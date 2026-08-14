@@ -2,6 +2,7 @@
 
 import type React from 'react'
 import { useState } from 'react'
+import Link from 'next/link'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -86,9 +87,12 @@ export function LoginForm() {
 
       <p className="text-center text-sm text-muted-foreground">
         {"Don't have an account? "}
-        <a href="#" className="font-medium text-primary underline-offset-4 hover:underline">
+        <Link
+          href="/sign-up"
+          className="font-medium text-primary underline-offset-4 hover:underline"
+        >
           Create one
-        </a>
+        </Link>
       </p>
     </form>
   )
