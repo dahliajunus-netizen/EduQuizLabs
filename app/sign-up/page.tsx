@@ -26,8 +26,7 @@ const countries = [
   "Oman",
   "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal",
   "Qatar",
-  "Romania", "Russia", "Rwanda",
-  "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria",
+  "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria",
   "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu",
   "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan",
   "Vanuatu", "Vatican City", "Venezuela", "Vietnam",
@@ -67,39 +66,49 @@ export default function SignUpPage() {
     };
   }, []);
 
-  // Decodes Google credential response token
-  function handleGoogleResponse(response: any) {
+  // Decodes Google credential response token & sends to backend API
+  async function handleGoogleResponse(response: any) {
     try {
+      setLoading(true);
       const base64Url = response.credential.split('.')[1];
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-      }).join(''));
-      
-      const googleUser = JSON.parse(jsonPayload);
-      
-      const existingUsers = JSON.parse(localStorage.getItem('edu_users') || '[]');
-      let user = existingUsers.find((u: any) => u.email === googleUser.email);
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
 
-      if (!user) {
-        user = { 
-          fullName: googleUser.name, 
-          email: googleUser.email, 
-          country: 'United States', 
-          password: 'oauth_google_user', 
-          role: 'student' 
-        };
-        existingUsers.push(user);
-        localStorage.setItem('edu_users', JSON.stringify(existingUsers));
+      const googleUser = JSON.parse(jsonPayload);
+
+      // Save Google User via API Route
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: googleUser.name,
+          email: googleUser.email,
+          country: 'United States',
+          password: `oauth_google_${googleUser.sub}`,
+          role: 'student',
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Google Sign-Up failed');
       }
 
-      alert(`Successfully signed up with Google as ${googleUser.name}!`);
       router.push('/');
-    } catch (err) {
-      setError('Google Sign-Up failed. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Google Sign-Up failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   }
 
+  // Handles standard email/password form submission
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -119,23 +128,25 @@ export default function SignUpPage() {
       return;
     }
 
-    const existingUsers = JSON.parse(localStorage.getItem('edu_users') || '[]');
-    const userExists = existingUsers.some((u: any) => u.email === email);
-    
-    if (userExists) {
-      setError('An account with this email already exists.');
-      setLoading(false);
-      return;
-    }
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName, email, country, password, role }),
+      });
 
-    const newUser = { fullName, email, country, password, role };
-    existingUsers.push(newUser);
-    localStorage.setItem('edu_users', JSON.stringify(existingUsers));
+      const data = await res.json();
 
-    setTimeout(() => {
-      setLoading(false);
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to sign up');
+      }
+
       router.push('/');
-    }, 800);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -150,11 +161,15 @@ export default function SignUpPage() {
           <p className="text-sm text-muted-foreground">Enter your details to get started.</p>
         </div>
 
-        {error && <div className="p-3 text-sm bg-red-500/10 text-red-500 rounded-md">{error}</div>}
+        {error && (
+          <div className="p-3 text-sm bg-red-500/10 text-red-500 rounded-md border border-red-500/20">
+            {error}
+          </div>
+        )}
 
-        {/* Official Google Sign Up Container */}
+        {/* Official Google Sign Up Button */}
         <div className="space-y-3">
-          <div id="google-button-div" className="flex justify-center w-full"></div>
+          <div id="google-button-div" className="flex justify-center w-full min-h-[40px]"></div>
         </div>
 
         <div className="flex items-center my-4">
@@ -176,8 +191,14 @@ export default function SignUpPage() {
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="country">Country</Label>
-            <select id="country" name="country" required className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm">
-              <option value="" disabled selected>Select your country</option>
+            <select
+              id="country"
+              name="country"
+              required
+              defaultValue=""
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm"
+            >
+              <option value="" disabled>Select your country</option>
               {countries.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
@@ -197,7 +218,7 @@ export default function SignUpPage() {
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="role">Role</Label>
-            <select id="role" name="role" className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm">
+            <select id="role" name="role" defaultValue="student" className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm">
               <option value="student">Student</option>
               <option value="teacher">Teacher</option>
             </select>
