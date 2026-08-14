@@ -16,14 +16,14 @@ export function LoginForm() {
   const [password, setPassword] = useState('')
   const [passwordTouched, setPasswordTouched] = useState(false)
 
-  const showPasswordError = passwordTouched && password.length > 0 && password.length < 8;
+  const showPasswordError = passwordTouched && password.length > 0 && password.length < 8
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPasswordTouched(true)
 
     if (password.length < 8) {
-      return; // Stop form submission if password is under 8 characters
+      return // Stop form submission if password is under 8 characters
     }
 
     setSubmitting(true)
@@ -66,8 +66,8 @@ export function LoginForm() {
             required
             value={password}
             onChange={(e) => {
-              setPassword(e.target.value);
-              setPasswordTouched(true);
+              setPassword(e.target.value)
+              setPasswordTouched(true)
             }}
             className={`h-11 bg-card pr-11 transition-colors ${
               showPasswordError
@@ -86,7 +86,7 @@ export function LoginForm() {
         </div>
         {/* Red Pop-up Error Message */}
         {showPasswordError && (
-          <p className="text-xs text-red-500 font-medium">
+          <p className="text-xs font-medium text-red-500">
             Password must be min. 8 characters
           </p>
         )}
@@ -120,6 +120,19 @@ export function LoginForm() {
         >
           Create one
         </Link>
+      </p>
+
+      {/* Working Terms & Privacy Links */}
+      <p className="pt-2 text-center text-xs text-muted-foreground">
+        By signing in you agree to our{' '}
+        <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+          Terms
+        </Link>{' '}
+        and{' '}
+        <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+          Privacy Policy
+        </Link>
+        .
       </p>
     </form>
   )
