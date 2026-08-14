@@ -39,6 +39,13 @@ export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // State to track password inputs and error pop-up
+  const [password, setPassword] = useState('');
+  const [passwordTouched, setPasswordTouched] = useState(false);
+
+  // Show error if user typed something and it's less than 8 chars
+  const showPasswordError = passwordTouched && password.length > 0 && password.length < 8;
+
   // Initialize Google SDK Script on load
   useEffect(() => {
     const script = document.createElement('script');
@@ -111,34 +118,33 @@ export default function SignUpPage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
     const formData = new FormData(e.currentTarget);
     const fullName = formData.get('fullName') as string;
     const email = formData.get('email') as string;
     const country = formData.get('country') as string;
-    const password = formData.get('password') as string;
+    const pwd = formData.get('password') as string;
     const confirmPassword = formData.get('confirmPassword') as string;
     const role = formData.get('role') as string;
 
-    // Minimum character check
-    if (password.length < 6) {
-      setError('Password must be min 6 characters');
-      setLoading(false);
+    setPasswordTouched(true);
+
+    if (pwd.length < 8) {
+      return; // Prevent submission if password is under 8 characters
+    }
+
+    if (pwd !== confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
 
     try {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName, email, country, password, role }),
+        body: JSON.stringify({ fullName, email, country, password: pwd, role }),
       });
 
       const data = await res.json();
@@ -219,11 +225,24 @@ export default function SignUpPage() {
                 name="password"
                 type="password"
                 required
-                minLength={6}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setPasswordTouched(true);
+                }}
                 placeholder="••••••••"
-                className="h-11 bg-card focus-visible:ring-2 focus-visible:ring-blue-500"
+                className={`h-11 bg-card transition-colors ${
+                  showPasswordError
+                    ? 'border-red-500 focus-visible:ring-1 focus-visible:ring-red-500'
+                    : 'focus-visible:ring-2 focus-visible:ring-blue-500'
+                }`}
               />
-              <p className="text-xs text-muted-foreground">Password must be min 6 characters</p>
+              {/* Red Pop-up Error Text */}
+              {showPasswordError && (
+                <p className="text-xs text-red-500 font-medium">
+                  Password must be min. 8 characters
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -233,7 +252,6 @@ export default function SignUpPage() {
                 name="confirmPassword"
                 type="password"
                 required
-                minLength={6}
                 placeholder="••••••••"
                 className="h-11 bg-card focus-visible:ring-2 focus-visible:ring-blue-500"
               />
