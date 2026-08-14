@@ -12,10 +12,22 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  // Real-time password validation states
+  const [password, setPassword] = useState('')
+  const [passwordTouched, setPasswordTouched] = useState(false)
+
+  const showPasswordError = passwordTouched && password.length > 0 && password.length < 8;
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setPasswordTouched(true)
+
+    if (password.length < 8) {
+      return; // Stop form submission if password is under 8 characters
+    }
+
     setSubmitting(true)
-    // Simulate an auth request for the demo.
+    // Simulate auth request logic
     setTimeout(() => setSubmitting(false), 1200)
   }
 
@@ -52,7 +64,16 @@ export function LoginForm() {
             autoComplete="current-password"
             placeholder="Enter your password"
             required
-            className="h-11 bg-card pr-11"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setPasswordTouched(true);
+            }}
+            className={`h-11 bg-card pr-11 transition-colors ${
+              showPasswordError
+                ? 'border-red-500 focus-visible:ring-1 focus-visible:ring-red-500'
+                : 'focus-visible:ring-2 focus-visible:ring-blue-500'
+            }`}
           />
           <button
             type="button"
@@ -63,6 +84,12 @@ export function LoginForm() {
             {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
         </div>
+        {/* Red Pop-up Error Message */}
+        {showPasswordError && (
+          <p className="text-xs text-red-500 font-medium">
+            Password must be min. 8 characters
+          </p>
+        )}
       </div>
 
       <label className="flex items-center gap-2 text-sm text-muted-foreground">
