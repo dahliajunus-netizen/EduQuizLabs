@@ -81,7 +81,6 @@ export default function SignUpPage() {
 
       const googleUser = JSON.parse(jsonPayload);
 
-      // Save Google User via API Route
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,6 +120,13 @@ export default function SignUpPage() {
     const password = formData.get('password') as string;
     const confirmPassword = formData.get('confirmPassword') as string;
     const role = formData.get('role') as string;
+
+    // Minimum character check
+    if (password.length < 6) {
+      setError('Password must be min 6 characters');
+      setLoading(false);
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
@@ -196,7 +202,7 @@ export default function SignUpPage() {
               name="country"
               required
               defaultValue=""
-              className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm"
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="" disabled>Select your country</option>
               {countries.map((c) => (
@@ -206,19 +212,37 @@ export default function SignUpPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" required placeholder="••••••••" className="h-11 bg-card" />
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                required
+                minLength={6}
+                placeholder="••••••••"
+                className="h-11 bg-card focus-visible:ring-2 focus-visible:ring-blue-500"
+              />
+              <p className="text-xs text-muted-foreground">Password must be min 6 characters</p>
             </div>
-            <div className="flex flex-col gap-2">
+
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input id="confirmPassword" name="confirmPassword" type="password" required placeholder="••••••••" className="h-11 bg-card" />
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                required
+                minLength={6}
+                placeholder="••••••••"
+                className="h-11 bg-card focus-visible:ring-2 focus-visible:ring-blue-500"
+              />
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="role">Role</Label>
-            <select id="role" name="role" defaultValue="student" className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm">
+            <select id="role" name="role" defaultValue="student" className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="student">Student</option>
               <option value="teacher">Teacher</option>
             </select>
