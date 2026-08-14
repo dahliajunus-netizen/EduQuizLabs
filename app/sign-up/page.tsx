@@ -106,6 +106,7 @@ export default function SignUpPage() {
         throw new Error(data.error || 'Google Sign-Up failed');
       }
 
+      // Redirect to sign-in page after sign-up
       router.push('/');
     } catch (err: any) {
       setError(err.message || 'Google Sign-Up failed. Please try again.');
@@ -153,6 +154,7 @@ export default function SignUpPage() {
         throw new Error(data.error || 'Failed to sign up');
       }
 
+      // Redirect to sign-in page (root route `/` or `/login`)
       router.push('/');
     } catch (err: any) {
       setError(err.message);
