@@ -122,7 +122,7 @@ export function LoginForm() {
         </Link>
       </p>
 
-      {/* Working Terms & Privacy Links */}
+      {/* Single Working Terms & Privacy Links */}
       <p className="pt-2 text-center text-xs text-muted-foreground">
         By signing in you agree to our{' '}
         <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
