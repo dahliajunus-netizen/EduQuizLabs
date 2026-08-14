@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Eye, EyeOff } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,14 +40,16 @@ export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // State to track password inputs and error pop-up
+  // States for password control
   const [password, setPassword] = useState('');
   const [passwordTouched, setPasswordTouched] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Show error if user typed something and it's less than 8 chars
+  // Validation logic: Show red error only if touched, typed, and under 8 chars
   const showPasswordError = passwordTouched && password.length > 0 && password.length < 8;
 
-  // Initialize Google SDK Script on load
+  // Initialize Google SDK Script
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
@@ -73,7 +76,6 @@ export default function SignUpPage() {
     };
   }, []);
 
-  // Decodes Google credential response token & sends to backend API
   async function handleGoogleResponse(response: any) {
     try {
       setLoading(true);
@@ -106,8 +108,8 @@ export default function SignUpPage() {
         throw new Error(data.error || 'Google Sign-Up failed');
       }
 
-      // Redirect to sign-in page after sign-up
-      router.push('/');
+      // Redirect to sign in page
+      router.push('/login');
     } catch (err: any) {
       setError(err.message || 'Google Sign-Up failed. Please try again.');
     } finally {
@@ -115,7 +117,6 @@ export default function SignUpPage() {
     }
   }
 
-  // Handles standard email/password form submission
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -131,7 +132,7 @@ export default function SignUpPage() {
     setPasswordTouched(true);
 
     if (pwd.length < 8) {
-      return; // Prevent submission if password is under 8 characters
+      return; // Stop execution if password is under 8 characters
     }
 
     if (pwd !== confirmPassword) {
@@ -154,8 +155,8 @@ export default function SignUpPage() {
         throw new Error(data.error || 'Failed to sign up');
       }
 
-      // Redirect to sign-in page (root route `/` or `/login`)
-      router.push('/');
+      // Redirect to Sign In Page
+      router.push('/login');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -181,7 +182,6 @@ export default function SignUpPage() {
           </div>
         )}
 
-        {/* Official Google Sign Up Button */}
         <div className="space-y-3">
           <div id="google-button-div" className="flex justify-center w-full min-h-[40px]"></div>
         </div>
@@ -222,24 +222,32 @@ export default function SignUpPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setPasswordTouched(true);
-                }}
-                placeholder="••••••••"
-                className={`h-11 bg-card transition-colors ${
-                  showPasswordError
-                    ? 'border-red-500 focus-visible:ring-1 focus-visible:ring-red-500'
-                    : 'focus-visible:ring-2 focus-visible:ring-blue-500'
-                }`}
-              />
-              {/* Red Pop-up Error Text */}
+              <div className="relative">
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setPasswordTouched(true);
+                  }}
+                  placeholder="••••••••"
+                  className={`h-11 bg-card pr-11 transition-colors ${
+                    showPasswordError
+                      ? 'border-red-500 focus-visible:ring-1 focus-visible:ring-red-500'
+                      : 'focus-visible:ring-2 focus-visible:ring-blue-500'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
               {showPasswordError && (
                 <p className="text-xs text-red-500 font-medium">
                   Password must be min. 8 characters
@@ -249,14 +257,23 @@ export default function SignUpPage() {
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                required
-                placeholder="••••••••"
-                className="h-11 bg-card focus-visible:ring-2 focus-visible:ring-blue-500"
-              />
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  className="h-11 bg-card pr-11 focus-visible:ring-2 focus-visible:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -275,14 +292,21 @@ export default function SignUpPage() {
 
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{' '}
-          <Link href="/" className="font-medium text-primary underline-offset-4 hover:underline">
+          <Link href="/login" className="font-medium text-primary underline-offset-4 hover:underline">
             Sign in
           </Link>
         </p>
       </div>
 
       <div className="text-center text-xs text-muted-foreground pt-6">
-        By signing up you agree to our <a href="#" className="underline hover:text-foreground">Terms</a> and <a href="#" className="underline hover:text-foreground">Privacy Policy</a>.
+        By signing up you agree to our{' '}
+        <Link href="/terms" className="underline hover:text-foreground">
+          Terms
+        </Link>{' '}
+        and{' '}
+        <Link href="/privacy" className="underline hover:text-foreground">
+          Privacy Policy
+        </Link>.
       </div>
     </div>
   );
