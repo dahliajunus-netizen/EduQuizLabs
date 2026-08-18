@@ -7,6 +7,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Eye, EyeOff } from 'lucide-react';
 
 const countries = [
   "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan",
@@ -38,12 +39,18 @@ const countries = [
 export default function SignUpPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [ageError, setAgeError] = useState(false);
+  const [ageError, setAgeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Controlled states for real-time validation checks
+  // Form fields
   const [age, setAge] = useState<string>('');
   const [role, setRole] = useState<string>('student');
+  const [password, setPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
+
+  // Password visibility states
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -71,15 +78,12 @@ export default function SignUpPage() {
     };
   }, []);
 
-  // Real-time validation check whenever age or role changes
   function validateAgeAndRole(currentAge: string, currentRole: string) {
     const numAge = Number(currentAge);
     if ((currentRole === 'teacher' || currentRole === 'parent') && currentAge !== '' && numAge < 18) {
-      setAgeError(true);
-      setError('Teachers and Parents must be at least 18 years old.');
+      setAgeError('Teachers and Parents must be at least 18 years old.');
     } else {
-      setAgeError(false);
-      setError(null);
+      setAgeError(null);
     }
   }
 
@@ -130,12 +134,24 @@ export default function SignUpPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setError(null);
     setLoading(true);
 
     const numAge = Number(age);
     if ((role === 'teacher' || role === 'parent') && numAge < 18) {
-      setAgeError(true);
-      setError('Teachers and Parents must be at least 18 years old.');
+      setAgeError('Teachers and Parents must be at least 18 years old.');
+      setLoading(false);
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      setLoading(false);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
       setLoading(false);
       return;
     }
@@ -144,14 +160,6 @@ export default function SignUpPage() {
     const fullName = formData.get('fullName') as string;
     const email = formData.get('email') as string;
     const country = formData.get('country') as string;
-    const password = formData.get('password') as string;
-    const confirmPassword = formData.get('confirmPassword') as string;
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      setLoading(false);
-      return;
-    }
 
     const existingUsers = JSON.parse(localStorage.getItem('edu_users') || '[]');
     const userExists = existingUsers.some((u: any) => u.email === email);
@@ -206,7 +214,7 @@ export default function SignUpPage() {
               <Input id="email" name="email" type="email" required placeholder="you@school.edu" className="h-11 bg-card" />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="age" className={ageError ? 'text-red-500' : ''}>Age</Label>
+              <Label htmlFor="age">Age</Label>
               <Input 
                 id="age" 
                 name="age" 
@@ -219,6 +227,7 @@ export default function SignUpPage() {
                 placeholder="14" 
                 className={`h-11 bg-card ${ageError ? '!border-red-500 !ring-red-500 text-red-500 focus-visible:ring-red-500' : ''}`} 
               />
+              {ageError && <span className="text-xs text-red-500 font-medium">{ageError}</span>}
             </div>
           </div>
 
@@ -235,11 +244,47 @@ export default function SignUpPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" required placeholder="••••••••" className="h-11 bg-card" />
+              <div className="relative">
+                <Input 
+                  id="password" 
+                  name="password" 
+                  type={showPassword ? "text" : "password"} 
+                  required 
+                  placeholder="••••••••" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="h-11 bg-card pr-10" 
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input id="confirmPassword" name="confirmPassword" type="password" required placeholder="••••••••" className="h-11 bg-card" />
+              <div className="relative">
+                <Input 
+                  id="confirmPassword" 
+                  name="confirmPassword" 
+                  type={showConfirmPassword ? "text" : "password"} 
+                  required 
+                  placeholder="••••••••" 
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="h-11 bg-card pr-10" 
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -250,7 +295,7 @@ export default function SignUpPage() {
               name="role" 
               value={role}
               onChange={handleRoleChange}
-              className={`flex h-11 w-full rounded-md border bg-card px-3 py-2 text-sm text-foreground shadow-sm ${ageError ? 'border-red-500' : 'border-input'}`}
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm"
             >
               <option value="student">Student</option>
               <option value="teacher">Teacher</option>
