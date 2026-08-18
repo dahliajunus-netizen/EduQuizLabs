@@ -52,11 +52,6 @@ export function LoginForm() {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Trust Tagline Change */}
-      <div className="text-xs font-semibold uppercase tracking-wider text-primary">
-        Trusted by SMP Labschool Cibubur
-      </div>
-
       {error && <div className="p-3 text-sm bg-red-500/10 text-red-500 rounded-md font-medium">{error}</div>}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
