@@ -10,8 +10,9 @@ function PrivacyContent() {
   const searchParams = useSearchParams();
   const from = searchParams.get('from');
 
-  const backHref = from === 'signin' ? '/' : '/sign-up';
-  const backLabel = from === 'signin' ? 'Back to Sign In' : 'Back to Sign Up';
+  const isFromSignIn = from === 'signin';
+  const backHref = isFromSignIn ? '/' : '/sign-up';
+  const backLabel = isFromSignIn ? 'Back to Sign In' : 'Back to Sign Up';
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
