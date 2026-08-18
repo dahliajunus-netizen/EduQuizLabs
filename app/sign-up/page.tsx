@@ -304,6 +304,9 @@ export default function SignUpPage() {
                   placeholder="••••••••" 
                   value={password}
                   onChange={handlePasswordChange}
+                  onCopy={(e) => e.preventDefault()}
+                  onPaste={(e) => e.preventDefault()}
+                  onCut={(e) => e.preventDefault()}
                   className={`h-11 bg-card pr-10 ${passwordError ? '!border-red-500 !ring-red-500 text-red-500 focus-visible:ring-red-500' : ''}`} 
                 />
                 <button
@@ -329,6 +332,9 @@ export default function SignUpPage() {
                   placeholder="••••••••" 
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  onCopy={(e) => e.preventDefault()}
+                  onPaste={(e) => e.preventDefault()}
+                  onCut={(e) => e.preventDefault()}
                   className="h-11 bg-card pr-10" 
                 />
                 <button
