@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -55,34 +55,6 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
-
-    script.onload = () => {
-      if (window.google) {
-        window.google.accounts.id.initialize({
-          client_id: '987240308433-40vrgkfn275ptpl110dqo5dlhk14oa5r.apps.googleusercontent.com',
-          callback: handleGoogleResponse,
-        });
-
-        window.google.accounts.id.renderButton(
-          document.getElementById('google-button-div'),
-          { theme: 'outline', size: 'large', width: '100%' }
-        );
-      }
-    };
-
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, []);
-
   function validateAgeAndRole(currentAge: string, currentRole: string) {
     const numAge = Number(currentAge);
     if ((currentRole === 'teacher' || currentRole === 'parent') && currentAge !== '' && numAge < 18) {
@@ -122,38 +94,6 @@ export default function SignUpPage() {
       setPasswordError('Password must be at least 8 characters long.');
     } else {
       setPasswordError(null);
-    }
-  }
-
-  function handleGoogleResponse(response: any) {
-    try {
-      const base64Url = response.credential.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-      }).join(''));
-      
-      const googleUser = JSON.parse(jsonPayload);
-      
-      const existingUsers = JSON.parse(localStorage.getItem('edu_users') || '[]');
-      let user = existingUsers.find((u: any) => u.email === googleUser.email);
-
-      if (!user) {
-        user = { 
-          fullName: googleUser.name, 
-          email: googleUser.email, 
-          age: 18,
-          country: 'United States', 
-          password: 'oauth_google_user', 
-          role: 'student' 
-        };
-        existingUsers.push(user);
-        localStorage.setItem('edu_users', JSON.stringify(existingUsers));
-      }
-
-      router.push('/');
-    } catch (err) {
-      setError('Google Sign-Up failed. Please try again.');
     }
   }
 
@@ -224,14 +164,6 @@ export default function SignUpPage() {
         </div>
 
         {error && <div className="p-3 text-sm bg-red-500/10 text-red-500 rounded-md font-medium">{error}</div>}
-
-        <div id="google-button-div" className="flex justify-center w-full"></div>
-
-        <div className="flex items-center my-4">
-          <div className="flex-grow border-t border-muted"></div>
-          <span className="px-3 text-xs uppercase text-muted-foreground">Or continue with</span>
-          <div className="flex-grow border-t border-muted"></div>
-        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="flex flex-col gap-2">
