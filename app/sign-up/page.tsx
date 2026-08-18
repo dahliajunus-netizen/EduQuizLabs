@@ -309,8 +309,17 @@ export default function SignUpPage() {
           </Link>
         </p>
 
+        {/* Updated links passing ?from=signup */}
         <div className="text-center text-xs text-muted-foreground pt-4">
-          By signing up you agree to our <a href="#" className="underline hover:text-foreground">Terms</a> and <a href="#" className="underline hover:text-foreground">Privacy Policy</a>.
+          By signing up you agree to our{' '}
+          <Link href="/terms?from=signup" className="underline hover:text-foreground">
+            Terms
+          </Link>{' '}
+          and{' '}
+          <Link href="/privacy?from=signup" className="underline hover:text-foreground">
+            Privacy Policy
+          </Link>
+          .
         </div>
       </div>
     </div>
