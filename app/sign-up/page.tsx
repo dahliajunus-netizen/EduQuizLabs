@@ -40,10 +40,12 @@ export default function SignUpPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [ageError, setAgeError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Form fields
+  const [email, setEmail] = useState<string>('');
   const [age, setAge] = useState<string>('');
   const [role, setRole] = useState<string>('student');
   const [password, setPassword] = useState<string>('');
@@ -85,6 +87,17 @@ export default function SignUpPage() {
       setAgeError('Teachers and Parents must be at least 18 years old.');
     } else {
       setAgeError(null);
+    }
+  }
+
+  function handleEmailChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    setEmail(val);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (val.length > 0 && !emailRegex.test(val)) {
+      setEmailError('Please enter a valid email');
+    } else {
+      setEmailError(null);
     }
   }
 
@@ -148,6 +161,13 @@ export default function SignUpPage() {
     setError(null);
     setLoading(true);
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailError('Please enter a valid email');
+      setLoading(false);
+      return;
+    }
+
     const numAge = Number(age);
     if ((role === 'teacher' || role === 'parent') && numAge < 18) {
       setAgeError('Teachers and Parents must be at least 18 years old.');
@@ -169,7 +189,6 @@ export default function SignUpPage() {
 
     const formData = new FormData(e.currentTarget);
     const fullName = formData.get('fullName') as string;
-    const email = formData.get('email') as string;
     const country = formData.get('country') as string;
 
     const existingUsers = JSON.parse(localStorage.getItem('edu_users') || '[]');
@@ -222,7 +241,17 @@ export default function SignUpPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" required placeholder="you@school.edu" className="h-11 bg-card" />
+              <Input 
+                id="email" 
+                name="email" 
+                type="text" 
+                required 
+                value={email}
+                onChange={handleEmailChange}
+                placeholder="you@school.edu" 
+                className={`h-11 bg-card ${emailError ? '!border-red-500 !ring-red-500 text-red-500 focus-visible:ring-red-500' : ''}`} 
+              />
+              {emailError && <span className="text-xs text-red-500 font-medium">{emailError}</span>}
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="age">Age</Label>
