@@ -17,7 +17,7 @@ export function LoginForm() {
 
   // Real-time password validation states
   const [password, setPassword] = useState('')
-  const [passwordTouched, setPasswordTouched] = useState(false)
+  const [passwordTouched, setPasswordTouched] = useState('')
 
   const showPasswordError = passwordTouched && password.length > 0 && password.length < 8
 
@@ -75,8 +75,9 @@ export function LoginForm() {
         localStorage.setItem('edu_users', JSON.stringify(existingUsers))
       }
 
-      alert(`Successfully signed in with Google as ${googleUser.name}!`)
-      router.push('/')
+      // Redirect based on role
+      const role = user.role ? user.role.toLowerCase() : 'student'
+      router.push(`/dashboard/${role}`)
     } catch (err) {
       setError('Google Sign-In failed. Please try again.')
     }
@@ -84,7 +85,7 @@ export function LoginForm() {
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setPasswordTouched(true)
+    setPasswordTouched('true')
     setError(null)
 
     if (password.length < 8) {
@@ -101,8 +102,10 @@ export function LoginForm() {
 
     setTimeout(() => {
       setSubmitting(false)
-      if (user || (email && password)) {
-        router.push('/')
+      if (user) {
+        // Redirect to specific dashboard based on role
+        const role = user.role ? user.role.toLowerCase() : 'student'
+        router.push(`/dashboard/${role}`)
       } else {
         setError('Invalid email or password.')
       }
@@ -156,7 +159,7 @@ export function LoginForm() {
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value)
-                setPasswordTouched(true)
+                setPasswordTouched('true')
               }}
               className={`h-11 bg-card pr-11 transition-colors ${
                 showPasswordError
