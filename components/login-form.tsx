@@ -27,12 +27,11 @@ export function LoginForm() {
     setError(null)
 
     if (password.length < 8) {
-      return // Stop form submission if password is under 8 characters
+      return 
     }
 
     setSubmitting(true)
     
-    // Check credentials against localStorage
     const formData = new FormData(event.currentTarget)
     const email = formData.get('email') as string
     const existingUsers = JSON.parse(localStorage.getItem('edu_users') || '[]')
@@ -41,7 +40,6 @@ export function LoginForm() {
     setTimeout(() => {
       setSubmitting(false)
       if (user) {
-        // Redirect to specific dashboard based on role
         const role = user.role ? user.role.toLowerCase() : 'student'
         router.push(`/dashboard/${role}`)
       } else {
@@ -106,7 +104,6 @@ export function LoginForm() {
               {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </div>
-          {/* Red Pop-up Error Message */}
           {showPasswordError && (
             <p className="text-xs font-medium text-red-500">
               Password must be min. 8 characters
@@ -144,14 +141,14 @@ export function LoginForm() {
           </Link>
         </p>
 
-        {/* Single Working Terms & Privacy Links */}
+        {/* Updated links passing ?from=signin */}
         <p className="pt-2 text-center text-xs text-muted-foreground">
           By signing in you agree to our{' '}
-          <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+          <Link href="/terms?from=signin" className="underline underline-offset-2 hover:text-foreground">
             Terms
           </Link>{' '}
           and{' '}
-          <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+          <Link href="/privacy?from=signin" className="underline underline-offset-2 hover:text-foreground">
             Privacy Policy
           </Link>
           .
