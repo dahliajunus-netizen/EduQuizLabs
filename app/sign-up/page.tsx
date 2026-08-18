@@ -40,6 +40,7 @@ export default function SignUpPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [ageError, setAgeError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Form fields
@@ -99,6 +100,16 @@ export default function SignUpPage() {
     validateAgeAndRole(age, val);
   }
 
+  function handlePasswordChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    setPassword(val);
+    if (val.length > 0 && val.length < 8) {
+      setPasswordError('Password must be at least 8 characters long.');
+    } else {
+      setPasswordError(null);
+    }
+  }
+
   function handleGoogleResponse(response: any) {
     try {
       const base64Url = response.credential.split('.')[1];
@@ -145,7 +156,7 @@ export default function SignUpPage() {
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+      setPasswordError('Password must be at least 8 characters long.');
       setLoading(false);
       return;
     }
@@ -252,8 +263,8 @@ export default function SignUpPage() {
                   required 
                   placeholder="••••••••" 
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-11 bg-card pr-10" 
+                  onChange={handlePasswordChange}
+                  className={`h-11 bg-card pr-10 ${passwordError ? '!border-red-500 !ring-red-500 text-red-500 focus-visible:ring-red-500' : ''}`} 
                 />
                 <button
                   type="button"
@@ -263,6 +274,7 @@ export default function SignUpPage() {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+              {passwordError && <span className="text-xs text-red-500 font-medium">{passwordError}</span>}
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
