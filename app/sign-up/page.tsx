@@ -65,7 +65,7 @@ export default function SignUpPage() {
     script.onload = () => {
       if (window.google) {
         window.google.accounts.id.initialize({
-          client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+          client_id: '987240308433-40vrgkfn275ptpl110dqo5dlhk14oa5r.apps.googleusercontent.com',
           callback: handleGoogleResponse,
         });
 
