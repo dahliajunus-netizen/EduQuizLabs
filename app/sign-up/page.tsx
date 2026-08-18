@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, ChevronDown } from 'lucide-react';
 
 const countriesWithFlags = [
   { name: "Afghanistan", flag: "🇦🇫" }, { name: "Albania", flag: "🇦🇱" }, { name: "Algeria", flag: "🇩🇿" }, { name: "Andorra", flag: "🇦🇩" }, { name: "Angola", flag: "🇦🇴" }, { name: "Antigua and Barbuda", flag: "🇦🇬" }, { name: "Argentina", flag: "🇦🇷" }, { name: "Armenia", flag: "🇦🇲" }, { name: "Australia", flag: "🇦🇺" }, { name: "Austria", flag: "🇦🇹" }, { name: "Azerbaijan", flag: "🇦🇿" },
@@ -50,10 +50,26 @@ export default function SignUpPage() {
   const [role, setRole] = useState<string>('student');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
+  
+  // Country custom select states
+  const [selectedCountry, setSelectedCountry] = useState<string>('');
+  const [isCountryOpen, setIsCountryOpen] = useState<boolean>(false);
+  const countryDropdownRef = useRef<HTMLDivElement>(null);
 
   // Password visibility states
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Close custom dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (countryDropdownRef.current && !countryDropdownRef.current.contains(event.target as Node)) {
+        setIsCountryOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   function validateAgeAndRole(currentAge: string, currentRole: string) {
     const numAge = Number(currentAge);
@@ -102,6 +118,12 @@ export default function SignUpPage() {
     setError(null);
     setLoading(true);
 
+    if (!selectedCountry) {
+      setError('Please select your country.');
+      setLoading(false);
+      return;
+    }
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setEmailError('Please enter a valid email');
@@ -130,7 +152,6 @@ export default function SignUpPage() {
 
     const formData = new FormData(e.currentTarget);
     const fullName = formData.get('fullName') as string;
-    const country = formData.get('country') as string;
 
     const existingUsers = JSON.parse(localStorage.getItem('edu_users') || '[]');
     const userExists = existingUsers.some((u: any) => u.email === email);
@@ -141,7 +162,7 @@ export default function SignUpPage() {
       return;
     }
 
-    const newUser = { fullName, email, age: numAge, country, password, role };
+    const newUser = { fullName, email, age: numAge, country: selectedCountry, password, role };
     existingUsers.push(newUser);
     localStorage.setItem('edu_users', JSON.stringify(existingUsers));
 
@@ -150,6 +171,8 @@ export default function SignUpPage() {
       router.push('/');
     }, 800);
   }
+
+  const selectedCountryObj = countriesWithFlags.find(c => c.name === selectedCountry);
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-background p-6">
@@ -210,18 +233,47 @@ export default function SignUpPage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
+          {/* Custom Country Dropdown with full flag support on PC */}
+          <div className="flex flex-col gap-2 relative" ref={countryDropdownRef}>
             <Label htmlFor="country">
               Country <span title="required" className="text-red-500 cursor-help">*</span>
             </Label>
-            <select id="country" name="country" required className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm">
-              <option value="" disabled selected>Select your country</option>
-              {countriesWithFlags.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.flag} {c.name}
-                </option>
-              ))}
-            </select>
+            <button
+              type="button"
+              onClick={() => setIsCountryOpen(!isCountryOpen)}
+              className="flex h-11 w-full items-center justify-between rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <span className="flex items-center gap-2 truncate">
+                {selectedCountryObj ? (
+                  <>
+                    <span className="text-lg leading-none">{selectedCountryObj.flag}</span>
+                    <span>{selectedCountryObj.name}</span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">Select your country</span>
+                )}
+              </span>
+              <ChevronDown size={16} className="text-muted-foreground shrink-0" />
+            </button>
+
+            {isCountryOpen && (
+              <div className="absolute top-full left-0 z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg">
+                {countriesWithFlags.map((c) => (
+                  <div
+                    key={c.name}
+                    onClick={() => {
+                      setSelectedCountry(c.name);
+                      setIsCountryOpen(false);
+                    }}
+                    className={`flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground ${selectedCountry === c.name ? 'bg-accent/50 font-medium' : ''}`}
+                  >
+                    <span className="text-lg leading-none">{c.flag}</span>
+                    <span className="truncate">{c.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <input type="hidden" name="country" value={selectedCountry} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
