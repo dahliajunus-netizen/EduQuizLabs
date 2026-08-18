@@ -1,23 +1,29 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function TermsPage() {
-  const router = useRouter();
+  const searchParams = useSearchParams();
+  const from = searchParams.get('from');
+
+  // Determine back link based on where they came from
+  const backHref = from === 'signin' ? '/' : '/sign-up';
+  const backLabel = from === 'signin' ? 'Back to Sign In' : 'Back to Sign Up';
 
   return (
     <div className="min-h-screen bg-background text-foreground p-6 sm:p-12">
       <div className="max-w-3xl mx-auto space-y-8">
         {/* Navigation Header */}
         <div className="flex items-center justify-between border-b border-border pb-6">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          <Link
+            href={backHref}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            <ArrowLeft className="h-4 w-4" /> Back
-          </button>
+            <ArrowLeft className="h-4 w-4" /> {backLabel}
+          </Link>
           <ThemeToggle />
         </div>
 
