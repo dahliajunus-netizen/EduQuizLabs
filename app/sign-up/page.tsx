@@ -234,13 +234,17 @@ export default function SignUpPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="fullName">Full Name</Label>
+            <Label htmlFor="fullName">
+              Full Name <span title="required" className="text-red-500 cursor-help">*</span>
+            </Label>
             <Input id="fullName" name="fullName" type="text" required placeholder="John Doe" className="h-11 bg-card" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">
+                Email <span title="required" className="text-red-500 cursor-help">*</span>
+              </Label>
               <Input 
                 id="email" 
                 name="email" 
@@ -254,7 +258,9 @@ export default function SignUpPage() {
               {emailError && <span className="text-xs text-red-500 font-medium">{emailError}</span>}
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="age">Age</Label>
+              <Label htmlFor="age">
+                Age <span title="required" className="text-red-500 cursor-help">*</span>
+              </Label>
               <Input 
                 id="age" 
                 name="age" 
@@ -272,7 +278,9 @@ export default function SignUpPage() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="country">Country</Label>
+            <Label htmlFor="country">
+              Country <span title="required" className="text-red-500 cursor-help">*</span>
+            </Label>
             <select id="country" name="country" required className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm">
               <option value="" disabled selected>Select your country</option>
               {countries.map((c) => (
@@ -283,7 +291,9 @@ export default function SignUpPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">
+                Password <span title="required" className="text-red-500 cursor-help">*</span>
+              </Label>
               <div className="relative">
                 <Input 
                   id="password" 
@@ -306,7 +316,9 @@ export default function SignUpPage() {
               {passwordError && <span className="text-xs text-red-500 font-medium">{passwordError}</span>}
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Label htmlFor="confirmPassword">
+                Confirm Password <span title="required" className="text-red-500 cursor-help">*</span>
+              </Label>
               <div className="relative">
                 <Input 
                   id="confirmPassword" 
@@ -330,7 +342,9 @@ export default function SignUpPage() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="role">Role</Label>
+            <Label htmlFor="role">
+              Role <span title="required" className="text-red-500 cursor-help">*</span>
+            </Label>
             <select 
               id="role" 
               name="role" 
