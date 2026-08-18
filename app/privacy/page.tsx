@@ -1,21 +1,23 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function PrivacyPage() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen bg-background text-foreground p-6 sm:p-12">
       <div className="max-w-3xl mx-auto space-y-8">
         {/* Navigation Header */}
         <div className="flex items-center justify-between border-b border-border pb-6">
-          <Link
-            href="/sign-up"
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          <button
+            onClick={() => router.back()}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
-            <ArrowLeft className="h-4 w-4" /> Back to Sign Up
-          </Link>
+            <ArrowLeft className="h-4 w-4" /> Back
+          </button>
           <ThemeToggle />
         </div>
 
