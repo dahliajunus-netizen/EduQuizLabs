@@ -41,6 +41,10 @@ export default function SignUpPage() {
   const [ageError, setAgeError] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Controlled states for real-time validation checks
+  const [age, setAge] = useState<string>('');
+  const [role, setRole] = useState<string>('student');
+
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
@@ -66,6 +70,30 @@ export default function SignUpPage() {
       document.body.removeChild(script);
     };
   }, []);
+
+  // Real-time validation check whenever age or role changes
+  function validateAgeAndRole(currentAge: string, currentRole: string) {
+    const numAge = Number(currentAge);
+    if ((currentRole === 'teacher' || currentRole === 'parent') && currentAge !== '' && numAge < 18) {
+      setAgeError(true);
+      setError('Teachers and Parents must be at least 18 years old.');
+    } else {
+      setAgeError(false);
+      setError(null);
+    }
+  }
+
+  function handleAgeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    setAge(val);
+    validateAgeAndRole(val, role);
+  }
+
+  function handleRoleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const val = e.target.value;
+    setRole(val);
+    validateAgeAndRole(age, val);
+  }
 
   function handleGoogleResponse(response: any) {
     try {
@@ -102,25 +130,22 @@ export default function SignUpPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setAgeError(false);
     setLoading(true);
 
-    const formData = new FormData(e.currentTarget);
-    const fullName = formData.get('fullName') as string;
-    const email = formData.get('email') as string;
-    const age = Number(formData.get('age'));
-    const country = formData.get('country') as string;
-    const password = formData.get('password') as string;
-    const confirmPassword = formData.get('confirmPassword') as string;
-    const role = formData.get('role') as string;
-
-    if ((role === 'teacher' || role === 'parent') && age < 18) {
+    const numAge = Number(age);
+    if ((role === 'teacher' || role === 'parent') && numAge < 18) {
       setAgeError(true);
       setError('Teachers and Parents must be at least 18 years old.');
       setLoading(false);
       return;
     }
+
+    const formData = new FormData(e.currentTarget);
+    const fullName = formData.get('fullName') as string;
+    const email = formData.get('email') as string;
+    const country = formData.get('country') as string;
+    const password = formData.get('password') as string;
+    const confirmPassword = formData.get('confirmPassword') as string;
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
@@ -137,7 +162,7 @@ export default function SignUpPage() {
       return;
     }
 
-    const newUser = { fullName, email, age, country, password, role };
+    const newUser = { fullName, email, age: numAge, country, password, role };
     existingUsers.push(newUser);
     localStorage.setItem('edu_users', JSON.stringify(existingUsers));
 
@@ -159,7 +184,7 @@ export default function SignUpPage() {
           <p className="text-sm text-muted-foreground">Enter your details to get started.</p>
         </div>
 
-        {error && <div className="p-3 text-sm bg-red-500/10 text-red-500 rounded-md">{error}</div>}
+        {error && <div className="p-3 text-sm bg-red-500/10 text-red-500 rounded-md font-medium">{error}</div>}
 
         <div id="google-button-div" className="flex justify-center w-full"></div>
 
@@ -181,7 +206,7 @@ export default function SignUpPage() {
               <Input id="email" name="email" type="email" required placeholder="you@school.edu" className="h-11 bg-card" />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="age">Age</Label>
+              <Label htmlFor="age" className={ageError ? 'text-red-500' : ''}>Age</Label>
               <Input 
                 id="age" 
                 name="age" 
@@ -189,8 +214,10 @@ export default function SignUpPage() {
                 min="1" 
                 max="120" 
                 required 
+                value={age}
+                onChange={handleAgeChange}
                 placeholder="14" 
-                className={`h-11 bg-card ${ageError ? '!border-red-500 !ring-red-500 text-red-500' : ''}`} 
+                className={`h-11 bg-card ${ageError ? '!border-red-500 !ring-red-500 text-red-500 focus-visible:ring-red-500' : ''}`} 
               />
             </div>
           </div>
@@ -218,7 +245,13 @@ export default function SignUpPage() {
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="role">Role</Label>
-            <select id="role" name="role" className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm">
+            <select 
+              id="role" 
+              name="role" 
+              value={role}
+              onChange={handleRoleChange}
+              className={`flex h-11 w-full rounded-md border bg-card px-3 py-2 text-sm text-foreground shadow-sm ${ageError ? 'border-red-500' : 'border-input'}`}
+            >
               <option value="student">Student</option>
               <option value="teacher">Teacher</option>
               <option value="parent">Parent</option>
