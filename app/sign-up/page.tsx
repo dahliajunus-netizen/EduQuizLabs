@@ -77,7 +77,9 @@ export default function SignUpPage() {
     };
 
     return () => {
-      document.body.removeChild(script);
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
     };
   }, []);
 
@@ -149,7 +151,6 @@ export default function SignUpPage() {
         localStorage.setItem('edu_users', JSON.stringify(existingUsers));
       }
 
-      alert(`Successfully signed up with Google as ${googleUser.name}!`);
       router.push('/');
     } catch (err) {
       setError('Google Sign-Up failed. Please try again.');
@@ -195,7 +196,7 @@ export default function SignUpPage() {
     const userExists = existingUsers.some((u: any) => u.email === email);
     
     if (userExists) {
-      setError('An account with this email already exists.');
+      setError('email is already used');
       setLoading(false);
       return;
     }
