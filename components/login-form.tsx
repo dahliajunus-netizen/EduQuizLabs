@@ -61,11 +61,14 @@ export function LoginForm() {
         }
       );
 
+      const responseText = await response.text();
+
       if (!response.ok) {
+        console.error("Supabase Error Response:", responseText);
         throw new Error('Server error during login');
       }
 
-      const users = await response.json();
+      const users = JSON.parse(responseText);
       const user = users[0]; // Get the first matching user if found
 
       setSubmitting(false)
@@ -74,9 +77,11 @@ export function LoginForm() {
         const role = user.role ? user.role.toLowerCase() : 'student'
         router.push(`/dashboard/${role}`)
       } else {
+        console.warn("No user found with those credentials. Response was empty array [].");
         setError('Invalid email or password.')
       }
     } catch (err) {
+      console.error(err);
       setSubmitting(false)
       setError('Could not connect to cloud database. Please try again.')
     }
