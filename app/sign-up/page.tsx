@@ -165,23 +165,36 @@ export default function SignUpPage() {
     const formData = new FormData(e.currentTarget);
     const fullName = formData.get('fullName') as string;
 
-    const existingUsers = JSON.parse(localStorage.getItem('edu_users') || '[]');
-    const userExists = existingUsers.some((u: any) => u.email === email);
+    try {
+      // Send user data directly to Supabase Cloud Database via fetch API
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users`, {
+        method: 'POST',
+        headers: {
+          'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({ 
+          full_name: fullName, 
+          email: email, 
+          age: numAge, 
+          country: selectedCountry, 
+          password: password, 
+          role: role 
+        })
+      });
 
-    if (userExists) {
-      setError('email is already used');
-      setLoading(false);
-      return;
-    }
+      if (!response.ok) {
+        throw new Error('Email is already used or server error');
+      }
 
-    const newUser = { fullName, email, age: numAge, country: selectedCountry, password, role };
-    existingUsers.push(newUser);
-    localStorage.setItem('edu_users', JSON.stringify(existingUsers));
-
-    setTimeout(() => {
       setLoading(false);
       router.push('/');
-    }, 800);
+    } catch (err: any) {
+      setError('Email is already used or unable to connect to cloud database.');
+      setLoading(false);
+    }
   }
 
   const selectedCountryObj = countriesWithFlags.find(c => c.name === selectedCountry);
