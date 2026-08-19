@@ -245,7 +245,7 @@ export default function TeacherDashboard() {
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={() => setIsModalOpen(export => false)}
+                  onClick={() => setIsModalOpen(false)}
                   className="w-1/2 h-11"
                 >
                   Cancel
