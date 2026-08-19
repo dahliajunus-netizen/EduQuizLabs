@@ -4,16 +4,28 @@ import type React from 'react'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Award, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+
+const creditsList = [
+  "Aidan Rayka Dewabrata - SMP Labschool Cibubur",
+  "Atha Badzikh Dodi Elang Permana - SMP Labschool Cibubur",
+  "Bagas Almer Dzaki - SMP Labschool Cibubur",
+  "Bilal Abrizam - SMP Labschool Cibubur",
+  "Maher Akbar Alvarez - SMP Labschool Cibubur",
+  "Raga Natha Aditya - SMP Labschool Cibubur"
+];
 
 export function LoginForm() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Credits Modal State
+  const [isCreditsOpen, setIsCreditsOpen] = useState(false)
 
   // Real-time password validation states
   const [password, setPassword] = useState('')
@@ -31,7 +43,7 @@ export function LoginForm() {
     }
 
     setSubmitting(true)
-    
+
     const formData = new FormData(event.currentTarget)
     const email = formData.get('email') as string
     const existingUsers = JSON.parse(localStorage.getItem('edu_users') || '[]')
@@ -49,7 +61,20 @@ export function LoginForm() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 relative">
+      {/* Credits Button Header Action */}
+      <div className="flex justify-end mb-1">
+        <Button 
+          type="button" 
+          variant="outline" 
+          size="sm" 
+          onClick={() => setIsCreditsOpen(true)}
+          className="gap-1.5 h-8 text-xs"
+        >
+          <Award size={14} /> Credits
+        </Button>
+      </div>
+
       {error && <div className="p-3 text-sm bg-red-500/10 text-red-500 rounded-md font-medium">{error}</div>}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
@@ -141,7 +166,6 @@ export function LoginForm() {
           </Link>
         </p>
 
-        {/* Updated links passing ?from=signin */}
         <p className="pt-2 text-center text-xs text-muted-foreground">
           By signing in you agree to our{' '}
           <Link href="/terms?from=signin" className="underline underline-offset-2 hover:text-foreground">
@@ -154,6 +178,36 @@ export function LoginForm() {
           .
         </p>
       </form>
+
+      {/* Credits Modal Popup */}
+      {isCreditsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-card rounded-xl border border-border shadow-2xl p-6 relative space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <Award size={20} className="text-primary" /> Project Credits
+              </h3>
+              <button 
+                onClick={() => setIsCreditsOpen(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-accent transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
+              <p className="text-xs text-muted-foreground">Developed by the following contributors:</p>
+              <ul className="space-y-2">
+                {creditsList.map((credit, idx) => (
+                  <li key={idx} className="text-sm bg-accent/30 p-2.5 rounded-lg border border-border/50 text-foreground font-medium">
+                    {credit}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
