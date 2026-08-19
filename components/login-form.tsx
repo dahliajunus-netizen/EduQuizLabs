@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import type React from 'react'
 import { useState } from 'react'
@@ -33,7 +33,7 @@ export function LoginForm() {
 
   const showPasswordError = passwordTouched && password.length > 0 && password.length < 8
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPasswordTouched('true')
     setError(null)
@@ -46,18 +46,40 @@ export function LoginForm() {
 
     const formData = new FormData(event.currentTarget)
     const email = formData.get('email') as string
-    const existingUsers = JSON.parse(localStorage.getItem('edu_users') || '[]')
-    const user = existingUsers.find((u: any) => u.email === email && u.password === password)
 
-    setTimeout(() => {
+    try {
+      // Query Supabase Cloud to check if email and password match
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email)}&password=eq.${encodeURIComponent(password)}&select=*`,
+        {
+          method: 'GET',
+          headers: {
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Server error during login');
+      }
+
+      const users = await response.json();
+      const user = users[0]; // Get the first matching user if found
+
       setSubmitting(false)
+
       if (user) {
         const role = user.role ? user.role.toLowerCase() : 'student'
         router.push(`/dashboard/${role}`)
       } else {
         setError('Invalid email or password.')
       }
-    }, 1200)
+    } catch (err) {
+      setSubmitting(false)
+      setError('Could not connect to cloud database. Please try again.')
+    }
   }
 
   return (
