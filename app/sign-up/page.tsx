@@ -58,7 +58,15 @@ export default function SignUpPage() {
 
   // Form fields
   const [email, setEmail] = useState<string>('');
-  const [age, setAge] = useState<string>('');
+  
+  // Birthday template inputs
+  const [day, setDay] = useState<string>('');
+  const [month, setMonth] = useState<string>('');
+  const [year, setYear] = useState<string>('');
+
+  const monthRef = useRef<HTMLInputElement>(null);
+  const yearRef = useRef<HTMLInputElement>(null);
+
   const [role, setRole] = useState<string>('student');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
@@ -83,10 +91,38 @@ export default function SignUpPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  function validateAgeAndRole(currentAge: string, currentRole: string) {
-    const numAge = Number(currentAge);
-    if ((currentRole === 'teacher' || currentRole === 'parent') && currentAge !== '' && numAge < 18) {
-      setAgeError('Teachers and Parents must be at least 18 years old.');
+  function calculateExactAge(d: string, m: string, y: string): number | null {
+    if (!d || !m || !y || y.length < 4) return null;
+    const numD = Number(d);
+    const numM = Number(m);
+    const numY = Number(y);
+
+    const today = new Date();
+    const birthDate = new Date(numY, numM - 1, numD);
+
+    if (isNaN(birthDate.getTime())) return null;
+
+    let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+    const mDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (mDiff < 0 || (mDiff === 0 && today.getDate() < birthDate.getDate())) {
+      calculatedAge--;
+    }
+    return calculatedAge;
+  }
+
+  function validateBirthdayAndRole(currDay: string, currMonth: string, currYear: string, currRole: string) {
+    if (currDay && currMonth && currYear.length === 4) {
+      const ageNum = calculateExactAge(currDay, currMonth, currYear);
+      if (ageNum === null) {
+        setAgeError('Please enter a valid birthday date.');
+        return;
+      }
+      if ((currRole === 'teacher' || currRole === 'parent') && ageNum < 21) {
+        setAgeError('Teachers and Parents must be at least 21 years old.');
+      } else {
+        setAgeError(null);
+      }
     } else {
       setAgeError(null);
     }
@@ -103,16 +139,34 @@ export default function SignUpPage() {
     }
   }
 
-  function handleAgeChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = e.target.value;
-    setAge(val);
-    validateAgeAndRole(val, role);
+  function handleDayChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 2);
+    setDay(val);
+    if (val.length === 2 && monthRef.current) {
+      monthRef.current.focus();
+    }
+    validateBirthdayAndRole(val, month, year, role);
+  }
+
+  function handleMonthChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 2);
+    setMonth(val);
+    if (val.length === 2 && yearRef.current) {
+      yearRef.current.focus();
+    }
+    validateBirthdayAndRole(day, val, year, role);
+  }
+
+  function handleYearChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+    setYear(val);
+    validateBirthdayAndRole(day, month, val, role);
   }
 
   function handleRoleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const val = e.target.value;
     setRole(val);
-    validateAgeAndRole(age, val);
+    validateBirthdayAndRole(day, month, year, val);
   }
 
   function handlePasswordChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -143,9 +197,15 @@ export default function SignUpPage() {
       return;
     }
 
-    const numAge = Number(age);
-    if ((role === 'teacher' || role === 'parent') && numAge < 18) {
-      setAgeError('Teachers and Parents must be at least 18 years old.');
+    const exactAge = calculateExactAge(day, month, year);
+    if (exactAge === null) {
+      setAgeError('Please enter a valid birthday.');
+      setLoading(false);
+      return;
+    }
+
+    if ((role === 'teacher' || role === 'parent') && exactAge < 21) {
+      setAgeError('Teachers and Parents must be at least 21 years old.');
       setLoading(false);
       return;
     }
@@ -164,9 +224,9 @@ export default function SignUpPage() {
 
     const formData = new FormData(e.currentTarget);
     const fullName = formData.get('fullName') as string;
+    const birthdayString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
     try {
-      // Send user data directly to Supabase Cloud Database via fetch API
       const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users`, {
         method: 'POST',
         headers: {
@@ -178,7 +238,8 @@ export default function SignUpPage() {
         body: JSON.stringify({ 
           full_name: fullName, 
           email: email, 
-          age: numAge, 
+          age: exactAge, 
+          birthday: birthdayString,
           country: selectedCountry, 
           password: password, 
           role: role 
@@ -201,7 +262,6 @@ export default function SignUpPage() {
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-background p-6 relative">
-      {/* Top right actions: Credits and Theme Toggle */}
       <div className="absolute top-6 right-6 flex items-center gap-3">
         <Button 
           variant="outline" 
@@ -247,22 +307,47 @@ export default function SignUpPage() {
               />
               {emailError && <span className="text-xs text-red-500 font-medium">{emailError}</span>}
             </div>
+
+            {/* Birthday Template Input (DD / MM / YYYY) */}
             <div className="flex flex-col gap-2">
-              <Label htmlFor="age">
-                Age <span title="required" className="text-red-500 cursor-help">*</span>
+              <Label>
+                Birthday <span title="required" className="text-red-500 cursor-help">*</span>
               </Label>
-              <Input 
-                id="age" 
-                name="age" 
-                type="number" 
-                min="1" 
-                max="120" 
-                required 
-                value={age}
-                onChange={handleAgeChange}
-                placeholder="14" 
-                className={`h-11 bg-card ${ageError ? '!border-red-500 !ring-red-500 text-red-500 focus-visible:ring-red-500' : ''}`} 
-              />
+              <div className={`flex h-11 items-center justify-between rounded-md border bg-card px-3 shadow-sm ${ageError ? 'border-red-500 ring-1 ring-red-500' : 'border-input'}`}>
+                <div className="flex items-center gap-1 w-full text-sm">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="DD"
+                    value={day}
+                    onChange={handleDayChange}
+                    maxLength={2}
+                    className="w-7 text-center bg-transparent focus:outline-none placeholder:text-muted-foreground font-mono"
+                  />
+                  <span className="text-muted-foreground">/</span>
+                  <input
+                    ref={monthRef}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="MM"
+                    value={month}
+                    onChange={handleMonthChange}
+                    maxLength={2}
+                    className="w-7 text-center bg-transparent focus:outline-none placeholder:text-muted-foreground font-mono"
+                  />
+                  <span className="text-muted-foreground">/</span>
+                  <input
+                    ref={yearRef}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="YYYY"
+                    value={year}
+                    onChange={handleYearChange}
+                    maxLength={4}
+                    className="w-12 text-center bg-transparent focus:outline-none placeholder:text-muted-foreground font-mono"
+                  />
+                </div>
+              </div>
               {ageError && <span className="text-xs text-red-500 font-medium">{ageError}</span>}
             </div>
           </div>
