@@ -227,7 +227,9 @@ export default function SignUpPage() {
     const birthdayString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users`, {
+      const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
+      
+      const response = await fetch(`${baseUrl}/rest/v1/users`, {
         method: 'POST',
         headers: {
           'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -246,14 +248,16 @@ export default function SignUpPage() {
         })
       });
 
+      const responseData = await response.json().catch(() => null);
+
       if (!response.ok) {
-        throw new Error('Email is already used or server error');
+        throw new Error(responseData?.message || responseData?.error || JSON.stringify(responseData) || `Database error: ${response.statusText}`);
       }
 
       setLoading(false);
       router.push('/');
     } catch (err: any) {
-      setError('Email is already used or unable to connect to cloud database.');
+      setError(err.message || 'Unable to connect to cloud database.');
       setLoading(false);
     }
   }
@@ -280,7 +284,7 @@ export default function SignUpPage() {
           <p className="text-sm text-muted-foreground">Enter your details to get started.</p>
         </div>
 
-        {error && <div className="p-3 text-sm bg-red-500/10 text-red-500 rounded-md font-medium">{error}</div>}
+        {error && <div className="p-3 text-sm bg-red-500/10 text-red-500 rounded-md font-medium break-all">{error}</div>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="flex flex-col gap-2">
