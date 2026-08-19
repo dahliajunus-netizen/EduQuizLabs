@@ -8,12 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Eye, EyeOff, ChevronDown, X, Award } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 const countriesWithFlags = [
   { name: "Afghanistan", code: "af" }, { name: "Albania", code: "al" }, { name: "Algeria", code: "dz" }, { name: "Andorra", code: "ad" }, { name: "Angola", code: "ao" }, { name: "Antigua and Barbuda", code: "ag" }, { name: "Argentina", code: "ar" }, { name: "Armenia", code: "am" }, { name: "Australia", code: "au" }, { name: "Austria", code: "at" }, { name: "Azerbaijan", code: "az" },
@@ -233,22 +227,31 @@ export default function SignUpPage() {
     const birthdayString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
     try {
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert([
-          { 
-            full_name: fullName, 
-            email: email, 
-            age: exactAge, 
-            birthday: birthdayString,
-            country: selectedCountry, 
-            password: password, 
-            role: role 
-          }
-        ]);
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-      if (insertError) {
-        throw new Error(insertError.message);
+      const res = await fetch(`${supabaseUrl}/rest/v1/users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey || '',
+          'Authorization': `Bearer ${supabaseAnonKey || ''}`,
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          full_name: fullName,
+          email: email,
+          age: exactAge,
+          birthday: birthdayString,
+          country: selectedCountry,
+          password: password,
+          role: role
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.hint || `Database error: ${res.statusText}`);
       }
 
       setLoading(false);
