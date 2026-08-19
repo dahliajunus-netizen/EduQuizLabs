@@ -7,7 +7,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Eye, EyeOff, ChevronDown } from 'lucide-react';
+import { Eye, EyeOff, ChevronDown, X, Award } from 'lucide-react';
 
 const countriesWithFlags = [
   { name: "Afghanistan", code: "af" }, { name: "Albania", code: "al" }, { name: "Algeria", code: "dz" }, { name: "Andorra", code: "ad" }, { name: "Angola", code: "ao" }, { name: "Antigua and Barbuda", code: "ag" }, { name: "Argentina", code: "ar" }, { name: "Armenia", code: "am" }, { name: "Australia", code: "au" }, { name: "Austria", code: "at" }, { name: "Azerbaijan", code: "az" },
@@ -36,6 +36,15 @@ const countriesWithFlags = [
   { name: "Zambia", code: "zm" }, { name: "Zimbabwe", code: "zw" }
 ];
 
+const creditsList = [
+  "Aidan Rayka Dewabrata - SMP Labschool Cibubur",
+  "Atha Badzikh Dodi Elang Permana - SMP Labschool Cibubur",
+  "Bagas Almer Dzaki - SMP Labschool Cibubur",
+  "Bilal Abrizam - SMP Labschool Cibubur",
+  "Maher Akbar Alvarez - SMP Labschool Cibubur",
+  "Raga Natha Aditya - SMP Labschool Cibubur"
+];
+
 export default function SignUpPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +52,9 @@ export default function SignUpPage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Credits Modal State
+  const [isCreditsOpen, setIsCreditsOpen] = useState(false);
 
   // Form fields
   const [email, setEmail] = useState<string>('');
@@ -50,7 +62,7 @@ export default function SignUpPage() {
   const [role, setRole] = useState<string>('student');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
-  
+
   // Country custom select states
   const [selectedCountry, setSelectedCountry] = useState<string>('');
   const [isCountryOpen, setIsCountryOpen] = useState<boolean>(false);
@@ -155,7 +167,7 @@ export default function SignUpPage() {
 
     const existingUsers = JSON.parse(localStorage.getItem('edu_users') || '[]');
     const userExists = existingUsers.some((u: any) => u.email === email);
-    
+
     if (userExists) {
       setError('email is already used');
       setLoading(false);
@@ -175,8 +187,17 @@ export default function SignUpPage() {
   const selectedCountryObj = countriesWithFlags.find(c => c.name === selectedCountry);
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-background p-6">
-      <div className="absolute top-6 right-6">
+    <div className="flex min-h-screen w-full items-center justify-center bg-background p-6 relative">
+      {/* Top right actions: Credits and Theme Toggle */}
+      <div className="absolute top-6 right-6 flex items-center gap-3">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => setIsCreditsOpen(true)}
+          className="gap-1.5 h-9"
+        >
+          <Award size={15} /> Credits
+        </Button>
         <ThemeToggle />
       </div>
 
@@ -233,7 +254,7 @@ export default function SignUpPage() {
             </div>
           </div>
 
-          {/* Custom Country Dropdown with true image flag icons on PC/Windows */}
+          {/* Custom Country Dropdown */}
           <div className="flex flex-col gap-2 relative" ref={countryDropdownRef}>
             <Label htmlFor="country">
               Country <span title="required" className="text-red-500 cursor-help">*</span>
@@ -383,6 +404,36 @@ export default function SignUpPage() {
           .
         </div>
       </div>
+
+      {/* Credits Modal Popup */}
+      {isCreditsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-card rounded-xl border border-border shadow-2xl p-6 relative space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <Award size={20} className="text-primary" /> Project Credits
+              </h3>
+              <button 
+                onClick={() => setIsCreditsOpen(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-accent transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
+              <p className="text-xs text-muted-foreground">Developed by the following contributors:</p>
+              <ul className="space-y-2">
+                {creditsList.map((credit, idx) => (
+                  <li key={idx} className="text-sm bg-accent/30 p-2.5 rounded-lg border border-border/50 text-foreground font-medium">
+                    {credit}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
