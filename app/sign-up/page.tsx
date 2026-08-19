@@ -8,6 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Eye, EyeOff, ChevronDown, X, Award } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 const countriesWithFlags = [
   { name: "Afghanistan", code: "af" }, { name: "Albania", code: "al" }, { name: "Algeria", code: "dz" }, { name: "Andorra", code: "ad" }, { name: "Angola", code: "ao" }, { name: "Antigua and Barbuda", code: "ag" }, { name: "Argentina", code: "ar" }, { name: "Armenia", code: "am" }, { name: "Australia", code: "au" }, { name: "Austria", code: "at" }, { name: "Azerbaijan", code: "az" },
@@ -227,31 +233,22 @@ export default function SignUpPage() {
     const birthdayString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
-      
-      const response = await fetch(`${baseUrl}/rest/v1/users`, {
-        method: 'POST',
-        headers: {
-          'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation'
-        },
-        body: JSON.stringify({ 
-          full_name: fullName, 
-          email: email, 
-          age: exactAge, 
-          birthday: birthdayString,
-          country: selectedCountry, 
-          password: password, 
-          role: role 
-        })
-      });
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert([
+          { 
+            full_name: fullName, 
+            email: email, 
+            age: exactAge, 
+            birthday: birthdayString,
+            country: selectedCountry, 
+            password: password, 
+            role: role 
+          }
+        ]);
 
-      const responseData = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(responseData?.message || responseData?.error || JSON.stringify(responseData) || `Database error: ${response.statusText}`);
+      if (insertError) {
+        throw new Error(insertError.message);
       }
 
       setLoading(false);
