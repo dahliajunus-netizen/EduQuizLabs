@@ -5,46 +5,103 @@ import { Navbar } from '@/components/Navbar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Users, FileText, CheckSquare, PlusCircle, BookOpen, Trash2, X } from 'lucide-react';
+import { Users, FileText, CheckSquare, PlusCircle, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
 
 export default function TeacherDashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [className, setClassName] = useState('');
   const [schoolName, setSchoolName] = useState('');
-  const [teacherClasses, setTeacherClasses] = useState<Array<{ name: string; school: string; code: string }>>([]);
+  const [teacherClasses, setTeacherClasses] = useState<Array<{ id?: number; name: string; school: string; code: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
+  // Fetch classes from Supabase
   useEffect(() => {
-    const savedClasses = JSON.parse(localStorage.getItem('teacher_created_classes') || '[]');
-    setTeacherClasses(savedClasses);
+    async function fetchTeacherClasses() {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/teacher_classes?select=*`,
+          {
+            headers: {
+              'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
+            }
+          }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setTeacherClasses(data);
+        }
+      } catch (err) {
+        console.error('Error fetching teacher classes', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchTeacherClasses();
   }, []);
 
-  const handleCreateClass = (e: React.FormEvent) => {
+  const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!className.trim() || !schoolName.trim()) return;
 
-    // Generate a random 5-character alphanumeric class code
+    setSubmitting(true);
     const randomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
     
-    const newClass = {
+    const newClassData = {
       name: className.trim(),
       school: schoolName.trim(),
       code: randomCode,
     };
 
-    const updatedClasses = [...teacherClasses, newClass];
-    setTeacherClasses(updatedClasses);
-    localStorage.setItem('teacher_created_classes', JSON.stringify(updatedClasses));
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/teacher_classes`,
+        {
+          method: 'POST',
+          headers: {
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation',
+          },
+          body: JSON.stringify(newClassData)
+        }
+      );
 
-    // Reset inputs and close modal
-    setClassName('');
-    setSchoolName('');
-    setIsModalOpen(false);
+      if (response.ok) {
+        const createdClass = await response.json();
+        setTeacherClasses([...teacherClasses, createdClass[0]]);
+        setClassName('');
+        setSchoolName('');
+        setIsModalOpen(false);
+      }
+    } catch (err) {
+      console.error('Error creating class', err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteClass = (code: string) => {
-    const updatedClasses = teacherClasses.filter((c) => c.code !== code);
-    setTeacherClasses(updatedClasses);
-    localStorage.setItem('teacher_created_classes', JSON.stringify(updatedClasses));
+  const handleDeleteClass = async (code: string) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/teacher_classes?code=eq.${code}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
+          }
+        }
+      );
+
+      if (response.ok) {
+        setTeacherClasses(teacherClasses.filter((c) => c.code !== code));
+      }
+    } catch (err) {
+      console.error('Error deleting class', err);
+    }
   };
 
   return (
@@ -110,7 +167,11 @@ export default function TeacherDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {teacherClasses.length === 0 ? (
+              {loading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : teacherClasses.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No classes created yet. Click "Create New Class" above to start!</p>
               ) : (
                 teacherClasses.map((item, index) => (
@@ -184,13 +245,13 @@ export default function TeacherDashboard() {
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => setIsModalOpen(export => false)}
                   className="w-1/2 h-11"
                 >
                   Cancel
                 </Button>
-                <Button type="submit" className="w-1/2 h-11">
-                  Generate Code
+                <Button type="submit" disabled={submitting} className="w-1/2 h-11">
+                  {submitting ? <Loader2 className="size-4 animate-spin" /> : 'Generate Code'}
                 </Button>
               </div>
             </form>
