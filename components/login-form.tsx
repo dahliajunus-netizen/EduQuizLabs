@@ -48,9 +48,9 @@ export function LoginForm() {
     const email = formData.get('email') as string
 
     try {
-      // Query Supabase Cloud to check if email and password match
+      // Query Supabase by email only to inspect the returned record
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email)}&password=eq.${encodeURIComponent(password)}&select=*`,
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email)}&select=*`,
         {
           method: 'GET',
           headers: {
@@ -69,15 +69,18 @@ export function LoginForm() {
       }
 
       const users = JSON.parse(responseText);
-      const user = users[0]; // Get the first matching user if found
+      const user = users[0]; // Get the user if the email exists
+
+      console.log("User found in database:", user);
+      console.log("Password typed:", password);
+      console.log("Password in DB:", user?.password);
 
       setSubmitting(false)
 
-      if (user) {
+      if (user && user.password === password) {
         const role = user.role ? user.role.toLowerCase() : 'student'
         router.push(`/dashboard/${role}`)
       } else {
-        console.warn("No user found with those credentials. Response was empty array [].");
         setError('Invalid email or password.')
       }
     } catch (err) {
