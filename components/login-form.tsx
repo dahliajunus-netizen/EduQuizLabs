@@ -45,10 +45,9 @@ export function LoginForm() {
     setSubmitting(true)
 
     const formData = new FormData(event.currentTarget)
-    const email = formData.get('email') as string
+    const email = (formData.get('email') as string).trim()
 
     try {
-      // Query Supabase by email only to inspect the returned record
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email)}&select=*`,
         {
@@ -69,15 +68,12 @@ export function LoginForm() {
       }
 
       const users = JSON.parse(responseText);
-      const user = users[0]; // Get the user if the email exists
-
-      console.log("User found in database:", user);
-      console.log("Password typed:", password);
-      console.log("Password in DB:", user?.password);
+      const user = users[0];
 
       setSubmitting(false)
 
-      if (user && user.password === password) {
+      // Trim both strings to bypass any invisible spacing issues from the database
+      if (user && user.password && user.password.trim() === password.trim()) {
         const role = user.role ? user.role.toLowerCase() : 'student'
         router.push(`/dashboard/${role}`)
       } else {
