@@ -90,7 +90,6 @@ export default function TeacherDashboard() {
   };
 
   const handleDeleteClass = async (code: string, e: React.MouseEvent) => {
-    // Prevent clicking the delete button from opening the class details link
     e.preventDefault();
     e.stopPropagation();
 
@@ -185,7 +184,7 @@ export default function TeacherDashboard() {
                 <p className="text-sm text-muted-foreground">No classes created yet. Click "Create New Class" above to start!</p>
               ) : (
                 teacherClasses.map((item, index) => (
-                  <Link key={index} href={`/student/classes/${item.code}`}>
+                  <Link key={index} href={`/dashboard/student/classes/${item.code}`}>
                     <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition cursor-pointer mb-2">
                       <div>
                         <h4 className="font-medium text-foreground">{item.class_name}</h4>
