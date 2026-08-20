@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Navbar } from '@/components/Navbar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,6 @@ export default function TeacherDashboard() {
     setSubmitting(true);
     const randomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
     
-    // Keys MUST match Supabase database column names exactly: class_name & school_name
     const newClassData = {
       class_name: className.trim(),
       school_name: schoolName.trim(),
@@ -89,7 +89,11 @@ export default function TeacherDashboard() {
     }
   };
 
-  const handleDeleteClass = async (code: string) => {
+  const handleDeleteClass = async (code: string, e: React.MouseEvent) => {
+    // Prevent clicking the delete button from opening the class details link
+    e.preventDefault();
+    e.stopPropagation();
+
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/teacher_classes?code=eq.${code}`,
@@ -181,26 +185,28 @@ export default function TeacherDashboard() {
                 <p className="text-sm text-muted-foreground">No classes created yet. Click "Create New Class" above to start!</p>
               ) : (
                 teacherClasses.map((item, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20">
-                    <div>
-                      <h4 className="font-medium text-foreground">{item.class_name}</h4>
-                      <p className="text-xs text-muted-foreground">School: {item.school_name}</p>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <span className="text-xs text-muted-foreground block">Join Code</span>
-                        <span className="font-mono text-sm font-bold text-primary">{item.code}</span>
+                  <Link key={index} href={`/student/classes/${item.code}`}>
+                    <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition cursor-pointer mb-2">
+                      <div>
+                        <h4 className="font-medium text-foreground">{item.class_name}</h4>
+                        <p className="text-xs text-muted-foreground">School: {item.school_name}</p>
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleDeleteClass(item.code)}
-                        className="text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 size={16} />
-                      </Button>
+                      <div className="flex items-center gap-6">
+                        <div className="text-right">
+                          <span className="text-xs text-muted-foreground block">Join Code</span>
+                          <span className="font-mono text-sm font-bold text-primary">{item.code}</span>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={(e) => handleDeleteClass(item.code, e)}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  </Link>
                 ))
               )}
             </div>
