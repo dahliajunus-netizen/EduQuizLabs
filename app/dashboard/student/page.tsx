@@ -14,7 +14,6 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
 
-  // Fetch student's classes from Supabase on load
   useEffect(() => {
     async function fetchClasses() {
       try {
@@ -50,7 +49,7 @@ export default function StudentDashboard() {
     setJoining(true);
 
     try {
-      // 1. Check if class code exists in Supabase teacher classes table
+      // 1. Check if class code exists
       const codeCheckResponse = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(trimmedCode)}&select=*`,
         {
@@ -71,14 +70,14 @@ export default function StudentDashboard() {
       }
 
       // 2. Check if already joined
-      const alreadyJoined = myClasses.some((c) => c.class_name === foundClass.name);
+      const alreadyJoined = myClasses.some((c) => c.code === foundClass.code);
       if (alreadyJoined) {
         setCodeError('You have already joined this class.');
         setJoining(false);
         return;
       }
 
-      // 3. Save enrollment to Supabase
+      // 3. Save enrollment to Supabase (Ensure keys match your table columns exactly)
       const insertResponse = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/student_classes`,
         {
@@ -90,9 +89,9 @@ export default function StudentDashboard() {
             'Prefer': 'return=representation',
           },
           body: JSON.stringify({
-            class_name: foundClass.name,
+            class_name: foundClass.class_name, // Matches your teacher_classes structure
             code: foundClass.code,
-            school: foundClass.school
+            school: foundClass.school_name     // Matches your teacher_classes structure
           })
         }
       );
@@ -102,7 +101,9 @@ export default function StudentDashboard() {
         setMyClasses([...myClasses, newEnrollment[0]]);
         setClassCode('');
       } else {
-        setCodeError('Failed to join class. Try again.');
+        const errorData = await insertResponse.json();
+        console.error("Supabase Error Details:", errorData);
+        setCodeError('Failed to join: ' + (errorData.message || 'Unknown error'));
       }
     } catch (err) {
       setCodeError('Network error joining class.');
@@ -120,7 +121,6 @@ export default function StudentDashboard() {
           <p className="text-muted-foreground">Track your coursework, join classes with a code, and view upcoming assignments.</p>
         </div>
 
-        {/* Top Section: Class Code Input */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="bg-card">
             <CardHeader>
@@ -149,15 +149,8 @@ export default function StudentDashboard() {
               </form>
             </CardContent>
           </Card>
-
-          <Card className="bg-card border-dashed border-muted/40">
-            <CardContent className="h-full flex items-center justify-center p-6 text-muted-foreground text-sm">
-              {/* Empty section */}
-            </CardContent>
-          </Card>
         </div>
 
-        {/* Bottom Section: Classes Enrolled */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2 bg-card">
             <CardHeader>
@@ -177,37 +170,13 @@ export default function StudentDashboard() {
                   myClasses.map((item, index) => (
                     <div key={index} className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20">
                       <div>
-                        <h4 className="font-medium text-foreground">{item.class_name || item}</h4>
-                        <p className="text-xs text-muted-foreground">School: {item.school || 'Labschool Cibubur'}</p>
+                        <h4 className="font-medium text-foreground">{item.class_name}</h4>
+                        <p className="text-xs text-muted-foreground">School: {item.school}</p>
                       </div>
                       <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">Active</span>
                     </div>
                   ))
                 )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <Clock className="h-5 w-5 text-amber-500" /> Assignments Due
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="border-b border-border pb-3">
-                  <h4 className="text-sm font-medium text-foreground">Problem Set 4</h4>
-                  <p className="text-xs text-amber-500 font-medium">Due Tomorrow, 11:59 PM</p>
-                </div>
-                <div className="border-b border-border pb-3">
-                  <h4 className="text-sm font-medium text-foreground">Physics Lab Report</h4>
-                  <p className="text-xs text-muted-foreground">Due in 3 days</p>
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium text-foreground">Literature Essay Draft</h4>
-                  <p className="text-xs text-muted-foreground">Due next week</p>
-                </div>
               </div>
             </CardContent>
           </Card>
