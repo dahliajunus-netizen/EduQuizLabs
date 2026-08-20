@@ -11,7 +11,7 @@ export default function TeacherDashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [className, setClassName] = useState('');
   const [schoolName, setSchoolName] = useState('');
-  const [teacherClasses, setTeacherClasses] = useState<Array<{ id?: number; name: string; school: string; code: string }>>([]);
+  const [teacherClasses, setTeacherClasses] = useState<Array<{ id?: string; class_name: string; school_name: string; code: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -48,9 +48,10 @@ export default function TeacherDashboard() {
     setSubmitting(true);
     const randomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
     
+    // Keys MUST match Supabase database column names exactly: class_name & school_name
     const newClassData = {
-      name: className.trim(),
-      school: schoolName.trim(),
+      class_name: className.trim(),
+      school_name: schoolName.trim(),
       code: randomCode,
     };
 
@@ -69,13 +70,18 @@ export default function TeacherDashboard() {
         }
       );
 
-      if (response.ok) {
-        const createdClass = await response.json();
-        setTeacherClasses([...teacherClasses, createdClass[0]]);
-        setClassName('');
-        setSchoolName('');
-        setIsModalOpen(false);
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        console.error("Supabase Error Response:", responseText);
+        throw new Error('Failed to create class');
       }
+
+      const createdClass = JSON.parse(responseText);
+      setTeacherClasses([...teacherClasses, createdClass[0]]);
+      setClassName('');
+      setSchoolName('');
+      setIsModalOpen(false);
     } catch (err) {
       console.error('Error creating class', err);
     } finally {
@@ -177,8 +183,8 @@ export default function TeacherDashboard() {
                 teacherClasses.map((item, index) => (
                   <div key={index} className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20">
                     <div>
-                      <h4 className="font-medium text-foreground">{item.name}</h4>
-                      <p className="text-xs text-muted-foreground">School: {item.school}</p>
+                      <h4 className="font-medium text-foreground">{item.class_name}</h4>
+                      <p className="text-xs text-muted-foreground">School: {item.school_name}</p>
                     </div>
                     <div className="flex items-center gap-6">
                       <div className="text-right">
