@@ -169,7 +169,7 @@ export default function StudentDashboard() {
                   <p className="text-sm text-muted-foreground">You haven't joined any classes yet. Enter a valid code above!</p>
                 ) : (
                   myClasses.map((item, index) => (
-                    <Link key={index} href={`/student/classes/${item.code}`}>
+                    <Link key={index} href={`/dashboard/student/classes/${item.code}`}>
                       <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition cursor-pointer mb-2">
                         <div>
                           <h4 className="font-medium text-foreground">{item.class_name}</h4>
