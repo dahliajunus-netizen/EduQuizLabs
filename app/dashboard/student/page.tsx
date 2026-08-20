@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Navbar } from '@/components/Navbar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,7 +50,7 @@ export default function StudentDashboard() {
     setJoining(true);
 
     try {
-      // 1. Check if class code exists
+      // 1. Check if class code exists in teacher classes
       const codeCheckResponse = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(trimmedCode)}&select=*`,
         {
@@ -77,7 +78,7 @@ export default function StudentDashboard() {
         return;
       }
 
-      // 3. Save enrollment to Supabase (Ensure keys match your table columns exactly)
+      // 3. Save enrollment to Supabase
       const insertResponse = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/student_classes`,
         {
@@ -89,9 +90,9 @@ export default function StudentDashboard() {
             'Prefer': 'return=representation',
           },
           body: JSON.stringify({
-            class_name: foundClass.class_name, // Matches your teacher_classes structure
+            class_name: foundClass.class_name,
             code: foundClass.code,
-            school: foundClass.school_name     // Matches your teacher_classes structure
+            school: foundClass.school_name
           })
         }
       );
@@ -133,7 +134,7 @@ export default function StudentDashboard() {
                 <div className="flex gap-3">
                   <Input
                     type="text"
-                    placeholder="Enter 5-digit code (e.g., A3F92)"
+                    placeholder="Enter code (e.g., A3F92)"
                     value={classCode}
                     onChange={(e) => {
                       setClassCode(e.target.value);
@@ -168,13 +169,15 @@ export default function StudentDashboard() {
                   <p className="text-sm text-muted-foreground">You haven't joined any classes yet. Enter a valid code above!</p>
                 ) : (
                   myClasses.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20">
-                      <div>
-                        <h4 className="font-medium text-foreground">{item.class_name}</h4>
-                        <p className="text-xs text-muted-foreground">School: {item.school}</p>
+                    <Link key={index} href={`/student/classes/${item.code}`}>
+                      <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition cursor-pointer mb-2">
+                        <div>
+                          <h4 className="font-medium text-foreground">{item.class_name}</h4>
+                          <p className="text-xs text-muted-foreground">School: {item.school}</p>
+                        </div>
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">Active</span>
                       </div>
-                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">Active</span>
-                    </div>
+                    </Link>
                   ))
                 )}
               </div>
