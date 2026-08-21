@@ -7,21 +7,35 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Users, FileText, CheckSquare, PlusCircle, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
+import { createClient } from '@/utils/supabase/client'; // Adjust this import to match how you initialize your Supabase client
 
 export default function TeacherDashboard() {
+  const supabase = createClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [className, setClassName] = useState('');
   const [schoolName, setSchoolName] = useState('');
-  const [teacherClasses, setTeacherClasses] = useState<Array<{ id?: string; class_name: string; school_name: string; code: string }>>([]);
+  const [teacherClasses, setTeacherClasses] = useState<Array<{ id?: string; class_name: string; school_name: string; code: string; teacher_id?: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // Fetch classes from Supabase
+  // Fetch logged-in user and their specific classes
   useEffect(() => {
-    async function fetchTeacherClasses() {
+    async function initTeacherData() {
       try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError || !user) {
+          console.error('Error getting user or not logged in', authError);
+          setLoading(false);
+          return;
+        }
+
+        setCurrentUserId(user.id);
+
+        // Fetch only classes created by this specific teacher ID
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/teacher_classes?select=*`,
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/teacher_classes?teacher_id=eq.${user.id}&select=*`,
           {
             headers: {
               'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -39,12 +53,13 @@ export default function TeacherDashboard() {
         setLoading(false);
       }
     }
-    fetchTeacherClasses();
-  }, []);
+
+    initTeacherData();
+  }, [supabase]);
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!className.trim() || !schoolName.trim()) return;
+    if (!className.trim() || !schoolName.trim() || !currentUserId) return;
 
     setSubmitting(true);
     const randomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -53,6 +68,7 @@ export default function TeacherDashboard() {
       class_name: className.trim(),
       school_name: schoolName.trim(),
       code: randomCode,
+      teacher_id: currentUserId, // Tag class with the creator's ID
     };
 
     try {
