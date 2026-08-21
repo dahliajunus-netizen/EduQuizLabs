@@ -2,11 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { createClient } from '@supabase/supabase-js';
 import { Navbar } from '@/components/Navbar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Users, FileText, CheckSquare, PlusCircle, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function TeacherDashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -17,69 +22,46 @@ export default function TeacherDashboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  // Helper to extract session token and valid user UUID from localStorage
-  const getSupabaseAuth = () => {
-    if (typeof window === 'undefined') return { token: supabaseAnonKey, userId: null };
-    
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.includes('supabase') && key.includes('auth-token')) {
-        try {
-          const item = JSON.parse(localStorage.getItem(key)!);
-          const token = item?.access_token || item?.currentSession?.access_token || supabaseAnonKey;
-          const userId = item?.user?.id || item?.currentSession?.user?.id || null;
-          if (userId) return { token, userId };
-        } catch (e) {
-          // ignore parsing errors on unrelated keys
-        }
-      }
-    }
-    return { token: supabaseAnonKey, userId: null };
-  };
-
   useEffect(() => {
     async function initTeacherData() {
       try {
-        const { token, userId } = getSupabaseAuth();
+        const { data: { session } } = await supabase.auth.getSession();
         
-        if (!userId) {
+        if (!session || !session.user) {
           console.warn('No active user session found.');
           setLoading(false);
           return;
         }
 
+        const userId = session.user.id;
         setCurrentUserId(userId);
 
-        const response = await fetch(
-          `${supabaseUrl}/rest/v1/teacher_classes?teacher_id=eq.${userId}&select=*`,
-          {
-            headers: {
-              'apikey': supabaseAnonKey!,
-              'Authorization': `Bearer ${token}`,
-            }
-          }
-        );
+        const { data, error } = await supabase
+          .from('teacher_classes')
+          .select('*')
+          .eq('teacher_id', userId);
 
-        if (response.ok) {
-          const data = await response.json();
+        if (error) {
+          console.error('Error fetching teacher classes:', error);
+        } else if (data) {
           setTeacherClasses(data);
         }
       } catch (err) {
-        console.error('Error fetching teacher classes', err);
+        console.error('Error initializing teacher data:', err);
       } finally {
         setLoading(false);
       }
     }
 
     initTeacherData();
-  }, [supabaseUrl, supabaseAnonKey]);
+  }, []);
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!className.trim() || !schoolName.trim() || !currentUserId) return;
+    if (!className.trim() || !schoolName.trim() || !currentUserId) {
+      console.warn('Missing required fields or user ID for class creation.');
+      return;
+    }
 
     setSubmitting(true);
     const randomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -92,36 +74,25 @@ export default function TeacherDashboardPage() {
     };
 
     try {
-      const { token } = getSupabaseAuth();
+      const { data, error } = await supabase
+        .from('teacher_classes')
+        .insert([newClassData])
+        .select();
 
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/teacher_classes`,
-        {
-          method: 'POST',
-          headers: {
-            'apikey': supabaseAnonKey!,
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation',
-          },
-          body: JSON.stringify(newClassData)
-        }
-      );
-
-      const responseBody = await response.text();
-      
-      if (!response.ok) {
-        console.error('Supabase 400 Error Details:', responseBody);
-        throw new Error(`Failed to create class: ${responseBody}`);
+      if (error) {
+        console.error('Supabase Insert Error Details:', error);
+        throw new Error(error.message);
       }
 
-      const createdClass = JSON.parse(responseBody);
-      setTeacherClasses([...teacherClasses, createdClass[0]]);
+      if (data && data.length > 0) {
+        setTeacherClasses([...teacherClasses, data[0]]);
+      }
+      
       setClassName('');
       setSchoolName('');
       setIsModalOpen(false);
     } catch (err) {
-      console.error('Error creating class', err);
+      console.error('Error creating class:', err);
     } finally {
       setSubmitting(false);
     }
@@ -132,24 +103,18 @@ export default function TeacherDashboardPage() {
     e.stopPropagation();
 
     try {
-      const { token } = getSupabaseAuth();
+      const { error } = await supabase
+        .from('teacher_classes')
+        .delete()
+        .eq('code', code);
 
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${code}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'apikey': supabaseAnonKey!,
-            'Authorization': `Bearer ${token}`,
-          }
-        }
-      );
-
-      if (response.ok) {
+      if (error) {
+        console.error('Error deleting class:', error);
+      } else {
         setTeacherClasses(teacherClasses.filter((c) => c.code !== code));
       }
     } catch (err) {
-      console.error('Error deleting class', err);
+      console.error('Error deleting class:', err);
     }
   };
 
