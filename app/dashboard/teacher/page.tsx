@@ -7,15 +7,10 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Users, FileText, CheckSquare, PlusCircle, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client directly to avoid missing utility file paths
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { createClient } from '@/utils/supabase/client';
 
 export default function TeacherDashboardPage() {
+  const supabase = createClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [className, setClassName] = useState('');
   const [schoolName, setSchoolName] = useState('');
@@ -24,7 +19,6 @@ export default function TeacherDashboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // Fetch logged-in user and their specific classes
   useEffect(() => {
     async function initTeacherData() {
       try {
@@ -38,18 +32,12 @@ export default function TeacherDashboardPage() {
 
         setCurrentUserId(user.id);
 
-        // Fetch only classes created by this specific teacher ID
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/teacher_classes?teacher_id=eq.${user.id}&select=*`,
-          {
-            headers: {
-              'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
-            }
-          }
-        );
-        if (response.ok) {
-          const data = await response.json();
+        const { data, error } = await supabase
+          .from('teacher_classes')
+          .select('*')
+          .eq('teacher_id', user.id);
+
+        if (!error && data) {
           setTeacherClasses(data);
         }
       } catch (err) {
@@ -60,7 +48,7 @@ export default function TeacherDashboardPage() {
     }
 
     initTeacherData();
-  }, []);
+  }, [supabase]);
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,36 +61,23 @@ export default function TeacherDashboardPage() {
       class_name: className.trim(),
       school_name: schoolName.trim(),
       code: randomCode,
-      teacher_id: currentUserId, // Tag class with the creator's ID
+      teacher_id: currentUserId,
     };
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/teacher_classes`,
-        {
-          method: 'POST',
-          headers: {
-            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation',
-          },
-          body: JSON.stringify(newClassData)
-        }
-      );
+      const { data, error } = await supabase
+        .from('teacher_classes')
+        .insert([newClassData])
+        .select();
 
-      const responseText = await response.text();
+      if (error) throw error;
 
-      if (!response.ok) {
-        console.error("Supabase Error Response:", responseText);
-        throw new Error('Failed to create class');
+      if (data) {
+        setTeacherClasses([...teacherClasses, data[0]]);
+        setClassName('');
+        setSchoolName('');
+        setIsModalOpen(false);
       }
-
-      const createdClass = JSON.parse(responseText);
-      setTeacherClasses([...teacherClasses, createdClass[0]]);
-      setClassName('');
-      setSchoolName('');
-      setIsModalOpen(false);
     } catch (err) {
       console.error('Error creating class', err);
     } finally {
@@ -115,18 +90,12 @@ export default function TeacherDashboardPage() {
     e.stopPropagation();
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/teacher_classes?code=eq.${code}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}`,
-          }
-        }
-      );
+      const { error } = await supabase
+        .from('teacher_classes')
+        .delete()
+        .eq('code', code);
 
-      if (response.ok) {
+      if (!error) {
         setTeacherClasses(teacherClasses.filter((c) => c.code !== code));
       }
     } catch (err) {
