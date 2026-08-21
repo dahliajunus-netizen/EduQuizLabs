@@ -39,7 +39,7 @@ const countriesWithFlags = [
 const creditsList = [
   "Aidan Rayka Dewabrata - SMP Labschool Cibubur",
   "Atha Badzikh Dodi Elang Permana - SMP Labschool Cibubur",
-  "Bagas Almer Dzaki - SMP Labschool Cibubur",
+  "Bagas Almer Dzaky - SMP Labschool Cibubur",
   "Bilal Abrizam - SMP Labschool Cibubur",
   "Maher Akbar Alvarez - SMP Labschool Cibubur",
   "Raga Natha Aditya - SMP Labschool Cibubur"
