@@ -26,15 +26,21 @@ export default function TeacherDashboardPage() {
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.includes('auth-token')) {
+        if (key && (key.includes('auth-token') || key.includes('supabase.auth.token'))) {
           const raw = localStorage.getItem(key);
           if (raw) {
             const parsed = JSON.parse(raw);
             const token = parsed?.access_token || parsed?.currentSession?.access_token || supabaseAnonKey;
-            const userId = parsed?.user?.id || parsed?.currentSession?.user?.id || null;
+            const userId = parsed?.user?.id || parsed?.currentSession?.user?.id || parsed?.id;
             if (userId) return { token, userId };
           }
         }
+      }
+      // Fallback: check if there's a standalone user object stored
+      const userRaw = localStorage.getItem('supabase.auth.user');
+      if (userRaw) {
+        const userParsed = JSON.parse(userRaw);
+        if (userParsed?.id) return { token: supabaseAnonKey, userId: userParsed.id };
       }
     } catch (e) {
       console.error('Error reading localStorage session', e);
