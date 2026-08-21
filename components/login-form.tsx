@@ -74,7 +74,18 @@ export function LoginForm() {
 
       // Trim both strings to bypass any invisible spacing issues from the database
       if (user && user.password && user.password.trim() === password.trim()) {
-        const role = user.role ? user.role.toLowerCase() : 'student'
+        const role = user.role ? user.role.toLowerCase() : 'student';
+
+        // Save active account context properly to avoid cross-account mixing
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('current_user', JSON.stringify({
+            id: user.id,
+            fullName: user.fullName || user.full_name || 'User',
+            email: user.email,
+            role: role
+          }));
+        }
+
         router.push(`/dashboard/${role}`)
       } else {
         setError('Invalid email or password.')
