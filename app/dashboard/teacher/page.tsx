@@ -7,8 +7,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Users, FileText, CheckSquare, PlusCircle, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
-// Relative path fallback pointing up to your project's client utility
-import { createClient } from '../../../utils/supabase/client';
+// Try this standard lib path if utils doesn't exist
+import { createClient } from '@/lib/supabase/client';
 
 export default function TeacherDashboardPage() {
   const supabase = createClient();
