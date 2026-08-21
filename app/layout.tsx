@@ -19,7 +19,7 @@ const instrumentSerif = Instrument_Serif({
 })
 
 export const metadata: Metadata = {
-  title: 'Sign in · EduQuizLabs',
+  title: 'EduQuizLabs',
   description: 'Sign in to EduQuizLabs to build, share, and take smarter quizzes.',
   generator: 'v0.app',
   icons: {
