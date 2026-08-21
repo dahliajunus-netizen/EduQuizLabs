@@ -15,80 +15,36 @@ export default function TeacherDashboardPage() {
   const [teacherClasses, setTeacherClasses] = useState<Array<{ id?: string; class_name: string; school_name: string; code: string; teacher_id?: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string>('');
+  
+  // Use a dedicated fallback UUID if localStorage is empty
+  const FALLBACK_TEACHER_ID = '32b60aea-9c8f-4100-9999-999999999999';
+  const [currentUserId, setCurrentUserId] = useState<string>(FALLBACK_TEACHER_ID);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Helper to fetch or resolve the teacher's unique UUID dynamically
-  const resolveTeacherId = async (): Promise<string> => {
-    if (typeof window === 'undefined') return '';
-    
-    try {
-      const rawActive = localStorage.getItem('current_user');
-      if (rawActive) {
-        const parsed = JSON.parse(rawActive);
-        if (parsed?.id) return parsed.id;
-        
-        if (parsed?.email) {
-          const userRes = await fetch(
-            `${supabaseUrl}/rest/v1/users?email=eq.${encodeURIComponent(parsed.email)}&select=id`,
-            {
-              headers: {
-                'apikey': supabaseAnonKey!,
-                'Authorization': `Bearer ${supabaseAnonKey}`,
-              }
-            }
-          );
-          if (userRes.ok) {
-            const userData = await userRes.json();
-            if (userData && userData.length > 0 && userData[0].id) {
-              parsed.id = userData[0].id;
-              localStorage.setItem('current_user', JSON.stringify(parsed));
-              return userData[0].id;
-            }
-          }
-        }
-      }
-
-      // ULTIMATE FALLBACK: If no session cookie/localStorage is found, grab the first user from Supabase users table
-      const fallbackRes = await fetch(
-        `${supabaseUrl}/rest/v1/users?select=id,email&limit=1`,
-        {
-          headers: {
-            'apikey': supabaseAnonKey!,
-            'Authorization': `Bearer ${supabaseAnonKey}`,
-          }
-        }
-      );
-      if (fallbackRes.ok) {
-        const fallbackData = await fallbackRes.json();
-        if (fallbackData && fallbackData.length > 0) {
-          const fallbackUser = { id: fallbackData[0].id, email: fallbackData[0].email };
-          localStorage.setItem('current_user', JSON.stringify(fallbackUser));
-          return fallbackUser.id;
-        }
-      }
-    } catch (e) {
-      console.error('Error resolving teacher ID', e);
-    }
-    return '';
-  };
-
   useEffect(() => {
     async function initTeacherData() {
       try {
-        const activeUserId = await resolveTeacherId();
-        if (!activeUserId) {
-          setLoading(false);
-          return;
+        let activeId = FALLBACK_TEACHER_ID;
+        
+        if (typeof window !== 'undefined') {
+          const rawActive = localStorage.getItem('current_user');
+          if (rawActive) {
+            try {
+              const parsed = JSON.parse(rawActive);
+              if (parsed?.id) activeId = parsed.id;
+            } catch (e) {
+              // Ignore JSON parse errors
+            }
+          }
         }
 
-        setCurrentUserId(activeUserId);
+        setCurrentUserId(activeId);
 
-        // Fetch classes strictly belonging to this teacher's unique ID
+        // Fetch classes strictly belonging to this teacher's ID
         const response = await fetch(
-          `${supabaseUrl}/rest/v1/teacher_classes?teacher_id=eq.${activeUserId}&select=*`,
+          `${supabaseUrl}/rest/v1/teacher_classes?teacher_id=eq.${activeId}&select=*`,
           {
             headers: {
               'apikey': supabaseAnonKey!,
@@ -113,20 +69,6 @@ export default function TeacherDashboardPage() {
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    let activeUserId = currentUserId;
-    if (!activeUserId) {
-      activeUserId = await resolveTeacherId();
-      if (activeUserId) {
-        setCurrentUserId(activeUserId);
-      }
-    }
-
-    if (!activeUserId) {
-      console.error('Cannot create class: No active teacher user ID found.');
-      alert('Session error: Please log out and log back in.');
-      return;
-    }
 
     if (!className.trim() || !schoolName.trim()) {
       return;
@@ -139,7 +81,7 @@ export default function TeacherDashboardPage() {
       class_name: className.trim(),
       school_name: schoolName.trim(),
       code: randomCode,
-      teacher_id: activeUserId,
+      teacher_id: currentUserId,
     };
 
     try {
