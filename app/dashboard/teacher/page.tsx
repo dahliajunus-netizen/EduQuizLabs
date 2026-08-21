@@ -6,7 +6,7 @@ import { Navbar } from '@/components/Navbar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Users, FileText, CheckSquare, PlusCircle, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
+import { PlusCircle, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
 
 export default function TeacherDashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -168,46 +168,6 @@ export default function TeacherDashboardPage() {
           </Button>
         </div>
 
-        {/* Quick Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="bg-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Created Classes</CardTitle>
-              <BookOpen className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">{teacherClasses.length} Active</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Pending Submissions</CardTitle>
-              <FileText className="h-4 w-4 text-amber-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">14 to Grade</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Active Sections</CardTitle>
-              <CheckSquare className="h-4 w-4 text-emerald-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">4 Sections</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Attendance Rate</CardTitle>
-              <Users className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">96.2%</div>
-            </CardContent>
-          </Card>
-        </div>
-
         {/* List of Created Classes */}
         <Card className="bg-card">
           <CardHeader>
@@ -226,7 +186,7 @@ export default function TeacherDashboardPage() {
               ) : (
                 teacherClasses.map((item, index) => (
                   <Link key={index} href={`/dashboard/student/classes/${item.code}`}>
-                    <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition cursor-pointer mb-2">
+                    <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/25 hover:bg-accent/40 transition cursor-pointer mb-2">
                       <div>
                         <h4 className="font-medium text-foreground">{item.class_name}</h4>
                         <p className="text-xs text-muted-foreground">School: {item.school_name}</p>
