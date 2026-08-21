@@ -42,11 +42,6 @@ export function Navbar() {
             <Link href={`/dashboard/${role}`} className="hover:text-foreground transition-colors flex items-center gap-1.5">
               <LayoutDashboard size={16} /> Overview
             </Link>
-            {role === 'teacher' && (
-              <Link href="/dashboard/teacher/classes" className="hover:text-foreground transition-colors flex items-center gap-1.5">
-                <Users size={16} /> My Classes
-              </Link>
-            )}
             {role === 'parent' && (
               <Link href="/dashboard/parent/children" className="hover:text-foreground transition-colors flex items-center gap-1.5">
                 <Users size={16} /> Children
