@@ -19,8 +19,8 @@ const instrumentSerif = Instrument_Serif({
 })
 
 export const metadata: Metadata = {
-  title: 'EduPortal · School Management Dashboard',
-  description: 'Sign in to EduPortal to manage classes and school progress.',
+  title: 'Sign in · EduQuizLabs',
+  description: 'Sign in to EduQuizLabs to build, share, and take smarter quizzes.',
   generator: 'v0.app',
   icons: {
     icon: '/image-removebg-preview (1) (1).png',
