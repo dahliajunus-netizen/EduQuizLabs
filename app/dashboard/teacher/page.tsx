@@ -7,9 +7,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Users, FileText, CheckSquare, PlusCircle, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
-import { createClient } from '@/utils/supabase/client'; // Adjust this import to match how you initialize your Supabase client
+import { createClient } from '@/utils/supabase/client';
 
-export default function TeacherDashboard() {
+export default function TeacherDashboardPage() {
   const supabase = createClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [className, setClassName] = useState('');
