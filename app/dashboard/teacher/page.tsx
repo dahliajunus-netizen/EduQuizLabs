@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Users, FileText, CheckSquare, PlusCircle, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
+// Change this import path if your project uses `@/lib/supabase/client`
 import { createClient } from '@/utils/supabase/client';
 
 export default function TeacherDashboardPage() {
