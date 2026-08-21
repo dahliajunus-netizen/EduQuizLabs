@@ -14,8 +14,36 @@ export default function ClassDetailsPage() {
 
   const [classData, setClassData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [dashboardUrl, setDashboardUrl] = useState('/dashboard/student');
 
   useEffect(() => {
+    // Determine whether user is a teacher or student based on localStorage or user profile
+    try {
+      let isTeacher = false;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('auth') || key.includes('supabase'))) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const role = parsed?.user?.user_metadata?.role || parsed?.user?.role;
+            if (role === 'teacher' || window.location.pathname.includes('/teacher')) {
+              isTeacher = true;
+              break;
+            }
+          }
+        }
+      }
+      // Also check if current URL path implies teacher context
+      if (window.location.href.includes('/teacher') || localStorage.getItem('user_role') === 'teacher') {
+        isTeacher = true;
+      }
+
+      setDashboardUrl(isTeacher ? '/dashboard/teacher' : '/dashboard/student');
+    } catch (e) {
+      console.error('Error determining role', e);
+    }
+
     async function fetchClassDetails() {
       if (!code) return;
       try {
@@ -56,7 +84,7 @@ export default function ClassDetailsPage() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="container mx-auto px-6 py-8 space-y-6">
-        <Link href="/teacher">
+        <Link href={dashboardUrl}>
           <Button variant="ghost" className="gap-2 mb-2">
             <ArrowLeft className="size-4" /> Back to Dashboard
           </Button>
