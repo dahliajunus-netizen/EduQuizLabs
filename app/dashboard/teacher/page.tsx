@@ -15,48 +15,60 @@ export default function TeacherDashboardPage() {
   const [teacherClasses, setTeacherClasses] = useState<Array<{ id?: string; class_name: string; school_name: string; code: string; teacher_id?: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string>('11111111-1111-1111-1111-111111111111');
+  const [currentUserId, setCurrentUserId] = useState<string>('');
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const getSupabaseSession = () => {
-    if (typeof window === 'undefined') return { token: supabaseAnonKey, userId: '11111111-1111-1111-1111-111111111111' };
-    try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (key.includes('auth') || key.includes('supabase'))) {
-          const raw = localStorage.getItem(key);
-          if (raw) {
-            try {
-              const parsed = JSON.parse(raw);
-              const token = parsed?.access_token || parsed?.currentSession?.access_token || supabaseAnonKey;
-              const userId = parsed?.user?.id || parsed?.currentSession?.user?.id || parsed?.id;
-              if (userId) return { token, userId };
-            } catch (err) {
-              // skip non-json
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Error reading localStorage session', e);
-    }
-    return { token: supabaseAnonKey, userId: '11111111-1111-1111-1111-111111111111' };
-  };
-
   useEffect(() => {
     async function initTeacherData() {
       try {
-        const { token, userId } = getSupabaseSession();
-        setCurrentUserId(userId);
+        let activeUserId = '';
+        let userEmail = '';
 
+        // 1. Grab active user from localStorage current_user set during login
+        if (typeof window !== 'undefined') {
+          const rawActive = localStorage.getItem('current_user');
+          if (rawActive) {
+            const parsed = JSON.parse(rawActive);
+            if (parsed?.id) activeUserId = parsed.id;
+            if (parsed?.email) userEmail = parsed.email;
+          }
+        }
+
+        // 2. Fallback: if id isn't found in current_user, lookup by email in Supabase users table
+        if (!activeUserId && userEmail) {
+          const userRes = await fetch(
+            `${supabaseUrl}/rest/v1/users?email=eq.${encodeURIComponent(userEmail)}&select=id`,
+            {
+              headers: {
+                'apikey': supabaseAnonKey!,
+                'Authorization': `Bearer ${supabaseAnonKey}`,
+              }
+            }
+          );
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            if (userData && userData.length > 0) {
+              activeUserId = userData[0].id;
+            }
+          }
+        }
+
+        if (!activeUserId) {
+          setLoading(false);
+          return;
+        }
+
+        setCurrentUserId(activeUserId);
+
+        // 3. Fetch classes strictly belonging to this teacher's unique ID
         const response = await fetch(
-          `${supabaseUrl}/rest/v1/teacher_classes?teacher_id=eq.${userId}&select=*`,
+          `${supabaseUrl}/rest/v1/teacher_classes?teacher_id=eq.${activeUserId}&select=*`,
           {
             headers: {
               'apikey': supabaseAnonKey!,
-              'Authorization': `Bearer ${token}`,
+              'Authorization': `Bearer ${supabaseAnonKey}`,
             }
           }
         );
@@ -77,11 +89,12 @@ export default function TeacherDashboardPage() {
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    const sessionInfo = getSupabaseSession();
-    const activeUserId = currentUserId || sessionInfo.userId || '11111111-1111-1111-1111-111111111111';
+    if (!currentUserId) {
+      console.error('Cannot create class: No active teacher user ID found.');
+      return;
+    }
 
     if (!className.trim() || !schoolName.trim()) {
-      console.error('Cannot create class: Missing class name or school name.');
       return;
     }
 
@@ -92,7 +105,7 @@ export default function TeacherDashboardPage() {
       class_name: className.trim(),
       school_name: schoolName.trim(),
       code: randomCode,
-      teacher_id: activeUserId,
+      teacher_id: currentUserId, // Stamped with the unique logged-in teacher's UUID
     };
 
     try {
@@ -102,7 +115,7 @@ export default function TeacherDashboardPage() {
           method: 'POST',
           headers: {
             'apikey': supabaseAnonKey!,
-            'Authorization': `Bearer ${sessionInfo.token}`,
+            'Authorization': `Bearer ${supabaseAnonKey}`,
             'Content-Type': 'application/json',
             'Prefer': 'return=representation',
           },
@@ -133,15 +146,13 @@ export default function TeacherDashboardPage() {
     e.stopPropagation();
 
     try {
-      const sessionInfo = getSupabaseSession();
-
       const response = await fetch(
         `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${code}`,
         {
           method: 'DELETE',
           headers: {
             'apikey': supabaseAnonKey!,
-            'Authorization': `Bearer ${sessionInfo.token}`,
+            'Authorization': `Bearer ${supabaseAnonKey}`,
           }
         }
       );
