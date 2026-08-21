@@ -23,7 +23,6 @@ export default function TeacherDashboardPage() {
   useEffect(() => {
     async function initTeacherData() {
       try {
-        // Retrieve stored user session token from browser localStorage if available
         const sessionStr = localStorage.getItem('supabase.auth.token');
         let accessToken = supabaseAnonKey;
         let userId = 'default-teacher-id';
@@ -40,7 +39,6 @@ export default function TeacherDashboardPage() {
 
         setCurrentUserId(userId);
 
-        // Fetch classes using native REST API
         const response = await fetch(
           `${supabaseUrl}/rest/v1/teacher_classes?teacher_id=eq.${userId}&select=*`,
           {
@@ -80,13 +78,24 @@ export default function TeacherDashboardPage() {
     };
 
     try {
+      const sessionStr = localStorage.getItem('supabase.auth.token');
+      let accessToken = supabaseAnonKey;
+      if (sessionStr) {
+        try {
+          const sessionData = JSON.parse(sessionStr);
+          accessToken = sessionData?.currentSession?.access_token || supabaseAnonKey;
+        } catch (e) {
+          console.error('Error parsing session', e);
+        }
+      }
+
       const response = await fetch(
         `${supabaseUrl}/rest/v1/teacher_classes`,
         {
           method: 'POST',
           headers: {
             'apikey': supabaseAnonKey!,
-            'Authorization': `Bearer ${supabaseAnonKey!}`,
+            'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
             'Prefer': 'return=representation',
           },
@@ -94,9 +103,14 @@ export default function TeacherDashboardPage() {
         }
       );
 
-      if (!response.ok) throw new Error('Failed to create class');
+      const responseBody = await response.text();
+      
+      if (!response.ok) {
+        console.error('Supabase 400 Error Details:', responseBody);
+        throw new Error(`Failed to create class: ${responseBody}`);
+      }
 
-      const createdClass = await response.json();
+      const createdClass = JSON.parse(responseBody);
       setTeacherClasses([...teacherClasses, createdClass[0]]);
       setClassName('');
       setSchoolName('');
@@ -113,13 +127,24 @@ export default function TeacherDashboardPage() {
     e.stopPropagation();
 
     try {
+      const sessionStr = localStorage.getItem('supabase.auth.token');
+      let accessToken = supabaseAnonKey;
+      if (sessionStr) {
+        try {
+          const sessionData = JSON.parse(sessionStr);
+          accessToken = sessionData?.currentSession?.access_token || supabaseAnonKey;
+        } catch (e) {
+          console.error('Error parsing session', e);
+        }
+      }
+
       const response = await fetch(
         `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${code}`,
         {
           method: 'DELETE',
           headers: {
             'apikey': supabaseAnonKey!,
-            'Authorization': `Bearer ${supabaseAnonKey!}`,
+            'Authorization': `Bearer ${accessToken}`,
           }
         }
       );
