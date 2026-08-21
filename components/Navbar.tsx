@@ -5,26 +5,30 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, BookOpen, Users, LogOut, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, LogOut } from 'lucide-react';
 
 export function Navbar() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    const users = JSON.parse(localStorage.getItem('edu_users') || '[]');
-    // For demo purposes, we grab the last logged-in or registered user, 
-    // or you can hook this up to your active session state.
-    if (users.length > 0) {
-      setUser(users[users.length - 1]);
+    try {
+      // Read the active signed-in user session securely
+      const rawUser = localStorage.getItem('current_user');
+      if (rawUser) {
+        setUser(JSON.parse(rawUser));
+      }
+    } catch (e) {
+      console.error('Error loading user session in navbar', e);
     }
   }, []);
 
   const handleLogout = () => {
+    localStorage.removeItem('current_user');
     router.push('/');
   };
 
-  const role = user?.role || 'student';
+  const role = user?.role ? user.role.toLowerCase() : 'student';
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -53,7 +57,7 @@ export function Navbar() {
 
         <div className="flex items-center gap-4">
           <div className="hidden sm:flex flex-col text-right">
-            <span className="text-sm font-medium text-foreground">{user?.fullName || 'Guest User'}</span>
+            <span className="text-sm font-medium text-foreground">{user?.fullName || user?.full_name || 'Guest User'}</span>
             <span className="text-xs text-muted-foreground capitalize">Role: {role}</span>
           </div>
           <ThemeToggle />
