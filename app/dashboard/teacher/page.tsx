@@ -20,21 +20,35 @@ export default function TeacherDashboardPage() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  // Helper to extract session token and valid user UUID from localStorage
+  const getSupabaseAuth = () => {
+    if (typeof window === 'undefined') return { token: supabaseAnonKey, userId: null };
+    
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.includes('supabase') && key.includes('auth-token')) {
+        try {
+          const item = JSON.parse(localStorage.getItem(key)!);
+          const token = item?.access_token || item?.currentSession?.access_token || supabaseAnonKey;
+          const userId = item?.user?.id || item?.currentSession?.user?.id || null;
+          if (userId) return { token, userId };
+        } catch (e) {
+          // ignore parsing errors on unrelated keys
+        }
+      }
+    }
+    return { token: supabaseAnonKey, userId: null };
+  };
+
   useEffect(() => {
     async function initTeacherData() {
       try {
-        const sessionStr = localStorage.getItem('supabase.auth.token');
-        let accessToken = supabaseAnonKey;
-        let userId = 'default-teacher-id';
-
-        if (sessionStr) {
-          try {
-            const sessionData = JSON.parse(sessionStr);
-            accessToken = sessionData?.currentSession?.access_token || supabaseAnonKey;
-            userId = sessionData?.currentSession?.user?.id || userId;
-          } catch (e) {
-            console.error('Error parsing session', e);
-          }
+        const { token, userId } = getSupabaseAuth();
+        
+        if (!userId) {
+          console.warn('No active user session found.');
+          setLoading(false);
+          return;
         }
 
         setCurrentUserId(userId);
@@ -44,7 +58,7 @@ export default function TeacherDashboardPage() {
           {
             headers: {
               'apikey': supabaseAnonKey!,
-              'Authorization': `Bearer ${accessToken}`,
+              'Authorization': `Bearer ${token}`,
             }
           }
         );
@@ -78,16 +92,7 @@ export default function TeacherDashboardPage() {
     };
 
     try {
-      const sessionStr = localStorage.getItem('supabase.auth.token');
-      let accessToken = supabaseAnonKey;
-      if (sessionStr) {
-        try {
-          const sessionData = JSON.parse(sessionStr);
-          accessToken = sessionData?.currentSession?.access_token || supabaseAnonKey;
-        } catch (e) {
-          console.error('Error parsing session', e);
-        }
-      }
+      const { token } = getSupabaseAuth();
 
       const response = await fetch(
         `${supabaseUrl}/rest/v1/teacher_classes`,
@@ -95,7 +100,7 @@ export default function TeacherDashboardPage() {
           method: 'POST',
           headers: {
             'apikey': supabaseAnonKey!,
-            'Authorization': `Bearer ${accessToken}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
             'Prefer': 'return=representation',
           },
@@ -127,16 +132,7 @@ export default function TeacherDashboardPage() {
     e.stopPropagation();
 
     try {
-      const sessionStr = localStorage.getItem('supabase.auth.token');
-      let accessToken = supabaseAnonKey;
-      if (sessionStr) {
-        try {
-          const sessionData = JSON.parse(sessionStr);
-          accessToken = sessionData?.currentSession?.access_token || supabaseAnonKey;
-        } catch (e) {
-          console.error('Error parsing session', e);
-        }
-      }
+      const { token } = getSupabaseAuth();
 
       const response = await fetch(
         `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${code}`,
@@ -144,7 +140,7 @@ export default function TeacherDashboardPage() {
           method: 'DELETE',
           headers: {
             'apikey': supabaseAnonKey!,
-            'Authorization': `Bearer ${accessToken}`,
+            'Authorization': `Bearer ${token}`,
           }
         }
       );
