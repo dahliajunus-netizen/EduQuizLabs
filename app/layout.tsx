@@ -19,25 +19,11 @@ const instrumentSerif = Instrument_Serif({
 })
 
 export const metadata: Metadata = {
-  title: 'Sign in · EduQuizLabs',
-  description: 'Sign in to EduQuizLabs to build, share, and take smarter quizzes.',
+  title: 'EduPortal · School Management Dashboard',
+  description: 'Sign in to EduPortal to manage classes and school progress.',
   generator: 'v0.app',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: '/image-removebg-preview (1) (1).png',
   },
 }
 
