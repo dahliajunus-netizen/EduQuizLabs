@@ -7,15 +7,11 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Users, FileText, CheckSquare, PlusCircle, BookOpen, Trash2, X, Loader2 } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client directly
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Relative path fallback pointing up to your project's client utility
+import { createClient } from '../../../utils/supabase/client';
 
 export default function TeacherDashboardPage() {
+  const supabase = createClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [className, setClassName] = useState('');
   const [schoolName, setSchoolName] = useState('');
@@ -60,7 +56,7 @@ export default function TeacherDashboardPage() {
     }
 
     initTeacherData();
-  }, []);
+  }, [supabase]);
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
