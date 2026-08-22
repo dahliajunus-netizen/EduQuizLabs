@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Instrument_Serif, Inter } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
+import { LanguageProvider } from '@/components/language-provider'
 import './globals.css'
 
 const inter = Inter({
@@ -20,7 +21,8 @@ const instrumentSerif = Instrument_Serif({
 
 export const metadata: Metadata = {
   title: 'EduQuizLabs',
-  description: 'Sign in to EduQuizLabs to build, share, and take smarter quizzes.',
+  description:
+    'Sign in to EduQuizLabs to build, share, and take smarter quizzes.',
   generator: 'v0.app',
   icons: {
     icon: '/image-removebg-preview (1) (1).png',
@@ -53,7 +55,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <LanguageProvider>
+            {children}
+          </LanguageProvider>
+
           {process.env.NODE_ENV === 'production' && <Analytics />}
         </ThemeProvider>
       </body>
