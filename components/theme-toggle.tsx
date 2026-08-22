@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button'
 
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme()
+
   const [mounted, setMounted] = useState(false)
   const [pop, setPop] = useState(false)
+
   const buttonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -21,28 +23,40 @@ export function ThemeToggle() {
   const toggleTheme = () => {
     const nextTheme = isDark ? 'light' : 'dark'
 
-    const button = buttonRef.current
+    /*
+     * ---------------------------------------------------------
+     * Icon pop animation
+     * ---------------------------------------------------------
+     */
 
-    const reducedMotion = window.matchMedia(
-      '(prefers-reduced-motion: reduce)',
-    ).matches
-
-    // Icon animation
     setPop(true)
 
     window.setTimeout(() => {
       setPop(false)
     }, 400)
 
-    // No animation if the user/device requests reduced motion
-    if (reducedMotion) {
+    /*
+     * ---------------------------------------------------------
+     * Reduced motion
+     * ---------------------------------------------------------
+     */
+
+    const prefersReducedMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
+
+    if (prefersReducedMotion) {
       setTheme(nextTheme)
       return
     }
 
     /*
-     * Get the center of the theme button.
+     * ---------------------------------------------------------
+     * Get button position
+     * ---------------------------------------------------------
      */
+
+    const button = buttonRef.current
     const rect = button?.getBoundingClientRect()
 
     const x = rect
@@ -54,11 +68,12 @@ export function ThemeToggle() {
       : window.innerHeight / 2
 
     /*
-     * Find the furthest corner from the button.
-     * The circle needs to be large enough to cover
-     * the entire screen.
+     * ---------------------------------------------------------
+     * Calculate circle size
+     * ---------------------------------------------------------
      */
-    const distances = [
+
+    const radius = Math.max(
       Math.hypot(x, y),
       Math.hypot(window.innerWidth - x, y),
       Math.hypot(x, window.innerHeight - y),
@@ -66,19 +81,17 @@ export function ThemeToggle() {
         window.innerWidth - x,
         window.innerHeight - y,
       ),
-    ]
+    )
 
-    const radius = Math.max(...distances)
+    const diameter = radius * 2
 
     /*
-     * ============================================================
-     * Create the transition circle
-     * ============================================================
+     * ---------------------------------------------------------
+     * Create transition circle
+     * ---------------------------------------------------------
      */
 
     const circle = document.createElement('div')
-
-    const diameter = radius * 2
 
     circle.style.position = 'fixed'
     circle.style.left = `${x - radius}px`
@@ -90,70 +103,61 @@ export function ThemeToggle() {
     circle.style.pointerEvents = 'none'
 
     /*
-     * Extremely high z-index so the circle is above
-     * the entire application.
+     * Keep it above the entire page.
      */
     circle.style.zIndex = '2147483647'
 
     /*
-     * The circle has the COLOR OF THE NEW THEME.
+     * Match the colors in globals.css.
      */
-    circle.style.background =
+    circle.style.backgroundColor =
       nextTheme === 'dark'
-        ? 'hsl(222 47% 11%)'
-        : 'hsl(0 0% 100%)'
+        ? 'oklch(0.19 0.03 245)'
+        : 'oklch(0.985 0.004 230)'
 
     /*
-     * Start completely collapsed.
+     * Start at the center.
      */
     circle.style.transform = 'scale(0)'
     circle.style.transformOrigin = 'center center'
 
+    /*
+     * Use standard CSS transition.
+     */
+    circle.style.transition =
+      'transform 500ms cubic-bezier(0.4, 0, 0.2, 1)'
+
     document.body.appendChild(circle)
 
     /*
-     * Force the browser to acknowledge the initial
-     * scale(0) before we change it.
+     * Force the browser to render the initial state.
      */
     void circle.offsetWidth
 
     /*
-     * Change the actual theme BEFORE expanding the circle.
+     * Change the actual theme.
      *
-     * The circle hides the change, then expands over it.
+     * The circle is currently covering the screen,
+     * so the change happens underneath it.
      */
     setTheme(nextTheme)
 
     /*
-     * Give next-themes/React a frame to apply the new theme.
+     * Wait for the theme change to render,
+     * then expand the circle.
      */
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const animation = circle.animate(
-          [
-            {
-              transform: 'scale(0)',
-            },
-            {
-              transform: 'scale(1)',
-            },
-          ],
-          {
-            duration: 500,
-            easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-            fill: 'forwards',
-          },
-        )
-
-        animation.onfinish = () => {
-          circle.remove()
-        }
-
-        animation.oncancel = () => {
-          circle.remove()
-        }
+        circle.style.transform = 'scale(1)'
       })
     })
+
+    /*
+     * Remove the circle after the animation.
+     */
+    window.setTimeout(() => {
+      circle.remove()
+    }, 550)
   }
 
   return (
