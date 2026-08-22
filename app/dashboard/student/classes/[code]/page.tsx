@@ -122,6 +122,10 @@ export default function ClassDetailsPage() {
   const [linkCheckError, setLinkCheckError] =
     useState<string | null>(null);
 
+  // Material deletion
+  const [deletingMaterialId, setDeletingMaterialId] =
+    useState<string | null>(null);
+
   /*
    * ------------------------------------------------------------
    * Detect current user's role
@@ -134,7 +138,6 @@ export default function ClassDetailsPage() {
     try {
       let detectedRole = '';
 
-      // Direct role
       const directRole =
         localStorage.getItem('user_role');
 
@@ -143,7 +146,6 @@ export default function ClassDetailsPage() {
           directRole.toLowerCase();
       }
 
-      // Current user
       const currentUserRaw =
         localStorage.getItem('current_user');
 
@@ -167,7 +169,6 @@ export default function ClassDetailsPage() {
         }
       }
 
-      // Inspect Supabase/auth localStorage entries
       for (
         let i = 0;
         i < localStorage.length;
@@ -518,6 +519,102 @@ export default function ClassDetailsPage() {
 
   /*
    * ------------------------------------------------------------
+   * DELETE MATERIAL
+   * ------------------------------------------------------------
+   */
+
+  const handleDeleteMaterial = async (
+    material: Material,
+    courseId: string
+  ) => {
+    if (!isTeacher) return;
+
+    if (!material.id) {
+      alert(
+        'This material cannot be deleted because it has no ID.'
+      );
+      return;
+    }
+
+    if (
+      !supabaseUrl ||
+      !supabaseAnonKey
+    ) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `Are you sure you want to delete "${material.name}"?`
+      );
+
+    if (!confirmed) return;
+
+    setDeletingMaterialId(
+      material.id
+    );
+
+    try {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/course_materials?id=eq.${encodeURIComponent(
+          material.id
+        )}`,
+        {
+          method: 'DELETE',
+
+          headers: {
+            apikey: supabaseAnonKey,
+
+            Authorization:
+              `Bearer ${supabaseAnonKey}`,
+
+            Prefer:
+              'return=minimal',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const responseText =
+          await response.text();
+
+        console.error(
+          'Delete material response:',
+          responseText
+        );
+
+        throw new Error(
+          'Failed to delete material.'
+        );
+      }
+
+      // Remove it immediately from the UI
+      setMaterials((previous) => ({
+        ...previous,
+
+        [courseId]: (
+          previous[courseId] || []
+        ).filter(
+          (item) =>
+            item.id !== material.id
+        ),
+      }));
+    } catch (err) {
+      console.error(
+        'Error deleting material:',
+        err
+      );
+
+      alert(
+        'Failed to delete material. Please try again.'
+      );
+    } finally {
+      setDeletingMaterialId(null);
+    }
+  };
+
+  /*
+   * ------------------------------------------------------------
    * Toggle course
    * ------------------------------------------------------------
    */
@@ -573,9 +670,6 @@ export default function ClassDetailsPage() {
   /*
    * ------------------------------------------------------------
    * AI LINK SAFETY CHECK
-   *
-   * Uses:
-   * /api/moderate-link
    * ------------------------------------------------------------
    */
 
@@ -609,7 +703,8 @@ export default function ClassDetailsPage() {
 
       if (!response.ok) {
         throw new Error(
-          data?.error ||
+          data?.reason ||
+            data?.error ||
             'Unable to check this link.'
         );
       }
@@ -670,10 +765,6 @@ export default function ClassDetailsPage() {
     setLinkCheckError(null);
 
     try {
-      /*
-       * Validate URL
-       */
-
       let parsedUrl: URL;
 
       try {
@@ -686,10 +777,6 @@ export default function ClassDetailsPage() {
           'Please enter a valid URL.'
         );
       }
-
-      /*
-       * Only HTTP / HTTPS
-       */
 
       if (
         parsedUrl.protocol !==
@@ -705,20 +792,12 @@ export default function ClassDetailsPage() {
       const cleanLink =
         parsedUrl.toString();
 
-      /*
-       * AI CHECK
-       */
-
       const checkResult =
         await checkMaterialLink(
           cleanLink
         );
 
       setCheckingLink(false);
-
-      /*
-       * Unsafe link
-       */
 
       if (!checkResult.safe) {
         const reason =
@@ -802,10 +881,6 @@ export default function ClassDetailsPage() {
           createdMaterial,
         ],
       }));
-
-      /*
-       * Automatically open course
-       */
 
       setOpenCourses((previous) => ({
         ...previous,
@@ -955,8 +1030,6 @@ export default function ClassDetailsPage() {
             </div>
           </div>
 
-          {/* Teacher only */}
-
           {isTeacher && (
             <Button
               onClick={() =>
@@ -1079,8 +1152,6 @@ export default function ClassDetailsPage() {
                           </CardTitle>
                         </div>
 
-                        {/* Teacher only */}
-
                         {isTeacher &&
                           course.id && (
                             <Button
@@ -1123,8 +1194,6 @@ export default function ClassDetailsPage() {
                                 Materials
                               </h3>
 
-                              {/* Teacher only */}
-
                               {isTeacher &&
                                 course.id && (
                                   <Button
@@ -1162,42 +1231,95 @@ export default function ClassDetailsPage() {
                                   (
                                     material,
                                     materialIndex
-                                  ) => (
-                                    <a
-                                      key={
-                                        material.id ||
-                                        `${courseId}-material-${materialIndex}`
-                                      }
-                                      href={
-                                        material.link
-                                      }
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="group flex items-center gap-3 rounded-lg border border-border bg-background p-3 transition hover:border-primary/50 hover:bg-primary/5"
-                                    >
-                                      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                                        <LinkIcon className="size-4 text-primary" />
-                                      </div>
+                                  ) => {
+                                    const materialId =
+                                      material.id ||
+                                      `${courseId}-material-${materialIndex}`;
 
-                                      <div className="min-w-0 flex-1">
-                                        <p className="truncate font-medium text-foreground">
-                                          {
-                                            material.name
-                                          }
-                                        </p>
+                                    const isDeleting =
+                                      !!material.id &&
+                                      deletingMaterialId ===
+                                        material.id;
 
-                                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                          {
+                                    return (
+                                      <div
+                                        key={
+                                          materialId
+                                        }
+                                        className="group flex items-center gap-3 rounded-lg border border-border bg-background p-3 transition hover:border-primary/50 hover:bg-primary/5"
+                                      >
+                                        {/* Material icon */}
+
+                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                                          <LinkIcon className="size-4 text-primary" />
+                                        </div>
+
+                                        {/* Material link */}
+
+                                        <a
+                                          href={
                                             material.link
                                           }
-                                        </p>
-                                      </div>
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="min-w-0 flex-1"
+                                        >
+                                          <p className="truncate font-medium text-foreground">
+                                            {
+                                              material.name
+                                            }
+                                          </p>
 
-                                      <span className="shrink-0 text-xs text-primary opacity-0 transition group-hover:opacity-100">
-                                        Open
-                                      </span>
-                                    </a>
-                                  )
+                                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                            {
+                                              material.link
+                                            }
+                                          </p>
+                                        </a>
+
+                                        {/* Open */}
+
+                                        <a
+                                          href={
+                                            material.link
+                                          }
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="hidden shrink-0 text-xs text-primary transition group-hover:block"
+                                        >
+                                          Open
+                                        </a>
+
+                                        {/* DELETE MATERIAL */}
+
+                                        {isTeacher &&
+                                          material.id && (
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              disabled={
+                                                isDeleting
+                                              }
+                                              onClick={() =>
+                                                handleDeleteMaterial(
+                                                  material,
+                                                  course.id!
+                                                )
+                                              }
+                                              className="size-8 shrink-0 p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                              aria-label={`Delete ${material.name}`}
+                                            >
+                                              {isDeleting ? (
+                                                <Loader2 className="size-4 animate-spin" />
+                                              ) : (
+                                                <Trash2 className="size-4" />
+                                              )}
+                                            </Button>
+                                          )}
+                                      </div>
+                                    );
+                                  }
                                 )}
                               </div>
                             )}
@@ -1358,7 +1480,6 @@ export default function ClassDetailsPage() {
               }
               className="space-y-4"
             >
-
               {/* Material name */}
 
               <div className="space-y-2">
