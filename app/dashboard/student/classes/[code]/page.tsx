@@ -60,6 +60,7 @@ type Assignment = {
   course_id: string;
   name: string;
   description: string;
+  due_date?: string | null;
   created_at?: string;
 };
 
@@ -158,6 +159,9 @@ export default function ClassDetailsPage() {
   const [assignmentDescription, setAssignmentDescription] =
     useState('');
 
+  const [assignmentDueDate, setAssignmentDueDate] =
+    useState('');
+
   const [creatingItem, setCreatingItem] =
     useState(false);
 
@@ -253,11 +257,188 @@ export default function ClassDetailsPage() {
   };
 
   // ============================================================
+  // DATE HELPERS
+  // ============================================================
+
+  // Returns today's date in DD/MM/YYYY format.
+  const getTodayDateInput = () => {
+    const now = new Date();
+
+    const day = String(
+      now.getDate()
+    ).padStart(2, '0');
+
+    const month = String(
+      now.getMonth() + 1
+    ).padStart(2, '0');
+
+    const year = now.getFullYear();
+
+    return `${day}/${month}/${year}`;
+  };
+
+  // Converts a DD/MM/YYYY date into a Date object.
+  // Returns null if the date is invalid.
+  const parseDDMMYYYY = (
+    value: string
+  ) => {
+    const match = value.match(
+      /^(\d{2})\/(\d{2})\/(\d{4})$/
+    );
+
+    if (!match) {
+      return null;
+    }
+
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+
+    const date = new Date(
+      year,
+      month - 1,
+      day
+    );
+
+    // Prevent invalid dates such as:
+    // 31/02/2026
+    // 32/01/2026
+    // 00/12/2026
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return null;
+    }
+
+    return date;
+  };
+
+  // Converts DD/MM/YYYY to the YYYY-MM-DD format
+  // expected by a PostgreSQL/Supabase date column.
+  const formatDateForDatabase = (
+    value: string
+  ) => {
+    const date = parseDDMMYYYY(value);
+
+    if (!date) {
+      return null;
+    }
+
+    const year =
+      date.getFullYear();
+
+    const month = String(
+      date.getMonth() + 1
+    ).padStart(2, '0');
+
+    const day = String(
+      date.getDate()
+    ).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+  };
+
+  // Makes sure the due date is today or later.
+  const isDueDateValid = (
+    value: string
+  ) => {
+    const date = parseDDMMYYYY(value);
+
+    if (!date) {
+      return false;
+    }
+
+    const today = new Date();
+
+    today.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+    date.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+    return date >= today;
+  };
+
+  // Formats a database date (YYYY-MM-DD)
+  // into DD/MM/YYYY for display.
+  const formatDateForDisplay = (
+    value?: string | null
+  ) => {
+    if (!value) {
+      return 'No due date';
+    }
+
+    const parts =
+      value.split('-');
+
+    if (parts.length === 3) {
+      const [
+        year,
+        month,
+        day,
+      ] = parts;
+
+      return `${day}/${month}/${year}`;
+    }
+
+    return value;
+  };
+
+  // Automatically formats typed digits as DD/MM/YYYY.
+  const handleDueDateChange = (
+    value: string
+  ) => {
+    let digits =
+      value.replace(/\D/g, '');
+
+    if (digits.length > 8) {
+      digits =
+        digits.slice(0, 8);
+    }
+
+    let formatted = digits;
+
+    if (digits.length >= 5) {
+      formatted =
+        digits.slice(0, 2) +
+        '/' +
+        digits.slice(2, 4) +
+        '/' +
+        digits.slice(4);
+    } else if (
+      digits.length >= 3
+    ) {
+      formatted =
+        digits.slice(0, 2) +
+        '/' +
+        digits.slice(2);
+    }
+
+    setAssignmentDueDate(
+      formatted
+    );
+
+    setLinkCheckError(null);
+  };
+
+  // ============================================================
   // COPY JOIN CODE
   // ============================================================
 
   const handleCopyCode = async () => {
-    if (!isTeacher || !classData?.code) return;
+    if (!isTeacher || !classData?.code) {
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(
@@ -283,14 +464,22 @@ export default function ClassDetailsPage() {
   // ============================================================
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (
+      typeof window === 'undefined'
+    ) {
+      return;
+    }
 
     try {
       let detectedRole = '';
       let detectedFullName = '';
 
-      const extractUser = (parsed: any) => {
-        if (!parsed) return;
+      const extractUser = (
+        parsed: any
+      ) => {
+        if (!parsed) {
+          return;
+        }
 
         const role =
           parsed?.role ||
@@ -322,7 +511,9 @@ export default function ClassDetailsPage() {
       };
 
       const directRole =
-        localStorage.getItem('user_role');
+        localStorage.getItem(
+          'user_role'
+        );
 
       if (directRole) {
         detectedRole =
@@ -330,12 +521,16 @@ export default function ClassDetailsPage() {
       }
 
       const currentUserRaw =
-        localStorage.getItem('current_user');
+        localStorage.getItem(
+          'current_user'
+        );
 
       if (currentUserRaw) {
         try {
           extractUser(
-            JSON.parse(currentUserRaw)
+            JSON.parse(
+              currentUserRaw
+            )
           );
         } catch {
           // Ignore invalid JSON.
@@ -347,9 +542,12 @@ export default function ClassDetailsPage() {
         i < localStorage.length;
         i++
       ) {
-        const key = localStorage.key(i);
+        const key =
+          localStorage.key(i);
 
-        if (!key) continue;
+        if (!key) {
+          continue;
+        }
 
         if (
           key.includes('supabase') ||
@@ -357,9 +555,13 @@ export default function ClassDetailsPage() {
           key === 'current_user'
         ) {
           const raw =
-            localStorage.getItem(key);
+            localStorage.getItem(
+              key
+            );
 
-          if (!raw) continue;
+          if (!raw) {
+            continue;
+          }
 
           try {
             extractUser(
@@ -416,17 +618,25 @@ export default function ClassDetailsPage() {
             )}&select=*`
           );
 
-        if (classList.length === 0) {
-          setError('Class not found.');
+        if (
+          classList.length === 0
+        ) {
+          setError(
+            'Class not found.'
+          );
+
           setClassData(null);
           setCourses([]);
           setMaterials({});
           setAssignments({});
           setSubmissions({});
+
           return;
         }
 
-        setClassData(classList[0]);
+        setClassData(
+          classList[0]
+        );
 
         const courseList =
           await getJson<Course[]>(
@@ -438,41 +648,64 @@ export default function ClassDetailsPage() {
         setCourses(courseList);
 
         const materialMap:
-          Record<string, Material[]> = {};
+          Record<
+            string,
+            Material[]
+          > = {};
 
         const assignmentMap:
-          Record<string, Assignment[]> = {};
+          Record<
+            string,
+            Assignment[]
+          > = {};
 
         await Promise.all(
-          courseList.map(async (course) => {
-            if (!course.id) return;
+          courseList.map(
+            async (course) => {
+              if (!course.id) {
+                return;
+              }
 
-            try {
-              materialMap[course.id] =
-                await getJson<Material[]>(
-                  `${supabaseUrl}/rest/v1/course_materials?course_id=eq.${encodeURIComponent(
-                    course.id
-                  )}&select=*&order=id.asc`
-                );
-            } catch {
-              materialMap[course.id] = [];
-            }
+              try {
+                materialMap[
+                  course.id
+                ] =
+                  await getJson<Material[]>(
+                    `${supabaseUrl}/rest/v1/course_materials?course_id=eq.${encodeURIComponent(
+                      course.id
+                    )}&select=*&order=id.asc`
+                  );
+              } catch {
+                materialMap[
+                  course.id
+                ] = [];
+              }
 
-            try {
-              assignmentMap[course.id] =
-                await getJson<Assignment[]>(
-                  `${supabaseUrl}/rest/v1/course_assignments?course_id=eq.${encodeURIComponent(
-                    course.id
-                  )}&select=*&order=created_at.asc`
-                );
-            } catch {
-              assignmentMap[course.id] = [];
+              try {
+                assignmentMap[
+                  course.id
+                ] =
+                  await getJson<Assignment[]>(
+                    `${supabaseUrl}/rest/v1/course_assignments?course_id=eq.${encodeURIComponent(
+                      course.id
+                    )}&select=*&order=created_at.asc`
+                  );
+              } catch {
+                assignmentMap[
+                  course.id
+                ] = [];
+              }
             }
-          })
+          )
         );
 
-        setMaterials(materialMap);
-        setAssignments(assignmentMap);
+        setMaterials(
+          materialMap
+        );
+
+        setAssignments(
+          assignmentMap
+        );
 
         const allAssignments =
           Object.values(
@@ -480,21 +713,29 @@ export default function ClassDetailsPage() {
           ).flat();
 
         const submissionMap:
-          Record<string, Submission[]> = {};
+          Record<
+            string,
+            Submission[]
+          > = {};
 
         await Promise.all(
           allAssignments.map(
-            async (assignment) => {
-              if (!assignment.id) return;
+            async (
+              assignment
+            ) => {
+              if (!assignment.id) {
+                return;
+              }
 
               try {
                 submissionMap[
                   assignment.id
-                ] = await getJson<Submission[]>(
-                  `${supabaseUrl}/rest/v1/assignment_submissions?assignment_id=eq.${encodeURIComponent(
-                    assignment.id
-                  )}&select=*&order=created_at.asc`
-                );
+                ] =
+                  await getJson<Submission[]>(
+                    `${supabaseUrl}/rest/v1/assignment_submissions?assignment_id=eq.${encodeURIComponent(
+                      assignment.id
+                    )}&select=*&order=created_at.asc`
+                  );
               } catch {
                 submissionMap[
                   assignment.id
@@ -549,18 +790,20 @@ export default function ClassDetailsPage() {
     setCreatingCourse(true);
 
     try {
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/class_courses`,
-        {
-          method: 'POST',
-          headers: jsonHeaders,
-          body: JSON.stringify({
-            course_name:
-              courseName.trim(),
-            class_code: code,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          `${supabaseUrl}/rest/v1/class_courses`,
+          {
+            method: 'POST',
+            headers: jsonHeaders,
+            body: JSON.stringify({
+              course_name:
+                courseName.trim(),
+              class_code:
+                code,
+            }),
+          }
+        );
 
       const text =
         await response.text();
@@ -573,7 +816,11 @@ export default function ClassDetailsPage() {
       }
 
       const created =
-        (JSON.parse(text) as Course[])[0];
+        (
+          JSON.parse(
+            text
+          ) as Course[]
+        )[0];
 
       if (!created) {
         throw new Error(
@@ -581,21 +828,27 @@ export default function ClassDetailsPage() {
         );
       }
 
-      setCourses((previous) => [
-        ...previous,
-        created,
-      ]);
+      setCourses(
+        (previous) => [
+          ...previous,
+          created,
+        ]
+      );
 
       if (created.id) {
-        setMaterials((previous) => ({
-          ...previous,
-          [created.id!]: [],
-        }));
+        setMaterials(
+          (previous) => ({
+            ...previous,
+            [created.id!]: [],
+          })
+        );
 
-        setAssignments((previous) => ({
-          ...previous,
-          [created.id!]: [],
-        }));
+        setAssignments(
+          (previous) => ({
+            ...previous,
+            [created.id!]: [],
+          })
+        );
       }
 
       setCourseName('');
@@ -644,32 +897,42 @@ export default function ClassDetailsPage() {
         )}`
       );
 
-      setCourses((previous) =>
-        previous.filter(
-          (course) =>
-            course.id !== courseId
-        )
+      setCourses(
+        (previous) =>
+          previous.filter(
+            (course) =>
+              course.id !==
+              courseId
+          )
       );
 
-      setMaterials((previous) => {
-        const updated = {
-          ...previous,
-        };
+      setMaterials(
+        (previous) => {
+          const updated = {
+            ...previous,
+          };
 
-        delete updated[courseId];
+          delete updated[
+            courseId
+          ];
 
-        return updated;
-      });
+          return updated;
+        }
+      );
 
-      setAssignments((previous) => {
-        const updated = {
-          ...previous,
-        };
+      setAssignments(
+        (previous) => {
+          const updated = {
+            ...previous,
+          };
 
-        delete updated[courseId];
+          delete updated[
+            courseId
+          ];
 
-        return updated;
-      });
+          return updated;
+        }
+      );
     } catch (err) {
       console.error(
         'Error deleting course:',
@@ -713,15 +976,20 @@ export default function ClassDetailsPage() {
         )}`
       );
 
-      setMaterials((previous) => ({
-        ...previous,
-        [courseId]: (
-          previous[courseId] || []
-        ).filter(
-          (material) =>
-            material.id !== materialId
-        ),
-      }));
+      setMaterials(
+        (previous) => ({
+          ...previous,
+          [courseId]: (
+            previous[
+              courseId
+            ] || []
+          ).filter(
+            (material) =>
+              material.id !==
+              materialId
+          ),
+        })
+      );
     } catch (err) {
       console.error(
         'Error deleting material:',
@@ -765,26 +1033,34 @@ export default function ClassDetailsPage() {
         )}`
       );
 
-      setAssignments((previous) => ({
-        ...previous,
-        [courseId]: (
-          previous[courseId] || []
-        ).filter(
-          (assignment) =>
-            assignment.id !==
-            assignmentId
-        ),
-      }));
-
-      setSubmissions((previous) => {
-        const updated = {
+      setAssignments(
+        (previous) => ({
           ...previous,
-        };
+          [courseId]: (
+            previous[
+              courseId
+            ] || []
+          ).filter(
+            (assignment) =>
+              assignment.id !==
+              assignmentId
+          ),
+        })
+      );
 
-        delete updated[assignmentId];
+      setSubmissions(
+        (previous) => {
+          const updated = {
+            ...previous,
+          };
 
-        return updated;
-      });
+          delete updated[
+            assignmentId
+          ];
+
+          return updated;
+        }
+      );
     } catch (err) {
       console.error(
         'Error deleting assignment:',
@@ -804,11 +1080,13 @@ export default function ClassDetailsPage() {
   const toggleCourse = (
     courseId: string
   ) => {
-    setOpenCourses((previous) => ({
-      ...previous,
-      [courseId]:
-        !previous[courseId],
-    }));
+    setOpenCourses(
+      (previous) => ({
+        ...previous,
+        [courseId]:
+          !previous[courseId],
+      })
+    );
   };
 
   // ============================================================
@@ -818,7 +1096,12 @@ export default function ClassDetailsPage() {
   const openAddModal = (
     course: Course
   ) => {
-    if (!isTeacher || !course.id) return;
+    if (
+      !isTeacher ||
+      !course.id
+    ) {
+      return;
+    }
 
     setSelectedCourse(course);
     setAddType('material');
@@ -828,6 +1111,11 @@ export default function ClassDetailsPage() {
     setAssignmentName('');
     setAssignmentDescription('');
 
+    // Start assignment due date at today.
+    setAssignmentDueDate(
+      getTodayDateInput()
+    );
+
     setLinkCheckError(null);
     setCheckingLink(false);
     setIsAddModalOpen(true);
@@ -836,7 +1124,12 @@ export default function ClassDetailsPage() {
   const closeAddModal = (
     force = false
   ) => {
-    if (creatingItem && !force) return;
+    if (
+      creatingItem &&
+      !force
+    ) {
+      return;
+    }
 
     setIsAddModalOpen(false);
     setSelectedCourse(null);
@@ -845,6 +1138,7 @@ export default function ClassDetailsPage() {
     setMaterialLink('');
     setAssignmentName('');
     setAssignmentDescription('');
+    setAssignmentDueDate('');
 
     setLinkCheckError(null);
     setCheckingLink(false);
@@ -858,24 +1152,26 @@ export default function ClassDetailsPage() {
     link: string
   ): Promise<LinkCheckResult> => {
     try {
-      const response = await fetch(
-        '/api/moderate-link',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            url: link,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          '/api/moderate-link',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              url: link,
+            }),
+          }
+        );
 
       let data: any = null;
 
       try {
-        data = await response.json();
+        data =
+          await response.json();
       } catch {
         data = null;
       }
@@ -889,9 +1185,11 @@ export default function ClassDetailsPage() {
       }
 
       return {
-        safe: data?.safe === true,
+        safe:
+          data?.safe === true,
         reason:
-          data?.reason || undefined,
+          data?.reason ||
+          undefined,
       };
     } catch (err) {
       console.error(
@@ -942,17 +1240,56 @@ export default function ClassDetailsPage() {
       addType === 'assignment' &&
       (
         !assignmentName.trim() ||
-        !assignmentDescription.trim()
+        !assignmentDescription.trim() ||
+        !assignmentDueDate.trim()
       )
     ) {
       return;
+    }
+
+    // ----------------------------------------------------------
+    // VALIDATE ASSIGNMENT DUE DATE
+    // ----------------------------------------------------------
+
+    if (
+      addType === 'assignment'
+    ) {
+      if (
+        !parseDDMMYYYY(
+          assignmentDueDate
+        )
+      ) {
+        setLinkCheckError(
+          'Please enter a valid due date in DD/MM/YYYY format.'
+        );
+
+        return;
+      }
+
+      if (
+        !isDueDateValid(
+          assignmentDueDate
+        )
+      ) {
+        setLinkCheckError(
+          'The due date cannot be earlier than today.'
+        );
+
+        return;
+      }
     }
 
     setCreatingItem(true);
     setLinkCheckError(null);
 
     try {
-      if (addType === 'material') {
+      // ========================================================
+      // MATERIAL
+      // ========================================================
+
+      if (
+        addType === 'material'
+      ) {
         setCheckingLink(true);
 
         if (
@@ -975,7 +1312,9 @@ export default function ClassDetailsPage() {
             cleanLink
           );
 
-        if (!checkResult.safe) {
+        if (
+          !checkResult.safe
+        ) {
           throw new Error(
             checkResult.reason ||
               'This link does not appear appropriate for an educational platform.'
@@ -984,19 +1323,22 @@ export default function ClassDetailsPage() {
 
         setCheckingLink(false);
 
-        const response = await fetch(
-          `${supabaseUrl}/rest/v1/course_materials`,
-          {
-            method: 'POST',
-            headers: jsonHeaders,
-            body: JSON.stringify({
-              course_id: courseId,
-              name:
-                materialName.trim(),
-              link: cleanLink,
-            }),
-          }
-        );
+        const response =
+          await fetch(
+            `${supabaseUrl}/rest/v1/course_materials`,
+            {
+              method: 'POST',
+              headers: jsonHeaders,
+              body: JSON.stringify({
+                course_id:
+                  courseId,
+                name:
+                  materialName.trim(),
+                link:
+                  cleanLink,
+              }),
+            }
+          );
 
         const text =
           await response.text();
@@ -1009,7 +1351,11 @@ export default function ClassDetailsPage() {
         }
 
         const created =
-          (JSON.parse(text) as Material[])[0];
+          (
+            JSON.parse(
+              text
+            ) as Material[]
+          )[0];
 
         if (!created) {
           throw new Error(
@@ -1017,38 +1363,70 @@ export default function ClassDetailsPage() {
           );
         }
 
-        setMaterials((previous) => ({
-          ...previous,
-          [courseId]: [
-            ...(previous[courseId] || []),
-            created,
-          ],
-        }));
+        setMaterials(
+          (previous) => ({
+            ...previous,
+            [courseId]: [
+              ...(
+                previous[
+                  courseId
+                ] || []
+              ),
+              created,
+            ],
+          })
+        );
 
-        setOpenCourses((previous) => ({
-          ...previous,
-          [courseId]: true,
-        }));
+        setOpenCourses(
+          (previous) => ({
+            ...previous,
+            [courseId]:
+              true,
+          })
+        );
 
         setCreatingItem(false);
         closeAddModal(true);
+
         return;
       }
 
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/course_assignments`,
-        {
-          method: 'POST',
-          headers: jsonHeaders,
-          body: JSON.stringify({
-            course_id: courseId,
-            name:
-              assignmentName.trim(),
-            description:
-              assignmentDescription.trim(),
-          }),
-        }
-      );
+      // ========================================================
+      // ASSIGNMENT
+      // ========================================================
+
+      const databaseDueDate =
+        formatDateForDatabase(
+          assignmentDueDate
+        );
+
+      if (!databaseDueDate) {
+        throw new Error(
+          'Invalid due date.'
+        );
+      }
+
+      const response =
+        await fetch(
+          `${supabaseUrl}/rest/v1/course_assignments`,
+          {
+            method: 'POST',
+            headers: jsonHeaders,
+            body: JSON.stringify({
+              course_id:
+                courseId,
+
+              name:
+                assignmentName.trim(),
+
+              description:
+                assignmentDescription.trim(),
+
+              due_date:
+                databaseDueDate,
+            }),
+          }
+        );
 
       const text =
         await response.text();
@@ -1061,7 +1439,11 @@ export default function ClassDetailsPage() {
       }
 
       const created =
-        (JSON.parse(text) as Assignment[])[0];
+        (
+          JSON.parse(
+            text
+          ) as Assignment[]
+        )[0];
 
       if (!created) {
         throw new Error(
@@ -1069,25 +1451,36 @@ export default function ClassDetailsPage() {
         );
       }
 
-      setAssignments((previous) => ({
-        ...previous,
-        [courseId]: [
-          ...(previous[courseId] || []),
-          created,
-        ],
-      }));
+      setAssignments(
+        (previous) => ({
+          ...previous,
+          [courseId]: [
+            ...(
+              previous[
+                courseId
+              ] || []
+            ),
+            created,
+          ],
+        })
+      );
 
       if (created.id) {
-        setSubmissions((previous) => ({
-          ...previous,
-          [created.id!]: [],
-        }));
+        setSubmissions(
+          (previous) => ({
+            ...previous,
+            [created.id!]: [],
+          })
+        );
       }
 
-      setOpenCourses((previous) => ({
-        ...previous,
-        [courseId]: true,
-      }));
+      setOpenCourses(
+        (previous) => ({
+          ...previous,
+          [courseId]:
+            true,
+        })
+      );
 
       setCreatingItem(false);
       closeAddModal(true);
@@ -1116,12 +1509,16 @@ export default function ClassDetailsPage() {
   const getStudentSubmission = (
     assignmentId: string
   ) => {
-    if (!studentFullName.trim()) {
+    if (
+      !studentFullName.trim()
+    ) {
       return undefined;
     }
 
     return (
-      submissions[assignmentId] || []
+      submissions[
+        assignmentId
+      ] || []
     ).find(
       (submission) =>
         submission.nickname
@@ -1140,14 +1537,20 @@ export default function ClassDetailsPage() {
   const openSubmissionModal = (
     assignment: Assignment
   ) => {
-    if (isTeacher || !assignment.id) {
+    if (
+      isTeacher ||
+      !assignment.id
+    ) {
       return;
     }
 
-    if (!studentFullName.trim()) {
+    if (
+      !studentFullName.trim()
+    ) {
       alert(
         'Your account full name could not be found. Please sign in again.'
       );
+
       return;
     }
 
@@ -1224,6 +1627,7 @@ export default function ClassDetailsPage() {
       );
 
       closeSubmissionModal();
+
       return;
     }
 
@@ -1250,8 +1654,6 @@ export default function ClassDetailsPage() {
       // --------------------------------------------------------
       // SECOND DUPLICATE CHECK
       // --------------------------------------------------------
-      // This checks Supabase itself in case the local state
-      // is outdated.
 
       const existing =
         await getJson<Submission[]>(
@@ -1262,22 +1664,33 @@ export default function ClassDetailsPage() {
           )}&select=*`
         );
 
-      if (existing.length > 0) {
-        setSubmissions((previous) => ({
-          ...previous,
-          [assignmentId]: [
-            ...(previous[assignmentId] || []),
-            ...existing.filter(
-              (remote) =>
-                !(previous[assignmentId] || [])
-                  .some(
+      if (
+        existing.length > 0
+      ) {
+        setSubmissions(
+          (previous) => ({
+            ...previous,
+            [assignmentId]: [
+              ...(
+                previous[
+                  assignmentId
+                ] || []
+              ),
+              ...existing.filter(
+                (remote) =>
+                  !(
+                    previous[
+                      assignmentId
+                    ] || []
+                  ).some(
                     (local) =>
                       local.id ===
                       remote.id
                   )
-            ),
-          ],
-        }));
+              ),
+            ],
+          })
+        );
 
         throw new Error(
           'You have already submitted this assignment.'
@@ -1291,38 +1704,43 @@ export default function ClassDetailsPage() {
 
       setCheckingLink(false);
 
-      if (!checkResult.safe) {
+      if (
+        !checkResult.safe
+      ) {
         throw new Error(
           checkResult.reason ||
             'This link does not appear appropriate for an educational platform.'
         );
       }
 
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/assignment_submissions`,
-        {
-          method: 'POST',
-          headers: jsonHeaders,
-          body: JSON.stringify({
-            assignment_id:
-              assignmentId,
+      const response =
+        await fetch(
+          `${supabaseUrl}/rest/v1/assignment_submissions`,
+          {
+            method: 'POST',
+            headers: jsonHeaders,
+            body: JSON.stringify({
+              assignment_id:
+                assignmentId,
 
-            // Always account name.
-            nickname:
-              studentFullName.trim(),
+              // Always account name.
+              nickname:
+                studentFullName.trim(),
 
-            // Manually entered class.
-            class:
-              submissionClass
-                .trim()
-                .toUpperCase(),
+              // Manually entered class.
+              class:
+                submissionClass
+                  .trim()
+                  .toUpperCase(),
 
-            link: cleanLink,
+              link:
+                cleanLink,
 
-            grade: null,
-          }),
-        }
-      );
+              grade:
+                null,
+            }),
+          }
+        );
 
       const text =
         await response.text();
@@ -1335,7 +1753,11 @@ export default function ClassDetailsPage() {
       }
 
       const created =
-        (JSON.parse(text) as Submission[])[0];
+        (
+          JSON.parse(
+            text
+          ) as Submission[]
+        )[0];
 
       if (!created) {
         throw new Error(
@@ -1343,18 +1765,27 @@ export default function ClassDetailsPage() {
         );
       }
 
-      setSubmissions((previous) => ({
-        ...previous,
-        [assignmentId]: [
-          ...(previous[assignmentId] || []),
-          created,
-        ],
-      }));
+      setSubmissions(
+        (previous) => ({
+          ...previous,
+          [assignmentId]: [
+            ...(
+              previous[
+                assignmentId
+              ] || []
+            ),
+            created,
+          ],
+        })
+      );
 
-      // Close even though submittingAssignment
-      // is still true.
-      setSubmittingAssignment(false);
-      closeSubmissionModal(true);
+      setSubmittingAssignment(
+        false
+      );
+
+      closeSubmissionModal(
+        true
+      );
 
       alert(
         'Assignment submitted successfully!'
@@ -1373,7 +1804,9 @@ export default function ClassDetailsPage() {
           : 'Failed to submit assignment.'
       );
     } finally {
-      setSubmittingAssignment(false);
+      setSubmittingAssignment(
+        false
+      );
     }
   };
 
@@ -1408,9 +1841,13 @@ export default function ClassDetailsPage() {
         'Undo your submission? Your teacher will no longer see it, and you will be able to submit again.'
       );
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
-    setUndoingSubmission(true);
+    setUndoingSubmission(
+      true
+    );
 
     try {
       await deleteFrom(
@@ -1419,16 +1856,20 @@ export default function ClassDetailsPage() {
         )}`
       );
 
-      setSubmissions((previous) => ({
-        ...previous,
-        [assignment.id!]: (
-          previous[assignment.id!] || []
-        ).filter(
-          (submission) =>
-            submission.id !==
-            existing.id
-        ),
-      }));
+      setSubmissions(
+        (previous) => ({
+          ...previous,
+          [assignment.id!]: (
+            previous[
+              assignment.id!
+            ] || []
+          ).filter(
+            (submission) =>
+              submission.id !==
+              existing.id
+          ),
+        })
+      );
 
       alert(
         'Submission undone. You can submit the assignment again.'
@@ -1443,7 +1884,9 @@ export default function ClassDetailsPage() {
         'Failed to undo submission.'
       );
     } finally {
-      setUndoingSubmission(false);
+      setUndoingSubmission(
+        false
+      );
     }
   };
 
@@ -1454,15 +1897,21 @@ export default function ClassDetailsPage() {
   const toggleAssignment = async (
     assignmentId: string
   ) => {
-    setOpenAssignments((previous) => ({
-      ...previous,
-      [assignmentId]:
-        !previous[assignmentId],
-    }));
+    setOpenAssignments(
+      (previous) => ({
+        ...previous,
+        [assignmentId]:
+          !previous[
+            assignmentId
+          ],
+      })
+    );
 
     if (
       isTeacher &&
-      !submissions[assignmentId] &&
+      !submissions[
+        assignmentId
+      ] &&
       supabaseUrl &&
       supabaseAnonKey
     ) {
@@ -1474,10 +1923,13 @@ export default function ClassDetailsPage() {
             )}&select=*&order=created_at.asc`
           );
 
-        setSubmissions((previous) => ({
-          ...previous,
-          [assignmentId]: data,
-        }));
+        setSubmissions(
+          (previous) => ({
+            ...previous,
+            [assignmentId]:
+              data,
+          })
+        );
       } catch (err) {
         console.error(
           'Error loading submissions:',
@@ -1504,9 +1956,12 @@ export default function ClassDetailsPage() {
     }
 
     const rawGrade =
-      gradeInputs[submission.id] ??
+      gradeInputs[
+        submission.id
+      ] ??
       String(
-        submission.grade ?? ''
+        submission.grade ??
+          ''
       );
 
     const grade =
@@ -1514,34 +1969,41 @@ export default function ClassDetailsPage() {
 
     if (
       rawGrade === '' ||
-      !Number.isInteger(grade) ||
+      !Number.isInteger(
+        grade
+      ) ||
       grade < 0 ||
       grade > 100
     ) {
       alert(
         'Grade must be a whole number between 0 and 100.'
       );
+
       return;
     }
 
-    setSavingGrades((previous) => ({
-      ...previous,
-      [submission.id!]: true,
-    }));
+    setSavingGrades(
+      (previous) => ({
+        ...previous,
+        [submission.id!]:
+          true,
+      })
+    );
 
     try {
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/assignment_submissions?id=eq.${encodeURIComponent(
-          submission.id
-        )}`,
-        {
-          method: 'PATCH',
-          headers: jsonHeaders,
-          body: JSON.stringify({
-            grade,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          `${supabaseUrl}/rest/v1/assignment_submissions?id=eq.${encodeURIComponent(
+            submission.id
+          )}`,
+          {
+            method: 'PATCH',
+            headers: jsonHeaders,
+            body: JSON.stringify({
+              grade,
+            }),
+          }
+        );
 
       const text =
         await response.text();
@@ -1554,33 +2016,45 @@ export default function ClassDetailsPage() {
       }
 
       const updated =
-        JSON.parse(text) as Submission[];
+        JSON.parse(
+          text
+        ) as Submission[];
 
       const updatedGrade =
-        updated[0]?.grade ?? grade;
+        updated[0]?.grade ??
+        grade;
 
-      setSubmissions((previous) => ({
-        ...previous,
-        [submission.assignment_id]:
-          (
-            previous[
-              submission.assignment_id
-            ] || []
-          ).map((item) =>
-            item.id === submission.id
-              ? {
-                  ...item,
-                  grade: updatedGrade,
-                }
-              : item
-          ),
-      }));
+      setSubmissions(
+        (previous) => ({
+          ...previous,
+          [submission.assignment_id]:
+            (
+              previous[
+                submission.assignment_id
+              ] || []
+            ).map(
+              (item) =>
+                item.id ===
+                submission.id
+                  ? {
+                      ...item,
+                      grade:
+                        updatedGrade,
+                    }
+                  : item
+            ),
+        })
+      );
 
-      setGradeInputs((previous) => ({
-        ...previous,
-        [submission.id!]:
-          String(updatedGrade),
-      }));
+      setGradeInputs(
+        (previous) => ({
+          ...previous,
+          [submission.id!]:
+            String(
+              updatedGrade
+            ),
+        })
+      );
     } catch (err) {
       console.error(
         'Error saving grade:',
@@ -1591,10 +2065,13 @@ export default function ClassDetailsPage() {
         'Failed to save grade.'
       );
     } finally {
-      setSavingGrades((previous) => ({
-        ...previous,
-        [submission.id!]: false,
-      }));
+      setSavingGrades(
+        (previous) => ({
+          ...previous,
+          [submission.id!]:
+            false,
+        })
+      );
     }
   };
 
@@ -1618,7 +2095,10 @@ export default function ClassDetailsPage() {
   // ERROR
   // ============================================================
 
-  if (error || !classData) {
+  if (
+    error ||
+    !classData
+  ) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
@@ -1663,9 +2143,10 @@ export default function ClassDetailsPage() {
     );
   }
 
-  const dashboardUrl = isTeacher
-    ? '/dashboard/teacher'
-    : '/dashboard/student';
+  const dashboardUrl =
+    isTeacher
+      ? '/dashboard/teacher'
+      : '/dashboard/student';
 
   // ============================================================
   // MAIN PAGE
@@ -1681,7 +2162,11 @@ export default function ClassDetailsPage() {
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Link href={dashboardUrl}>
+            <Link
+              href={
+                dashboardUrl
+              }
+            >
               <Button
                 variant="ghost"
                 className="-ml-3 mb-3 gap-2"
@@ -1692,13 +2177,17 @@ export default function ClassDetailsPage() {
             </Link>
 
             <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              {classData.class_name}
+              {
+                classData.class_name
+              }
             </h1>
 
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               <span>
                 School:{' '}
-                {classData.school_name}
+                {
+                  classData.school_name
+                }
               </span>
 
               <span className="hidden sm:inline">
@@ -1709,7 +2198,9 @@ export default function ClassDetailsPage() {
                 Code:{' '}
 
                 <span className="font-mono font-semibold text-primary">
-                  {classData.code}
+                  {
+                    classData.code
+                  }
                 </span>
 
                 {isTeacher && (
@@ -1746,7 +2237,9 @@ export default function ClassDetailsPage() {
           {isTeacher && (
             <Button
               onClick={() =>
-                setIsCourseModalOpen(true)
+                setIsCourseModalOpen(
+                  true
+                )
               }
               className="gap-2"
             >
@@ -1805,7 +2298,10 @@ export default function ClassDetailsPage() {
           ) : (
             <div className="space-y-3">
               {courses.map(
-                (course, index) => {
+                (
+                  course,
+                  index
+                ) => {
                   const courseId =
                     course.id ||
                     `course-${index}`;
@@ -2124,6 +2620,19 @@ export default function ClassDetailsPage() {
                                               }
                                             </p>
 
+                                            {/* DUE DATE */}
+
+                                            {assignment.due_date && (
+                                              <p className="mt-2 text-xs font-medium text-muted-foreground">
+                                                Due:{' '}
+                                                <span className="text-foreground">
+                                                  {formatDateForDisplay(
+                                                    assignment.due_date
+                                                  )}
+                                                </span>
+                                              </p>
+                                            )}
+
                                             {isTeacher && (
                                               <p className="mt-2 text-xs text-primary">
                                                 {
@@ -2288,7 +2797,9 @@ export default function ClassDetailsPage() {
                                                                         e
                                                                       ) => {
                                                                         let value =
-                                                                          e.target.value;
+                                                                          e
+                                                                            .target
+                                                                            .value;
 
                                                                         if (
                                                                           value ===
@@ -2321,7 +2832,7 @@ export default function ClassDetailsPage() {
                                                                         }
 
                                                                         // HARD LIMIT:
-                                                                        // never allow >100.
+                                                                        // Never allow >100.
                                                                         if (
                                                                           numeric >
                                                                           100
@@ -2498,7 +3009,9 @@ export default function ClassDetailsPage() {
 
                 <p className="mt-1 text-sm text-muted-foreground">
                   Add a course to{' '}
-                  {classData.class_name}.
+                  {
+                    classData.class_name
+                  }.
                 </p>
               </div>
 
@@ -2532,7 +3045,9 @@ export default function ClassDetailsPage() {
                 <Input
                   type="text"
                   placeholder="e.g. Mathematics - Module 1"
-                  value={courseName}
+                  value={
+                    courseName
+                  }
                   onChange={(e) =>
                     setCourseName(
                       e.target.value
@@ -2635,15 +3150,32 @@ export default function ClassDetailsPage() {
                 </label>
 
                 <select
-                  value={addType}
+                  value={
+                    addType
+                  }
                   onChange={(e) => {
                     setAddType(
-                      e.target.value as AddType
+                      e.target
+                        .value as AddType
                     );
 
                     setLinkCheckError(
                       null
                     );
+
+                    // Give assignment a default
+                    // due date when switching
+                    // to Assignment.
+                    if (
+                      e.target
+                        .value ===
+                        'assignment' &&
+                      !assignmentDueDate
+                    ) {
+                      setAssignmentDueDate(
+                        getTodayDateInput()
+                      );
+                    }
                   }}
                   disabled={
                     creatingItem
@@ -2662,7 +3194,8 @@ export default function ClassDetailsPage() {
 
               {/* MATERIAL */}
 
-              {addType === 'material' && (
+              {addType ===
+                'material' && (
                 <>
                   <div className="space-y-2">
                     <label className="block text-xs font-medium text-muted-foreground">
@@ -2672,10 +3205,13 @@ export default function ClassDetailsPage() {
                     <Input
                       type="text"
                       placeholder="e.g. Chapter 1 Notes"
-                      value={materialName}
+                      value={
+                        materialName
+                      }
                       onChange={(e) => {
                         setMaterialName(
-                          e.target.value
+                          e.target
+                            .value
                         );
 
                         setLinkCheckError(
@@ -2699,10 +3235,13 @@ export default function ClassDetailsPage() {
                     <Input
                       type="url"
                       placeholder="https://example.com/material"
-                      value={materialLink}
+                      value={
+                        materialLink
+                      }
                       onChange={(e) => {
                         setMaterialLink(
-                          e.target.value
+                          e.target
+                            .value
                         );
 
                         setLinkCheckError(
@@ -2727,7 +3266,8 @@ export default function ClassDetailsPage() {
 
               {/* ASSIGNMENT */}
 
-              {addType === 'assignment' && (
+              {addType ===
+                'assignment' && (
                 <>
                   <div className="space-y-2">
                     <label className="block text-xs font-medium text-muted-foreground">
@@ -2737,10 +3277,13 @@ export default function ClassDetailsPage() {
                     <Input
                       type="text"
                       placeholder="e.g. Create a science poster"
-                      value={assignmentName}
+                      value={
+                        assignmentName
+                      }
                       onChange={(e) =>
                         setAssignmentName(
-                          e.target.value
+                          e.target
+                            .value
                         )
                       }
                       required
@@ -2763,7 +3306,8 @@ export default function ClassDetailsPage() {
                       }
                       onChange={(e) =>
                         setAssignmentDescription(
-                          e.target.value
+                          e.target
+                            .value
                         )
                       }
                       placeholder="Explain what students need to do..."
@@ -2774,6 +3318,52 @@ export default function ClassDetailsPage() {
                       rows={5}
                       className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
                     />
+                  </div>
+
+                  {/* DUE DATE */}
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-medium text-muted-foreground">
+                      Due Date
+                    </label>
+
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="DD/MM/YYYY"
+                      value={
+                        assignmentDueDate
+                      }
+                      onChange={(e) =>
+                        handleDueDateChange(
+                          e.target.value
+                        )
+                      }
+                      required
+                      disabled={
+                        creatingItem
+                      }
+                      className="h-11 bg-background"
+                    />
+
+                    <p className="text-xs text-muted-foreground">
+                      Enter the due date in
+                      DD/MM/YYYY format.
+                      The due date must be
+                      today or later.
+                    </p>
+
+                    {assignmentDueDate.length ===
+                      10 &&
+                      !isDueDateValid(
+                        assignmentDueDate
+                      ) && (
+                        <p className="text-xs font-medium text-destructive">
+                          The due date must be
+                          today or a future
+                          date.
+                        </p>
+                      )}
                   </div>
                 </>
               )}
@@ -2786,11 +3376,16 @@ export default function ClassDetailsPage() {
 
                   <div>
                     <p className="font-medium text-destructive">
-                      Link not allowed
+                      {addType ===
+                      'assignment'
+                        ? 'Assignment not allowed'
+                        : 'Link not allowed'}
                     </p>
 
                     <p className="mt-1 text-sm text-destructive/80">
-                      {linkCheckError}
+                      {
+                        linkCheckError
+                      }
                     </p>
 
                     <p className="mt-2 text-xs text-destructive/70">
@@ -2823,7 +3418,8 @@ export default function ClassDetailsPage() {
 
               {/* SAFETY */}
 
-              {addType === 'material' &&
+              {addType ===
+                'material' &&
                 !checkingLink &&
                 !linkCheckError && (
                   <div className="flex gap-3 rounded-lg border border-border bg-muted/30 p-3">
@@ -2866,6 +3462,7 @@ export default function ClassDetailsPage() {
                   disabled={
                     creatingItem ||
                     checkingLink ||
+
                     (
                       addType ===
                         'material' &&
@@ -2874,12 +3471,17 @@ export default function ClassDetailsPage() {
                         !materialLink.trim()
                       )
                     ) ||
+
                     (
                       addType ===
                         'assignment' &&
                       (
                         !assignmentName.trim() ||
-                        !assignmentDescription.trim()
+                        !assignmentDescription.trim() ||
+                        !assignmentDueDate.trim() ||
+                        !isDueDateValid(
+                          assignmentDueDate
+                        )
                       )
                     )
                   }
@@ -2933,6 +3535,17 @@ export default function ClassDetailsPage() {
                       selectedAssignment.description
                     }
                   </p>
+
+                  {selectedAssignment.due_date && (
+                    <p className="mt-2 text-xs font-medium text-muted-foreground">
+                      Due:{' '}
+                      <span className="text-foreground">
+                        {formatDateForDisplay(
+                          selectedAssignment.due_date
+                        )}
+                      </span>
+                    </p>
+                  )}
                 </div>
 
                 <button
@@ -3027,7 +3640,8 @@ export default function ClassDetailsPage() {
                     }
                     onChange={(e) => {
                       setSubmissionLink(
-                        e.target.value
+                        e.target
+                          .value
                       );
 
                       setLinkCheckError(
@@ -3060,7 +3674,9 @@ export default function ClassDetailsPage() {
                       </p>
 
                       <p className="mt-1 text-sm text-destructive/80">
-                        {linkCheckError}
+                        {
+                          linkCheckError
+                        }
                       </p>
 
                       <p className="mt-2 text-xs text-destructive/70">
