@@ -4,6 +4,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
+    // page.tsx sends { url: "..." }
     const link =
       typeof body.url === 'string'
         ? body.url.trim()
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate URL
     let url: URL;
 
     try {
@@ -33,6 +35,7 @@ export async function POST(request: Request) {
       );
     }
 
+    // Only allow normal web links
     if (
       url.protocol !== 'http:' &&
       url.protocol !== 'https:'
@@ -65,8 +68,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+    /*
+     * Ask Gemini to classify the URL.
+     *
+     * This uses the REST API directly, so
+     * @google/genai is NOT required.
+     */
+    const geminiResponse = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',
       {
         method: 'POST',
 
@@ -80,38 +89,45 @@ export async function POST(request: Request) {
             {
               parts: [
                 {
-                  text: `You are checking a URL submitted as classroom material.
+                  text: `You are a safety checker for an educational classroom platform.
 
-Decide whether the URL appears appropriate for students.
+A teacher is submitting this URL as classroom material for students.
 
-Allow:
+Evaluate the URL/domain and determine whether it appears appropriate for a school educational platform.
+
+ALLOW normal:
 - educational websites
 - school websites
 - academic resources
 - documentation
+- reference websites
 - normal news websites
 - normal video platforms
 - normal productivity websites
-- general websites that are not clearly inappropriate
+- general-purpose websites that are not clearly inappropriate
 
-Reject URLs that clearly indicate:
+REJECT links that clearly indicate:
 - pornography or sexually explicit content
 - adult sexual services
 - sexual content involving minors
 - gambling or betting
 - illegal drug sales
-- obvious phishing, malware, or scam domains
+- obvious phishing websites
+- obvious malware websites
+- obvious scam websites
 
-Judge the URL/domain itself. Do not assume a normal website is inappropriate merely because user-generated content could exist on it.
+Judge the URL itself. Do not reject a normal website merely because it could theoretically contain inappropriate user-generated content.
 
-Return ONLY JSON:
+Return ONLY valid JSON.
+
+If the link is appropriate:
 
 {
   "safe": true,
   "reason": "Short explanation"
 }
 
-or
+If the link is inappropriate:
 
 {
   "safe": false,
@@ -126,21 +142,27 @@ ${url.href}`,
           ],
 
           generationConfig: {
-            responseMimeType: 'application/json',
+            temperature: 0,
+            responseMimeType:
+              'application/json',
           },
         }),
       }
     );
 
-    if (!response.ok) {
+    /*
+     * Gemini returned an error.
+     */
+    if (!geminiResponse.ok) {
       const errorText =
-        await response.text();
+        await geminiResponse.text();
 
       console.error(
         '[moderate-link] Gemini API error:',
         {
-          status: response.status,
-          statusText: response.statusText,
+          status: geminiResponse.status,
+          statusText:
+            geminiResponse.statusText,
           body: errorText,
         }
       );
@@ -155,17 +177,20 @@ ${url.href}`,
       );
     }
 
-    const data =
-      await response.json();
+    /*
+     * Read Gemini response.
+     */
+    const geminiData =
+      await geminiResponse.json();
 
     const text =
-      data?.candidates?.[0]
+      geminiData?.candidates?.[0]
         ?.content?.parts?.[0]?.text;
 
     if (!text) {
       console.error(
-        '[moderate-link] No Gemini response:',
-        data
+        '[moderate-link] Gemini returned no text:',
+        geminiData
       );
 
       return NextResponse.json(
@@ -178,6 +203,9 @@ ${url.href}`,
       );
     }
 
+    /*
+     * Parse Gemini JSON.
+     */
     let result: {
       safe?: boolean;
       reason?: string;
@@ -201,11 +229,14 @@ ${url.href}`,
       );
     }
 
+    /*
+     * Validate Gemini's result.
+     */
     if (
       typeof result.safe !== 'boolean'
     ) {
       console.error(
-        '[moderate-link] Invalid moderation result:',
+        '[moderate-link] Invalid Gemini result:',
         result
       );
 
@@ -219,6 +250,14 @@ ${url.href}`,
       );
     }
 
+    /*
+     * Return exactly what page.tsx expects:
+     *
+     * {
+     *   safe: boolean,
+     *   reason?: string
+     * }
+     */
     return NextResponse.json({
       safe: result.safe,
       reason:
