@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Navbar } from '@/components/Navbar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { FileText, Loader2, ArrowLeft, PlusCircle, BookOpen, Trash2, X } from 'lucide-react';
+import { FileText, Loader2, ArrowLeft, PlusCircle, BookOpen, Trash2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,9 @@ export default function ClassDetailsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [courseName, setCourseName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  
+  // Track which course dropdowns are open
+  const [openDropdowns, setOpenDropdowns] = useState<Record<string, boolean>>({});
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -55,7 +58,6 @@ export default function ClassDetailsPage() {
     async function fetchClassAndCourses() {
       if (!code) return;
       try {
-        // Fetch class details
         const response = await fetch(
           `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${code}&select=*`,
           {
@@ -72,7 +74,6 @@ export default function ClassDetailsPage() {
           }
         }
 
-        // Fetch courses associated with this class code
         const coursesRes = await fetch(
           `${supabaseUrl}/rest/v1/class_courses?class_code=eq.${code}&select=*`,
           {
@@ -157,6 +158,13 @@ export default function ClassDetailsPage() {
     }
   };
 
+  const toggleDropdown = (courseId: string) => {
+    setOpenDropdowns(prev => ({
+      ...prev,
+      [courseId]: !prev[courseId]
+    }));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -185,7 +193,6 @@ export default function ClassDetailsPage() {
             <p className="text-muted-foreground">School: {classData?.school_name || 'N/A'}</p>
           </div>
 
-          {/* Red Circle Area: Teacher-only Create New Course Button */}
           {isTeacher && (
             <Button onClick={() => setIsModalOpen(true)} className="gap-2">
               <PlusCircle size={18} /> Create new course
@@ -193,7 +200,7 @@ export default function ClassDetailsPage() {
           )}
         </div>
 
-        {/* Green Circle Area: Courses List / Teacher Materials */}
+        {/* Full-width Course Rows */}
         <div className="space-y-4">
           <h2 className="text-xl font-semibold text-foreground">Courses</h2>
           {courses.length === 0 ? (
@@ -210,35 +217,56 @@ export default function ClassDetailsPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {courses.map((course) => (
-                <Card key={course.id || course.course_name} className="bg-card hover:border-primary/50 transition">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-base font-medium flex items-center gap-2">
-                      <BookOpen className="size-4 text-primary" /> {course.course_name}
-                    </CardTitle>
-                    {isTeacher && course.id && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleDeleteCourse(course.id!)}
-                        className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
-                      >
-                        <Trash2 size={15} />
-                      </Button>
+            <div className="space-y-3">
+              {courses.map((course) => {
+                const cId = course.id || course.course_name;
+                const isOpen = !!openDropdowns[cId];
+
+                return (
+                  <Card key={cId} className="bg-card hover:border-primary/50 transition w-full">
+                    <CardHeader className="flex flex-row items-center justify-between py-4">
+                      <div className="flex items-center gap-3">
+                        {/* Green Circle Area: Dropdown Toggle Button */}
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => toggleDropdown(cId)}
+                          className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
+                        >
+                          {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </Button>
+                        <CardTitle className="text-base font-medium flex items-center gap-2">
+                          <BookOpen className="size-4 text-primary" /> {course.course_name}
+                        </CardTitle>
+                      </div>
+
+                      {isTeacher && course.id && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleDeleteCourse(course.id!)}
+                          className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
+                        >
+                          <Trash2 size={15} />
+                        </Button>
+                      )}
+                    </CardHeader>
+
+                    {/* Expandable Dropdown Content */}
+                    {isOpen && (
+                      <CardContent className="border-t border-border pt-4 text-sm text-muted-foreground space-y-2">
+                        <p>Course materials, assignments, and lessons for <span className="text-foreground font-semibold">{course.course_name}</span> will appear here.</p>
+                      </CardContent>
                     )}
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-xs text-muted-foreground">Active course module</p>
-                  </CardContent>
-                </Card>
-              ))}
+                  </CardCard>
+                );
+              })}
             </div>
           )}
         </div>
       </main>
 
-      {/* Course Creation Modal Popup */}
+      {/* Modal Popup */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-md bg-card rounded-xl border border-border shadow-2xl p-6 relative space-y-6">
