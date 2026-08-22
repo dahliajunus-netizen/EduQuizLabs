@@ -47,7 +47,7 @@ export default function Page() {
         </div>
 
         <p className="relative z-10 text-sm text-primary-foreground/60">
-          Trusted by SMP Labschool Cibubur
+          Trusted by SMP Labschool Cibubur to represent the school in ISIF
         </p>
 
         {/* Decorative grid */}
