@@ -117,24 +117,13 @@ export default function ClassDetailsPage() {
   const [isTeacher, setIsTeacher] =
     useState(false);
 
-  // ============================================================
-  // CURRENT STUDENT
-  // ============================================================
-
   const [studentFullName, setStudentFullName] =
     useState('');
-
-  // ============================================================
-  // COPY JOIN CODE
-  // ============================================================
 
   const [copiedCode, setCopiedCode] =
     useState(false);
 
-  // ============================================================
-  // COURSE MODAL
-  // ============================================================
-
+  // COURSE
   const [isCourseModalOpen, setIsCourseModalOpen] =
     useState(false);
 
@@ -144,17 +133,10 @@ export default function ClassDetailsPage() {
   const [creatingCourse, setCreatingCourse] =
     useState(false);
 
-  // ============================================================
-  // OPEN COURSES
-  // ============================================================
-
   const [openCourses, setOpenCourses] =
     useState<Record<string, boolean>>({});
 
-  // ============================================================
-  // ADD MODAL
-  // ============================================================
-
+  // ADD MATERIAL / ASSIGNMENT
   const [isAddModalOpen, setIsAddModalOpen] =
     useState(false);
 
@@ -164,14 +146,12 @@ export default function ClassDetailsPage() {
   const [addType, setAddType] =
     useState<AddType>('material');
 
-  // Material fields
   const [materialName, setMaterialName] =
     useState('');
 
   const [materialLink, setMaterialLink] =
     useState('');
 
-  // Assignment fields
   const [assignmentName, setAssignmentName] =
     useState('');
 
@@ -181,20 +161,14 @@ export default function ClassDetailsPage() {
   const [creatingItem, setCreatingItem] =
     useState(false);
 
-  // ============================================================
   // LINK CHECK
-  // ============================================================
-
   const [checkingLink, setCheckingLink] =
     useState(false);
 
   const [linkCheckError, setLinkCheckError] =
     useState<string | null>(null);
 
-  // ============================================================
   // STUDENT SUBMISSION
-  // ============================================================
-
   const [isSubmissionModalOpen, setIsSubmissionModalOpen] =
     useState(false);
 
@@ -213,10 +187,7 @@ export default function ClassDetailsPage() {
   const [undoingSubmission, setUndoingSubmission] =
     useState(false);
 
-  // ============================================================
-  // TEACHER SUBMISSIONS
-  // ============================================================
-
+  // TEACHER
   const [openAssignments, setOpenAssignments] =
     useState<Record<string, boolean>>({});
 
@@ -227,13 +198,66 @@ export default function ClassDetailsPage() {
     useState<Record<string, boolean>>({});
 
   // ============================================================
+  // HELPERS
+  // ============================================================
+
+  const authHeaders = {
+    apikey: supabaseAnonKey || '',
+    Authorization: `Bearer ${supabaseAnonKey || ''}`,
+  };
+
+  const jsonHeaders = {
+    ...authHeaders,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  };
+
+  const getJson = async <T,>(url: string): Promise<T> => {
+    const response = await fetch(url, {
+      headers: authHeaders,
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        await response.text() || 'Request failed.'
+      );
+    }
+
+    return response.json();
+  };
+
+  const deleteFrom = async (url: string) => {
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: authHeaders,
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        await response.text() || 'Delete failed.'
+      );
+    }
+  };
+
+  const isValidHttpUrl = (value: string) => {
+    try {
+      const url = new URL(value.trim());
+
+      return (
+        url.protocol === 'http:' ||
+        url.protocol === 'https:'
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  // ============================================================
   // COPY JOIN CODE
   // ============================================================
 
   const handleCopyCode = async () => {
-    if (!isTeacher || !classData?.code) {
-      return;
-    }
+    if (!isTeacher || !classData?.code) return;
 
     try {
       await navigator.clipboard.writeText(
@@ -242,9 +266,10 @@ export default function ClassDetailsPage() {
 
       setCopiedCode(true);
 
-      setTimeout(() => {
-        setCopiedCode(false);
-      }, 2000);
+      setTimeout(
+        () => setCopiedCode(false),
+        2000
+      );
     } catch (err) {
       console.error(
         'Failed to copy join code:',
@@ -264,6 +289,38 @@ export default function ClassDetailsPage() {
       let detectedRole = '';
       let detectedFullName = '';
 
+      const extractUser = (parsed: any) => {
+        if (!parsed) return;
+
+        const role =
+          parsed?.role ||
+          parsed?.user?.role ||
+          parsed?.user?.user_metadata?.role ||
+          parsed?.user_metadata?.role;
+
+        if (role) {
+          detectedRole =
+            String(role).toLowerCase();
+        }
+
+        if (!detectedFullName) {
+          detectedFullName =
+            parsed?.fullName ||
+            parsed?.full_name ||
+            parsed?.name ||
+            parsed?.user?.fullName ||
+            parsed?.user?.full_name ||
+            parsed?.user?.name ||
+            parsed?.user?.user_metadata?.fullName ||
+            parsed?.user?.user_metadata?.full_name ||
+            parsed?.user?.user_metadata?.name ||
+            parsed?.user_metadata?.fullName ||
+            parsed?.user_metadata?.full_name ||
+            parsed?.user_metadata?.name ||
+            '';
+        }
+      };
+
       const directRole =
         localStorage.getItem('user_role');
 
@@ -277,36 +334,11 @@ export default function ClassDetailsPage() {
 
       if (currentUserRaw) {
         try {
-          const currentUser =
-            JSON.parse(currentUserRaw);
-
-          const role =
-            currentUser?.role ||
-            currentUser?.user?.role ||
-            currentUser?.user?.user_metadata?.role ||
-            currentUser?.user_metadata?.role;
-
-          if (role) {
-            detectedRole =
-              String(role).toLowerCase();
-          }
-
-          detectedFullName =
-            currentUser?.fullName ||
-            currentUser?.full_name ||
-            currentUser?.name ||
-            currentUser?.user?.fullName ||
-            currentUser?.user?.full_name ||
-            currentUser?.user?.name ||
-            currentUser?.user?.user_metadata?.fullName ||
-            currentUser?.user?.user_metadata?.full_name ||
-            currentUser?.user?.user_metadata?.name ||
-            currentUser?.user_metadata?.fullName ||
-            currentUser?.user_metadata?.full_name ||
-            currentUser?.user_metadata?.name ||
-            '';
+          extractUser(
+            JSON.parse(currentUserRaw)
+          );
         } catch {
-          // Ignore invalid JSON
+          // Ignore invalid JSON.
         }
       }
 
@@ -330,38 +362,11 @@ export default function ClassDetailsPage() {
           if (!raw) continue;
 
           try {
-            const parsed =
-              JSON.parse(raw);
-
-            const role =
-              parsed?.role ||
-              parsed?.user?.role ||
-              parsed?.user?.user_metadata?.role ||
-              parsed?.user_metadata?.role;
-
-            if (role) {
-              detectedRole =
-                String(role).toLowerCase();
-            }
-
-            if (!detectedFullName) {
-              detectedFullName =
-                parsed?.fullName ||
-                parsed?.full_name ||
-                parsed?.name ||
-                parsed?.user?.fullName ||
-                parsed?.user?.full_name ||
-                parsed?.user?.name ||
-                parsed?.user?.user_metadata?.fullName ||
-                parsed?.user?.user_metadata?.full_name ||
-                parsed?.user?.user_metadata?.name ||
-                parsed?.user_metadata?.fullName ||
-                parsed?.user_metadata?.full_name ||
-                parsed?.user_metadata?.name ||
-                '';
-            }
+            extractUser(
+              JSON.parse(raw)
+            );
           } catch {
-            // Ignore invalid JSON
+            // Ignore invalid JSON.
           }
         }
       }
@@ -371,7 +376,9 @@ export default function ClassDetailsPage() {
       );
 
       setStudentFullName(
-        String(detectedFullName || '').trim()
+        String(
+          detectedFullName || ''
+        ).trim()
       );
     } catch (err) {
       console.error(
@@ -384,7 +391,7 @@ export default function ClassDetailsPage() {
   }, []);
 
   // ============================================================
-  // FETCH EVERYTHING
+  // FETCH CLASS
   // ============================================================
 
   useEffect(() => {
@@ -402,33 +409,12 @@ export default function ClassDetailsPage() {
       setError(null);
 
       try {
-        const headers = {
-          apikey: supabaseAnonKey!,
-          Authorization:
-            `Bearer ${supabaseAnonKey}`,
-        };
-
-        // --------------------------------------------------------
-        // CLASS
-        // --------------------------------------------------------
-
-        const classResponse = await fetch(
-          `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(
-            code
-          )}&select=*`,
-          {
-            headers,
-          }
-        );
-
-        if (!classResponse.ok) {
-          throw new Error(
-            'Unable to load class.'
+        const classList =
+          await getJson<ClassData[]>(
+            `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(
+              code
+            )}&select=*`
           );
-        }
-
-        const classList: ClassData[] =
-          await classResponse.json();
 
         if (classList.length === 0) {
           setError('Class not found.');
@@ -442,34 +428,14 @@ export default function ClassDetailsPage() {
 
         setClassData(classList[0]);
 
-        // --------------------------------------------------------
-        // COURSES
-        // --------------------------------------------------------
-
-        const coursesResponse =
-          await fetch(
+        const courseList =
+          await getJson<Course[]>(
             `${supabaseUrl}/rest/v1/class_courses?class_code=eq.${encodeURIComponent(
               code
-            )}&select=*&order=id.asc`,
-            {
-              headers,
-            }
+            )}&select=*&order=id.asc`
           );
-
-        if (!coursesResponse.ok) {
-          throw new Error(
-            'Unable to load courses.'
-          );
-        }
-
-        const courseList: Course[] =
-          await coursesResponse.json();
 
         setCourses(courseList);
-
-        // --------------------------------------------------------
-        // MATERIALS + ASSIGNMENTS
-        // --------------------------------------------------------
 
         const materialMap:
           Record<string, Material[]> = {};
@@ -481,46 +447,24 @@ export default function ClassDetailsPage() {
           courseList.map(async (course) => {
             if (!course.id) return;
 
-            // MATERIALS
             try {
-              const materialResponse =
-                await fetch(
+              materialMap[course.id] =
+                await getJson<Material[]>(
                   `${supabaseUrl}/rest/v1/course_materials?course_id=eq.${encodeURIComponent(
                     course.id
-                  )}&select=*&order=id.asc`,
-                  {
-                    headers,
-                  }
+                  )}&select=*&order=id.asc`
                 );
-
-              if (materialResponse.ok) {
-                materialMap[course.id] =
-                  await materialResponse.json();
-              } else {
-                materialMap[course.id] = [];
-              }
             } catch {
               materialMap[course.id] = [];
             }
 
-            // ASSIGNMENTS
             try {
-              const assignmentResponse =
-                await fetch(
+              assignmentMap[course.id] =
+                await getJson<Assignment[]>(
                   `${supabaseUrl}/rest/v1/course_assignments?course_id=eq.${encodeURIComponent(
                     course.id
-                  )}&select=*&order=created_at.asc`,
-                  {
-                    headers,
-                  }
+                  )}&select=*&order=created_at.asc`
                 );
-
-              if (assignmentResponse.ok) {
-                assignmentMap[course.id] =
-                  await assignmentResponse.json();
-              } else {
-                assignmentMap[course.id] = [];
-              }
             } catch {
               assignmentMap[course.id] = [];
             }
@@ -529,10 +473,6 @@ export default function ClassDetailsPage() {
 
         setMaterials(materialMap);
         setAssignments(assignmentMap);
-
-        // --------------------------------------------------------
-        // SUBMISSIONS
-        // --------------------------------------------------------
 
         const allAssignments =
           Object.values(
@@ -548,25 +488,13 @@ export default function ClassDetailsPage() {
               if (!assignment.id) return;
 
               try {
-                const response =
-                  await fetch(
-                    `${supabaseUrl}/rest/v1/assignment_submissions?assignment_id=eq.${encodeURIComponent(
-                      assignment.id
-                    )}&select=*&order=created_at.asc`,
-                    {
-                      headers,
-                    }
-                  );
-
-                if (response.ok) {
-                  submissionMap[
+                submissionMap[
+                  assignment.id
+                ] = await getJson<Submission[]>(
+                  `${supabaseUrl}/rest/v1/assignment_submissions?assignment_id=eq.${encodeURIComponent(
                     assignment.id
-                  ] = await response.json();
-                } else {
-                  submissionMap[
-                    assignment.id
-                  ] = [];
-                }
+                  )}&select=*&order=created_at.asc`
+                );
               } catch {
                 submissionMap[
                   assignment.id
@@ -609,10 +537,9 @@ export default function ClassDetailsPage() {
   ) => {
     e.preventDefault();
 
-    if (!isTeacher) return;
-    if (!courseName.trim()) return;
-
     if (
+      !isTeacher ||
+      !courseName.trim() ||
       !supabaseUrl ||
       !supabaseAnonKey
     ) {
@@ -626,17 +553,7 @@ export default function ClassDetailsPage() {
         `${supabaseUrl}/rest/v1/class_courses`,
         {
           method: 'POST',
-
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization:
-              `Bearer ${supabaseAnonKey}`,
-            'Content-Type':
-              'application/json',
-            Prefer:
-              'return=representation',
-          },
-
+          headers: jsonHeaders,
           body: JSON.stringify({
             course_name:
               courseName.trim(),
@@ -645,42 +562,40 @@ export default function ClassDetailsPage() {
         }
       );
 
-      const responseText =
+      const text =
         await response.text();
 
       if (!response.ok) {
         throw new Error(
-          responseText ||
+          text ||
             'Failed to create course.'
         );
       }
 
-      const createdCourses:
-        Course[] =
-        JSON.parse(responseText);
+      const created =
+        (JSON.parse(text) as Course[])[0];
 
-      if (
-        createdCourses.length > 0
-      ) {
-        const created =
-          createdCourses[0];
+      if (!created) {
+        throw new Error(
+          'No course was returned.'
+        );
+      }
 
-        setCourses((previous) => [
+      setCourses((previous) => [
+        ...previous,
+        created,
+      ]);
+
+      if (created.id) {
+        setMaterials((previous) => ({
           ...previous,
-          created,
-        ]);
+          [created.id!]: [],
+        }));
 
-        if (created.id) {
-          setMaterials((previous) => ({
-            ...previous,
-            [created.id!]: [],
-          }));
-
-          setAssignments((previous) => ({
-            ...previous,
-            [created.id!]: [],
-          }));
-        }
+        setAssignments((previous) => ({
+          ...previous,
+          [created.id!]: [],
+        }));
       }
 
       setCourseName('');
@@ -706,43 +621,28 @@ export default function ClassDetailsPage() {
   const handleDeleteCourse = async (
     courseId: string
   ) => {
-    if (!isTeacher) return;
-
     if (
+      !isTeacher ||
       !supabaseUrl ||
       !supabaseAnonKey
     ) {
       return;
     }
 
-    const confirmed =
-      window.confirm(
+    if (
+      !window.confirm(
         'Are you sure you want to delete this course?'
-      );
-
-    if (!confirmed) return;
+      )
+    ) {
+      return;
+    }
 
     try {
-      const response = await fetch(
+      await deleteFrom(
         `${supabaseUrl}/rest/v1/class_courses?id=eq.${encodeURIComponent(
           courseId
-        )}`,
-        {
-          method: 'DELETE',
-
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization:
-              `Bearer ${supabaseAnonKey}`,
-          },
-        }
+        )}`
       );
-
-      if (!response.ok) {
-        throw new Error(
-          'Failed to delete course.'
-        );
-      }
 
       setCourses((previous) =>
         previous.filter(
@@ -790,47 +690,31 @@ export default function ClassDetailsPage() {
     materialId: string,
     courseId: string
   ) => {
-    if (!isTeacher) return;
-
     if (
+      !isTeacher ||
       !supabaseUrl ||
       !supabaseAnonKey
     ) {
       return;
     }
 
-    const confirmed =
-      window.confirm(
+    if (
+      !window.confirm(
         'Are you sure you want to delete this material?'
-      );
-
-    if (!confirmed) return;
+      )
+    ) {
+      return;
+    }
 
     try {
-      const response = await fetch(
+      await deleteFrom(
         `${supabaseUrl}/rest/v1/course_materials?id=eq.${encodeURIComponent(
           materialId
-        )}`,
-        {
-          method: 'DELETE',
-
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization:
-              `Bearer ${supabaseAnonKey}`,
-          },
-        }
+        )}`
       );
-
-      if (!response.ok) {
-        throw new Error(
-          'Failed to delete material.'
-        );
-      }
 
       setMaterials((previous) => ({
         ...previous,
-
         [courseId]: (
           previous[courseId] || []
         ).filter(
@@ -858,47 +742,31 @@ export default function ClassDetailsPage() {
     assignmentId: string,
     courseId: string
   ) => {
-    if (!isTeacher) return;
-
     if (
+      !isTeacher ||
       !supabaseUrl ||
       !supabaseAnonKey
     ) {
       return;
     }
 
-    const confirmed =
-      window.confirm(
+    if (
+      !window.confirm(
         'Are you sure you want to delete this assignment? All submissions for it may also be removed depending on your Supabase foreign-key settings.'
-      );
-
-    if (!confirmed) return;
+      )
+    ) {
+      return;
+    }
 
     try {
-      const response = await fetch(
+      await deleteFrom(
         `${supabaseUrl}/rest/v1/course_assignments?id=eq.${encodeURIComponent(
           assignmentId
-        )}`,
-        {
-          method: 'DELETE',
-
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization:
-              `Bearer ${supabaseAnonKey}`,
-          },
-        }
+        )}`
       );
-
-      if (!response.ok) {
-        throw new Error(
-          'Failed to delete assignment.'
-        );
-      }
 
       setAssignments((previous) => ({
         ...previous,
-
         [courseId]: (
           previous[courseId] || []
         ).filter(
@@ -944,45 +812,37 @@ export default function ClassDetailsPage() {
   };
 
   // ============================================================
-  // OPEN ADD MODAL
+  // ADD MODAL
   // ============================================================
 
   const openAddModal = (
     course: Course
   ) => {
-    if (!isTeacher || !course.id) {
-      return;
-    }
+    if (!isTeacher || !course.id) return;
 
     setSelectedCourse(course);
-
     setAddType('material');
 
     setMaterialName('');
     setMaterialLink('');
-
     setAssignmentName('');
     setAssignmentDescription('');
 
     setLinkCheckError(null);
     setCheckingLink(false);
-
     setIsAddModalOpen(true);
   };
 
-  // ============================================================
-  // CLOSE ADD MODAL
-  // ============================================================
-
-  const closeAddModal = () => {
-    if (creatingItem) return;
+  const closeAddModal = (
+    force = false
+  ) => {
+    if (creatingItem && !force) return;
 
     setIsAddModalOpen(false);
     setSelectedCourse(null);
 
     setMaterialName('');
     setMaterialLink('');
-
     setAssignmentName('');
     setAssignmentDescription('');
 
@@ -1002,12 +862,10 @@ export default function ClassDetailsPage() {
         '/api/moderate-link',
         {
           method: 'POST',
-
           headers: {
             'Content-Type':
               'application/json',
           },
-
           body: JSON.stringify({
             url: link,
           }),
@@ -1031,12 +889,9 @@ export default function ClassDetailsPage() {
       }
 
       return {
-        safe:
-          data?.safe === true,
-
+        safe: data?.safe === true,
         reason:
-          data?.reason ||
-          undefined,
+          data?.reason || undefined,
       };
     } catch (err) {
       console.error(
@@ -1053,7 +908,7 @@ export default function ClassDetailsPage() {
   };
 
   // ============================================================
-  // CREATE MATERIAL OR ASSIGNMENT
+  // CREATE MATERIAL / ASSIGNMENT
   // ============================================================
 
   const handleCreateItem = async (
@@ -1061,18 +916,17 @@ export default function ClassDetailsPage() {
   ) => {
     e.preventDefault();
 
-    if (!isTeacher) return;
-
-    if (!selectedCourse?.id) {
-      return;
-    }
-
     if (
+      !isTeacher ||
+      !selectedCourse?.id ||
       !supabaseUrl ||
       !supabaseAnonKey
     ) {
       return;
     }
+
+    const courseId =
+      selectedCourse.id;
 
     if (
       addType === 'material' &&
@@ -1098,46 +952,28 @@ export default function ClassDetailsPage() {
     setLinkCheckError(null);
 
     try {
-      // --------------------------------------------------------
-      // MATERIAL
-      // --------------------------------------------------------
-
       if (addType === 'material') {
         setCheckingLink(true);
 
-        let parsedUrl: URL;
-
-        try {
-          parsedUrl =
-            new URL(
-              materialLink.trim()
-            );
-        } catch {
-          throw new Error(
-            'Please enter a valid URL.'
-          );
-        }
-
         if (
-          parsedUrl.protocol !==
-            'http:' &&
-          parsedUrl.protocol !==
-            'https:'
+          !isValidHttpUrl(
+            materialLink
+          )
         ) {
           throw new Error(
-            'Only HTTP and HTTPS links are allowed.'
+            'Please enter a valid HTTP or HTTPS URL.'
           );
         }
 
         const cleanLink =
-          parsedUrl.toString();
+          new URL(
+            materialLink.trim()
+          ).toString();
 
         const checkResult =
           await checkMaterialLink(
             cleanLink
           );
-
-        setCheckingLink(false);
 
         if (!checkResult.safe) {
           throw new Error(
@@ -1146,173 +982,115 @@ export default function ClassDetailsPage() {
           );
         }
 
+        setCheckingLink(false);
+
         const response = await fetch(
           `${supabaseUrl}/rest/v1/course_materials`,
           {
             method: 'POST',
-
-            headers: {
-              apikey: supabaseAnonKey,
-
-              Authorization:
-                `Bearer ${supabaseAnonKey}`,
-
-              'Content-Type':
-                'application/json',
-
-              Prefer:
-                'return=representation',
-            },
-
+            headers: jsonHeaders,
             body: JSON.stringify({
-              course_id:
-                selectedCourse.id,
-
+              course_id: courseId,
               name:
                 materialName.trim(),
-
-              link:
-                cleanLink,
+              link: cleanLink,
             }),
           }
         );
 
-        const responseText =
+        const text =
           await response.text();
 
         if (!response.ok) {
           throw new Error(
-            responseText ||
+            text ||
               'Failed to create material.'
           );
         }
 
-        const createdMaterials:
-          Material[] =
-          JSON.parse(responseText);
+        const created =
+          (JSON.parse(text) as Material[])[0];
 
-        if (
-          createdMaterials.length === 0
-        ) {
+        if (!created) {
           throw new Error(
             'No material was returned.'
           );
         }
 
-        const createdMaterial =
-          createdMaterials[0];
-
         setMaterials((previous) => ({
           ...previous,
-
-          [selectedCourse.id!]: [
-            ...(previous[
-              selectedCourse.id!
-            ] || []),
-
-            createdMaterial,
+          [courseId]: [
+            ...(previous[courseId] || []),
+            created,
           ],
         }));
 
         setOpenCourses((previous) => ({
           ...previous,
-
-          [selectedCourse.id!]:
-            true,
+          [courseId]: true,
         }));
 
-        closeAddModal();
-
+        setCreatingItem(false);
+        closeAddModal(true);
         return;
       }
-
-      // --------------------------------------------------------
-      // ASSIGNMENT
-      // --------------------------------------------------------
 
       const response = await fetch(
         `${supabaseUrl}/rest/v1/course_assignments`,
         {
           method: 'POST',
-
-          headers: {
-            apikey: supabaseAnonKey,
-
-            Authorization:
-              `Bearer ${supabaseAnonKey}`,
-
-            'Content-Type':
-              'application/json',
-
-            Prefer:
-              'return=representation',
-          },
-
+          headers: jsonHeaders,
           body: JSON.stringify({
-            course_id:
-              selectedCourse.id,
-
+            course_id: courseId,
             name:
               assignmentName.trim(),
-
             description:
               assignmentDescription.trim(),
           }),
         }
       );
 
-      const responseText =
+      const text =
         await response.text();
 
       if (!response.ok) {
         throw new Error(
-          responseText ||
+          text ||
             'Failed to create assignment.'
         );
       }
 
-      const createdAssignments:
-        Assignment[] =
-        JSON.parse(responseText);
+      const created =
+        (JSON.parse(text) as Assignment[])[0];
 
-      if (
-        createdAssignments.length === 0
-      ) {
+      if (!created) {
         throw new Error(
           'No assignment was returned.'
         );
       }
 
-      const createdAssignment =
-        createdAssignments[0];
-
       setAssignments((previous) => ({
         ...previous,
-
-        [selectedCourse.id!]: [
-          ...(previous[
-            selectedCourse.id!
-          ] || []),
-
-          createdAssignment,
+        [courseId]: [
+          ...(previous[courseId] || []),
+          created,
         ],
       }));
 
-      if (createdAssignment.id) {
+      if (created.id) {
         setSubmissions((previous) => ({
           ...previous,
-          [createdAssignment.id!]: [],
+          [created.id!]: [],
         }));
       }
 
       setOpenCourses((previous) => ({
         ...previous,
-
-        [selectedCourse.id!]:
-          true,
+        [courseId]: true,
       }));
 
-      closeAddModal();
+      setCreatingItem(false);
+      closeAddModal(true);
     } catch (err) {
       console.error(
         'Error creating item:',
@@ -1332,7 +1110,7 @@ export default function ClassDetailsPage() {
   };
 
   // ============================================================
-  // CHECK WHETHER CURRENT STUDENT HAS SUBMITTED
+  // GET CURRENT STUDENT SUBMISSION
   // ============================================================
 
   const getStudentSubmission = (
@@ -1346,13 +1124,17 @@ export default function ClassDetailsPage() {
       submissions[assignmentId] || []
     ).find(
       (submission) =>
-        submission.nickname.trim().toLowerCase() ===
-        studentFullName.trim().toLowerCase()
+        submission.nickname
+          .trim()
+          .toLowerCase() ===
+        studentFullName
+          .trim()
+          .toLowerCase()
     );
   };
 
   // ============================================================
-  // OPEN STUDENT SUBMISSION MODAL
+  // OPEN STUDENT SUBMISSION
   // ============================================================
 
   const openSubmissionModal = (
@@ -1369,12 +1151,11 @@ export default function ClassDetailsPage() {
       return;
     }
 
-    const existingSubmission =
+    if (
       getStudentSubmission(
         assignment.id
-      );
-
-    if (existingSubmission) {
+      )
+    ) {
       return;
     }
 
@@ -1384,26 +1165,26 @@ export default function ClassDetailsPage() {
 
     setSubmissionClass('');
     setSubmissionLink('');
-
     setLinkCheckError(null);
     setCheckingLink(false);
-
     setIsSubmissionModalOpen(true);
   };
 
-  // ============================================================
-  // CLOSE STUDENT SUBMISSION MODAL
-  // ============================================================
-
-  const closeSubmissionModal = () => {
-    if (submittingAssignment) return;
+  const closeSubmissionModal = (
+    force = false
+  ) => {
+    if (
+      submittingAssignment &&
+      !force
+    ) {
+      return;
+    }
 
     setIsSubmissionModalOpen(false);
     setSelectedAssignment(null);
 
     setSubmissionClass('');
     setSubmissionLink('');
-
     setLinkCheckError(null);
     setCheckingLink(false);
   };
@@ -1417,40 +1198,27 @@ export default function ClassDetailsPage() {
   ) => {
     e.preventDefault();
 
-    if (isTeacher) return;
-
-    if (!selectedAssignment?.id) {
-      return;
-    }
-
-    if (!studentFullName.trim()) {
-      alert(
-        'Your account full name could not be found. Please sign in again.'
-      );
-      return;
-    }
-
     if (
+      isTeacher ||
+      !selectedAssignment?.id ||
+      !studentFullName.trim() ||
       !submissionClass.trim() ||
-      !submissionLink.trim()
-    ) {
-      return;
-    }
-
-    if (
+      !submissionLink.trim() ||
       !supabaseUrl ||
       !supabaseAnonKey
     ) {
       return;
     }
 
-    // Prevent duplicate submissions
-    const alreadySubmitted =
-      getStudentSubmission(
-        selectedAssignment.id
-      );
+    const assignmentId =
+      selectedAssignment.id;
 
-    if (alreadySubmitted) {
+    // First check local state.
+    if (
+      getStudentSubmission(
+        assignmentId
+      )
+    ) {
       alert(
         'You have already submitted this assignment.'
       );
@@ -1464,34 +1232,58 @@ export default function ClassDetailsPage() {
     setLinkCheckError(null);
 
     try {
-      let parsedUrl: URL;
-
-      try {
-        parsedUrl =
-          new URL(
-            submissionLink.trim()
-          );
-      } catch {
-        throw new Error(
-          'Please enter a valid URL.'
-        );
-      }
-
       if (
-        parsedUrl.protocol !==
-          'http:' &&
-        parsedUrl.protocol !==
-          'https:'
+        !isValidHttpUrl(
+          submissionLink
+        )
       ) {
         throw new Error(
-          'Only HTTP and HTTPS links are allowed.'
+          'Please enter a valid HTTP or HTTPS URL.'
         );
       }
 
       const cleanLink =
-        parsedUrl.toString();
+        new URL(
+          submissionLink.trim()
+        ).toString();
 
-      // Same Gemini safety check
+      // --------------------------------------------------------
+      // SECOND DUPLICATE CHECK
+      // --------------------------------------------------------
+      // This checks Supabase itself in case the local state
+      // is outdated.
+
+      const existing =
+        await getJson<Submission[]>(
+          `${supabaseUrl}/rest/v1/assignment_submissions?assignment_id=eq.${encodeURIComponent(
+            assignmentId
+          )}&nickname=eq.${encodeURIComponent(
+            studentFullName.trim()
+          )}&select=*`
+        );
+
+      if (existing.length > 0) {
+        setSubmissions((previous) => ({
+          ...previous,
+          [assignmentId]: [
+            ...(previous[assignmentId] || []),
+            ...existing.filter(
+              (remote) =>
+                !(previous[assignmentId] || [])
+                  .some(
+                    (local) =>
+                      local.id ===
+                      remote.id
+                  )
+            ),
+          ],
+        }));
+
+        throw new Error(
+          'You have already submitted this assignment.'
+        );
+      }
+
       const checkResult =
         await checkMaterialLink(
           cleanLink
@@ -1510,71 +1302,59 @@ export default function ClassDetailsPage() {
         `${supabaseUrl}/rest/v1/assignment_submissions`,
         {
           method: 'POST',
-
-          headers: {
-            apikey: supabaseAnonKey,
-
-            Authorization:
-              `Bearer ${supabaseAnonKey}`,
-
-            'Content-Type':
-              'application/json',
-
-            Prefer:
-              'return=representation',
-          },
-
+          headers: jsonHeaders,
           body: JSON.stringify({
             assignment_id:
-              selectedAssignment.id,
+              assignmentId,
 
-            // ALWAYS use account full name
+            // Always account name.
             nickname:
               studentFullName.trim(),
 
-            // Manual class input
+            // Manually entered class.
             class:
-              submissionClass.trim().toUpperCase(),
+              submissionClass
+                .trim()
+                .toUpperCase(),
 
-            link:
-              cleanLink,
+            link: cleanLink,
 
             grade: null,
           }),
         }
       );
 
-      const responseText =
+      const text =
         await response.text();
 
       if (!response.ok) {
         throw new Error(
-          responseText ||
+          text ||
             'Failed to submit assignment.'
         );
       }
 
-      const createdSubmissions:
-        Submission[] =
-        JSON.parse(responseText);
+      const created =
+        (JSON.parse(text) as Submission[])[0];
 
-      if (
-        createdSubmissions.length > 0
-      ) {
-        setSubmissions((previous) => ({
-          ...previous,
-
-          [selectedAssignment.id!]: [
-            ...(previous[
-              selectedAssignment.id!
-            ] || []),
-
-            createdSubmissions[0],
-          ],
-        }));
+      if (!created) {
+        throw new Error(
+          'No submission was returned.'
+        );
       }
 
-      closeSubmissionModal();
+      setSubmissions((previous) => ({
+        ...previous,
+        [assignmentId]: [
+          ...(previous[assignmentId] || []),
+          created,
+        ],
+      }));
+
+      // Close even though submittingAssignment
+      // is still true.
+      setSubmittingAssignment(false);
+      closeSubmissionModal(true);
 
       alert(
         'Assignment submitted successfully!'
@@ -1614,12 +1394,12 @@ export default function ClassDetailsPage() {
       return;
     }
 
-    const existingSubmission =
+    const existing =
       getStudentSubmission(
         assignment.id
       );
 
-    if (!existingSubmission?.id) {
+    if (!existing?.id) {
       return;
     }
 
@@ -1633,43 +1413,20 @@ export default function ClassDetailsPage() {
     setUndoingSubmission(true);
 
     try {
-      const response = await fetch(
+      await deleteFrom(
         `${supabaseUrl}/rest/v1/assignment_submissions?id=eq.${encodeURIComponent(
-          existingSubmission.id
-        )}`,
-        {
-          method: 'DELETE',
-
-          headers: {
-            apikey: supabaseAnonKey,
-
-            Authorization:
-              `Bearer ${supabaseAnonKey}`,
-          },
-        }
+          existing.id
+        )}`
       );
-
-      const responseText =
-        await response.text();
-
-      if (!response.ok) {
-        throw new Error(
-          responseText ||
-            'Failed to undo submission.'
-        );
-      }
 
       setSubmissions((previous) => ({
         ...previous,
-
         [assignment.id!]: (
-          previous[
-            assignment.id!
-          ] || []
+          previous[assignment.id!] || []
         ).filter(
           (submission) =>
             submission.id !==
-            existingSubmission.id
+            existing.id
         ),
       }));
 
@@ -1699,12 +1456,10 @@ export default function ClassDetailsPage() {
   ) => {
     setOpenAssignments((previous) => ({
       ...previous,
-
       [assignmentId]:
         !previous[assignmentId],
     }));
 
-    // Load fresh submissions when teacher opens it
     if (
       isTeacher &&
       !submissions[assignmentId] &&
@@ -1712,34 +1467,17 @@ export default function ClassDetailsPage() {
       supabaseAnonKey
     ) {
       try {
-        const response =
-          await fetch(
+        const data =
+          await getJson<Submission[]>(
             `${supabaseUrl}/rest/v1/assignment_submissions?assignment_id=eq.${encodeURIComponent(
               assignmentId
-            )}&select=*&order=created_at.asc`,
-            {
-              headers: {
-                apikey:
-                  supabaseAnonKey,
-                Authorization:
-                  `Bearer ${supabaseAnonKey}`,
-              },
-            }
+            )}&select=*&order=created_at.asc`
           );
 
-        if (response.ok) {
-          const data:
-            Submission[] =
-            await response.json();
-
-          setSubmissions(
-            (previous) => ({
-              ...previous,
-              [assignmentId]:
-                data,
-            })
-          );
-        }
+        setSubmissions((previous) => ({
+          ...previous,
+          [assignmentId]: data,
+        }));
       } catch (err) {
         console.error(
           'Error loading submissions:',
@@ -1766,18 +1504,16 @@ export default function ClassDetailsPage() {
     }
 
     const rawGrade =
-      gradeInputs[
-        submission.id
-      ] ??
-      (
-        submission.grade ??
-        ''
-      ).toString();
+      gradeInputs[submission.id] ??
+      String(
+        submission.grade ?? ''
+      );
 
     const grade =
       Number(rawGrade);
 
     if (
+      rawGrade === '' ||
       !Number.isInteger(grade) ||
       grade < 0 ||
       grade > 100
@@ -1785,14 +1521,12 @@ export default function ClassDetailsPage() {
       alert(
         'Grade must be a whole number between 0 and 100.'
       );
-
       return;
     }
 
     setSavingGrades((previous) => ({
       ...previous,
-      [submission.id!]:
-        true,
+      [submission.id!]: true,
     }));
 
     try {
@@ -1802,46 +1536,31 @@ export default function ClassDetailsPage() {
         )}`,
         {
           method: 'PATCH',
-
-          headers: {
-            apikey: supabaseAnonKey,
-
-            Authorization:
-              `Bearer ${supabaseAnonKey}`,
-
-            'Content-Type':
-              'application/json',
-
-            Prefer:
-              'return=representation',
-          },
-
+          headers: jsonHeaders,
           body: JSON.stringify({
             grade,
           }),
         }
       );
 
-      const responseText =
+      const text =
         await response.text();
 
       if (!response.ok) {
         throw new Error(
-          responseText ||
+          text ||
             'Failed to save grade.'
         );
       }
 
-      const updated:
-        Submission[] =
-        JSON.parse(responseText);
+      const updated =
+        JSON.parse(text) as Submission[];
 
-      const updatedSubmission =
-        updated[0];
+      const updatedGrade =
+        updated[0]?.grade ?? grade;
 
       setSubmissions((previous) => ({
         ...previous,
-
         [submission.assignment_id]:
           (
             previous[
@@ -1851,22 +1570,17 @@ export default function ClassDetailsPage() {
             item.id === submission.id
               ? {
                   ...item,
-                  grade,
+                  grade: updatedGrade,
                 }
               : item
           ),
       }));
 
-      if (updatedSubmission) {
-        setGradeInputs((previous) => ({
-          ...previous,
-          [submission.id!]:
-            String(
-              updatedSubmission.grade ??
-                grade
-            ),
-        }));
-      }
+      setGradeInputs((previous) => ({
+        ...previous,
+        [submission.id!]:
+          String(updatedGrade),
+      }));
     } catch (err) {
       console.error(
         'Error saving grade:',
@@ -1879,8 +1593,7 @@ export default function ClassDetailsPage() {
     } finally {
       setSavingGrades((previous) => ({
         ...previous,
-        [submission.id!]:
-          false,
+        [submission.id!]: false,
       }));
     }
   };
@@ -1964,9 +1677,7 @@ export default function ClassDetailsPage() {
 
       <main className="container mx-auto space-y-8 px-6 py-8">
 
-        {/* ======================================================
-            HEADER
-            ====================================================== */}
+        {/* HEADER */}
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -2045,9 +1756,7 @@ export default function ClassDetailsPage() {
           )}
         </div>
 
-        {/* ======================================================
-            COURSES
-            ====================================================== */}
+        {/* COURSES */}
 
         <section className="space-y-4">
           <div className="flex items-center justify-between">
@@ -2164,8 +1873,6 @@ export default function ClassDetailsPage() {
                         </div>
 
                         <div className="flex shrink-0 items-center gap-1">
-                          {/* ONLY ONE ADD BUTTON PER COURSE */}
-
                           {isTeacher &&
                             course.id && (
                               <Button
@@ -2212,9 +1919,7 @@ export default function ClassDetailsPage() {
                       {isOpen && (
                         <CardContent className="space-y-8 border-t border-border pt-5">
 
-                          {/* =================================================
-                              MATERIALS
-                              ================================================= */}
+                          {/* MATERIALS */}
 
                           <div className="space-y-3">
                             <div>
@@ -2305,9 +2010,7 @@ export default function ClassDetailsPage() {
                             )}
                           </div>
 
-                          {/* =================================================
-                              ASSIGNMENTS
-                              ================================================= */}
+                          {/* ASSIGNMENTS */}
 
                           <div className="space-y-3">
                             <div>
@@ -2364,7 +2067,8 @@ export default function ClassDetailsPage() {
                                         }
                                         className="overflow-hidden rounded-lg border border-border bg-background"
                                       >
-                                        {/* ASSIGNMENT CARD */}
+
+                                        {/* ASSIGNMENT BUTTON */}
 
                                         <button
                                           type="button"
@@ -2404,13 +2108,14 @@ export default function ClassDetailsPage() {
                                                 }
                                               </p>
 
-                                              {isTeacher && (
-                                                isAssignmentOpen ? (
-                                                  <ChevronUp className="size-4 shrink-0 text-muted-foreground" />
-                                                ) : (
-                                                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-                                                )
-                                              )}
+                                              {isTeacher &&
+                                                (
+                                                  isAssignmentOpen ? (
+                                                    <ChevronUp className="size-4 shrink-0 text-muted-foreground" />
+                                                  ) : (
+                                                    <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                                                  )
+                                                )}
                                             </div>
 
                                             <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
@@ -2434,8 +2139,9 @@ export default function ClassDetailsPage() {
                                             {!isTeacher &&
                                               studentSubmission && (
                                                 <div className="mt-2 flex items-center gap-2 text-xs font-medium text-primary">
-                                                  <span>
-                                                    ✓ Submitted
+                                                  <span className="flex items-center gap-1">
+                                                    <RotateCcw className="size-3.5" />
+                                                    Submitted
                                                   </span>
 
                                                   <span className="text-muted-foreground">
@@ -2477,7 +2183,7 @@ export default function ClassDetailsPage() {
                                                     <thead>
                                                       <tr className="border-b border-border bg-muted/40">
                                                         <th className="px-4 py-3 text-left font-semibold text-foreground">
-                                                          Nickname
+                                                          Name
                                                         </th>
 
                                                         <th className="px-4 py-3 text-left font-semibold text-foreground">
@@ -2530,10 +2236,10 @@ export default function ClassDetailsPage() {
                                                               gradeInputs[
                                                                 submission.id!
                                                               ] ??
-                                                              (
+                                                              String(
                                                                 submission.grade ??
-                                                                ''
-                                                              ).toString();
+                                                                  ''
+                                                              );
 
                                                             return (
                                                               <tr
@@ -2585,30 +2291,59 @@ export default function ClassDetailsPage() {
                                                                           e.target.value;
 
                                                                         if (
-                                                                          value !==
-                                                                            ''
+                                                                          value ===
+                                                                          ''
                                                                         ) {
-                                                                          const numeric =
-                                                                            Number(
-                                                                              value
-                                                                            );
+                                                                          setGradeInputs(
+                                                                            (
+                                                                              previous
+                                                                            ) => ({
+                                                                              ...previous,
+                                                                              [submission.id!]:
+                                                                                '',
+                                                                            })
+                                                                          );
 
-                                                                          if (
-                                                                            numeric >
-                                                                            100
-                                                                          ) {
-                                                                            value =
-                                                                              '100';
-                                                                          }
-
-                                                                          if (
-                                                                            numeric <
-                                                                            0
-                                                                          ) {
-                                                                            value =
-                                                                              '0';
-                                                                          }
+                                                                          return;
                                                                         }
+
+                                                                        let numeric =
+                                                                          Number(
+                                                                            value
+                                                                          );
+
+                                                                        if (
+                                                                          !Number.isFinite(
+                                                                            numeric
+                                                                          )
+                                                                        ) {
+                                                                          return;
+                                                                        }
+
+                                                                        // HARD LIMIT:
+                                                                        // never allow >100.
+                                                                        if (
+                                                                          numeric >
+                                                                          100
+                                                                        ) {
+                                                                          numeric =
+                                                                            100;
+                                                                        }
+
+                                                                        if (
+                                                                          numeric <
+                                                                          0
+                                                                        ) {
+                                                                          numeric =
+                                                                            0;
+                                                                        }
+
+                                                                        value =
+                                                                          String(
+                                                                            Math.trunc(
+                                                                              numeric
+                                                                            )
+                                                                          );
 
                                                                         setGradeInputs(
                                                                           (
@@ -2624,14 +2359,40 @@ export default function ClassDetailsPage() {
                                                                         e
                                                                       ) => {
                                                                         if (
-                                                                          e.key ===
-                                                                            'e' ||
-                                                                          e.key ===
-                                                                            'E' ||
-                                                                          e.key ===
-                                                                            '+' ||
-                                                                          e.key ===
-                                                                            '-'
+                                                                          [
+                                                                            'e',
+                                                                            'E',
+                                                                            '+',
+                                                                            '-',
+                                                                            '.',
+                                                                          ].includes(
+                                                                            e.key
+                                                                          )
+                                                                        ) {
+                                                                          e.preventDefault();
+                                                                        }
+                                                                      }}
+                                                                      onPaste={(
+                                                                        e
+                                                                      ) => {
+                                                                        const pasted =
+                                                                          e.clipboardData.getData(
+                                                                            'text'
+                                                                          );
+
+                                                                        const numeric =
+                                                                          Number(
+                                                                            pasted
+                                                                          );
+
+                                                                        if (
+                                                                          !Number.isInteger(
+                                                                            numeric
+                                                                          ) ||
+                                                                          numeric <
+                                                                            0 ||
+                                                                          numeric >
+                                                                            100
                                                                         ) {
                                                                           e.preventDefault();
                                                                         }
@@ -2682,7 +2443,7 @@ export default function ClassDetailsPage() {
                                             </div>
                                           )}
 
-                                        {/* TEACHER DELETE */}
+                                        {/* DELETE ASSIGNMENT */}
 
                                         {isTeacher && (
                                           <div className="flex justify-end border-t border-border px-4 py-2">
@@ -2866,7 +2627,6 @@ export default function ClassDetailsPage() {
               }
               className="space-y-5"
             >
-
               {/* TYPE */}
 
               <div className="space-y-2">
@@ -3034,8 +2794,8 @@ export default function ClassDetailsPage() {
                     </p>
 
                     <p className="mt-2 text-xs text-destructive/70">
-                      The material was not
-                      added to the course.
+                      The item was not added
+                      to the course.
                     </p>
                   </div>
                 </div>
@@ -3106,18 +2866,22 @@ export default function ClassDetailsPage() {
                   disabled={
                     creatingItem ||
                     checkingLink ||
-                    (addType ===
-                      'material' &&
+                    (
+                      addType ===
+                        'material' &&
                       (
                         !materialName.trim() ||
                         !materialLink.trim()
-                      )) ||
-                    (addType ===
-                      'assignment' &&
+                      )
+                    ) ||
+                    (
+                      addType ===
+                        'assignment' &&
                       (
                         !assignmentName.trim() ||
                         !assignmentDescription.trim()
-                      ))
+                      )
+                    )
                   }
                   className="h-11 w-1/2"
                 >
@@ -3192,7 +2956,7 @@ export default function ClassDetailsPage() {
                 className="space-y-4"
               >
 
-                {/* FULL NAME — LOCKED */}
+                {/* FULL NAME */}
 
                 <div className="space-y-2">
                   <label className="block text-xs font-medium text-muted-foreground">
@@ -3216,7 +2980,7 @@ export default function ClassDetailsPage() {
                   </p>
                 </div>
 
-                {/* CLASS — MANUAL */}
+                {/* CLASS */}
 
                 <div className="space-y-2">
                   <label className="block text-xs font-medium text-muted-foreground">
@@ -3231,7 +2995,8 @@ export default function ClassDetailsPage() {
                     }
                     onChange={(e) =>
                       setSubmissionClass(
-                        e.target.value.toUpperCase()
+                        e.target.value
+                          .toUpperCase()
                       )
                     }
                     required
@@ -3291,7 +3056,7 @@ export default function ClassDetailsPage() {
 
                     <div>
                       <p className="font-medium text-destructive">
-                        Link not allowed
+                        Submission not allowed
                       </p>
 
                       <p className="mt-1 text-sm text-destructive/80">
