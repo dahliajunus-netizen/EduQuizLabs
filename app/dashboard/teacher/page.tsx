@@ -4,7 +4,12 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Navbar } from '@/components/Navbar';
 import { useLanguage } from '@/components/language-provider';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -20,7 +25,7 @@ type TeacherClass = {
   class_name: string;
   school_name: string;
   code: string;
-  teacher_id?: string;
+  teacher_id: string;
 };
 
 export default function TeacherDashboardPage() {
@@ -30,75 +35,146 @@ export default function TeacherDashboardPage() {
   const [className, setClassName] = useState('');
   const [schoolName, setSchoolName] = useState('');
   const [teacherClasses, setTeacherClasses] = useState<TeacherClass[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-
-  // Use a dedicated fallback UUID if localStorage is empty
-  const FALLBACK_TEACHER_ID =
-    '32b60aea-9c8f-4100-9999-999999999999';
-
-  const [currentUserId, setCurrentUserId] =
-    useState<string>(FALLBACK_TEACHER_ID);
+  const [deletingCode, setDeletingCode] = useState<string | null>(null);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  /*
+   * ============================================================
+   * GET CURRENT USER
+   * ============================================================
+   *
+   * We no longer use a fake fallback teacher ID.
+   *
+   * If current_user does not exist, we simply don't load/create
+   * any classes instead of accidentally sharing a teacher ID.
+   */
   useEffect(() => {
-    async function initTeacherData() {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const rawActive = localStorage.getItem('current_user');
+
+      if (!rawActive) {
+        console.error('No current_user found in localStorage.');
+        setLoading(false);
+        return;
+      }
+
+      const parsed = JSON.parse(rawActive);
+
+      if (!parsed?.id) {
+        console.error('current_user does not contain an ID.');
+        setLoading(false);
+        return;
+      }
+
+      setCurrentUserId(String(parsed.id));
+    } catch (error) {
+      console.error('Failed to read current_user:', error);
+      setLoading(false);
+    }
+  }, []);
+
+  /*
+   * ============================================================
+   * FETCH ONLY THIS TEACHER'S CLASSES
+   * ============================================================
+   */
+  useEffect(() => {
+    if (!currentUserId) return;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Supabase environment variables are missing.');
+      setLoading(false);
+      return;
+    }
+
+    async function fetchTeacherClasses() {
+      setLoading(true);
+
       try {
-        let activeId = FALLBACK_TEACHER_ID;
-
-        if (typeof window !== 'undefined') {
-          const rawActive =
-            localStorage.getItem('current_user');
-
-          if (rawActive) {
-            try {
-              const parsed = JSON.parse(rawActive);
-
-              if (parsed?.id) {
-                activeId = parsed.id;
-              }
-            } catch (e) {
-              // Ignore JSON parse errors
-            }
-          }
-        }
-
-        setCurrentUserId(activeId);
-
-        // Fetch classes strictly belonging to this teacher's ID
         const response = await fetch(
-          `${supabaseUrl}/rest/v1/teacher_classes?teacher_id=eq.${activeId}&select=*`,
+          `${supabaseUrl}/rest/v1/teacher_classes?teacher_id=eq.${encodeURIComponent(
+            currentUserId
+          )}&select=*`,
           {
+            method: 'GET',
             headers: {
-              apikey: supabaseAnonKey!,
+              apikey: supabaseAnonKey,
               Authorization: `Bearer ${supabaseAnonKey}`,
+              'Content-Type': 'application/json',
             },
+            cache: 'no-store',
           }
         );
 
-        if (response.ok) {
-          const data = await response.json();
-          setTeacherClasses(data);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(
+            `Failed to fetch classes: ${errorText}`
+          );
         }
-      } catch (err) {
-        console.error(
-          'Error fetching teacher classes',
-          err
+
+        const data: TeacherClass[] = await response.json();
+
+        /*
+         * Extra frontend safety filter.
+         *
+         * Even though the API query already filters by teacher_id,
+         * we verify it again before putting anything into state.
+         */
+        const ownClasses = data.filter(
+          (item) =>
+            String(item.teacher_id) === String(currentUserId)
         );
+
+        setTeacherClasses(ownClasses);
+      } catch (error) {
+        console.error(
+          'Error fetching teacher classes:',
+          error
+        );
+        setTeacherClasses([]);
       } finally {
         setLoading(false);
       }
     }
 
-    initTeacherData();
-  }, [supabaseUrl, supabaseAnonKey]);
+    fetchTeacherClasses();
+  }, [
+    currentUserId,
+    supabaseUrl,
+    supabaseAnonKey,
+  ]);
 
+  /*
+   * ============================================================
+   * CREATE CLASS
+   * ============================================================
+   */
   const handleCreateClass = async (
     e: React.FormEvent
   ) => {
     e.preventDefault();
+
+    if (!currentUserId) {
+      console.error(
+        'Cannot create class: no logged-in teacher ID.'
+      );
+      return;
+    }
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error(
+        'Supabase environment variables are missing.'
+      );
+      return;
+    }
 
     if (
       !className.trim() ||
@@ -109,6 +185,9 @@ export default function TeacherDashboardPage() {
 
     setSubmitting(true);
 
+    /*
+     * Generate a random 5-character join code.
+     */
     const randomCode = Math.random()
       .toString(36)
       .substring(2, 7)
@@ -127,7 +206,7 @@ export default function TeacherDashboardPage() {
         {
           method: 'POST',
           headers: {
-            apikey: supabaseAnonKey!,
+            apikey: supabaseAnonKey,
             Authorization: `Bearer ${supabaseAnonKey}`,
             'Content-Type': 'application/json',
             Prefer: 'return=representation',
@@ -144,26 +223,55 @@ export default function TeacherDashboardPage() {
         );
       }
 
-      const createdClass = JSON.parse(responseBody);
+      const createdClass: TeacherClass[] =
+        JSON.parse(responseBody);
 
-      setTeacherClasses([
-        ...teacherClasses,
-        createdClass[0],
-      ]);
+      if (!createdClass?.[0]) {
+        throw new Error(
+          'Supabase did not return the created class.'
+        );
+      }
+
+      /*
+       * Only add the class if it belongs to the current teacher.
+       */
+      if (
+        String(createdClass[0].teacher_id) ===
+        String(currentUserId)
+      ) {
+        setTeacherClasses((previous) => [
+          ...previous,
+          createdClass[0],
+        ]);
+      }
 
       setClassName('');
       setSchoolName('');
       setIsModalOpen(false);
-    } catch (err) {
+    } catch (error) {
       console.error(
-        'Error creating class',
-        err
+        'Error creating class:',
+        error
       );
     } finally {
       setSubmitting(false);
     }
   };
 
+  /*
+   * ============================================================
+   * DELETE CLASS
+   * ============================================================
+   *
+   * IMPORTANT:
+   * The DELETE request checks BOTH:
+   *
+   *   code
+   *   teacher_id
+   *
+   * So a teacher cannot delete another teacher's class just
+   * because they know the join code.
+   */
   const handleDeleteClass = async (
     code: string,
     e: React.MouseEvent
@@ -171,30 +279,66 @@ export default function TeacherDashboardPage() {
     e.preventDefault();
     e.stopPropagation();
 
+    if (!currentUserId) {
+      console.error(
+        'Cannot delete class: no logged-in teacher ID.'
+      );
+      return;
+    }
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error(
+        'Supabase environment variables are missing.'
+      );
+      return;
+    }
+
+    setDeletingCode(code);
+
     try {
       const response = await fetch(
-        `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${code}`,
+        `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(
+          code
+        )}&teacher_id=eq.${encodeURIComponent(
+          currentUserId
+        )}`,
         {
           method: 'DELETE',
           headers: {
-            apikey: supabaseAnonKey!,
+            apikey: supabaseAnonKey,
             Authorization: `Bearer ${supabaseAnonKey}`,
           },
         }
       );
 
-      if (response.ok) {
-        setTeacherClasses(
-          teacherClasses.filter(
-            (c) => c.code !== code
-          )
+      if (!response.ok) {
+        const errorText = await response.text();
+
+        throw new Error(
+          `Failed to delete class: ${errorText}`
         );
       }
-    } catch (err) {
-      console.error(
-        'Error deleting class',
-        err
+
+      /*
+       * Remove only the class belonging to this teacher.
+       */
+      setTeacherClasses((previous) =>
+        previous.filter(
+          (item) =>
+            !(
+              item.code === code &&
+              String(item.teacher_id) ===
+                String(currentUserId)
+            )
+        )
       );
+    } catch (error) {
+      console.error(
+        'Error deleting class:',
+        error
+      );
+    } finally {
+      setDeletingCode(null);
     }
   };
 
@@ -204,7 +348,9 @@ export default function TeacherDashboardPage() {
 
       <main className="container mx-auto px-6 py-8 space-y-8">
 
-        {/* Page Header */}
+        {/* =====================================================
+            PAGE HEADER
+            ===================================================== */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">
@@ -218,6 +364,7 @@ export default function TeacherDashboardPage() {
 
           <Button
             onClick={() => setIsModalOpen(true)}
+            disabled={!currentUserId}
             className="gap-2"
           >
             <PlusCircle size={18} />
@@ -225,7 +372,9 @@ export default function TeacherDashboardPage() {
           </Button>
         </div>
 
-        {/* List of Created Classes */}
+        {/* =====================================================
+            CLASS LIST
+            ===================================================== */}
         <Card className="bg-card">
           <CardHeader>
             <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -243,6 +392,14 @@ export default function TeacherDashboardPage() {
                   <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 </div>
 
+              ) : !currentUserId ? (
+
+                /* No logged-in user */
+                <p className="text-sm text-muted-foreground">
+                  Unable to identify the current teacher.
+                  Please sign in again.
+                </p>
+
               ) : teacherClasses.length === 0 ? (
 
                 /* Empty State */
@@ -252,11 +409,14 @@ export default function TeacherDashboardPage() {
 
               ) : (
 
-                /* Classes */
+                /* =================================================
+                   ONLY THIS TEACHER'S CLASSES ARE RENDERED
+                   ================================================= */
                 teacherClasses.map((item, index) => (
+
                   <Link
-                    key={item.id || index}
-                    href={`/dashboard/student/classes/${item.code}`}
+                    key={item.id || `${item.code}-${index}`}
+                    href={`/dashboard/teacher/classes/${item.code}`}
                   >
                     <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/25 hover:bg-accent/40 transition cursor-pointer mb-2">
 
@@ -287,6 +447,9 @@ export default function TeacherDashboardPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          disabled={
+                            deletingCode === item.code
+                          }
                           onClick={(e) =>
                             handleDeleteClass(
                               item.code,
@@ -295,7 +458,11 @@ export default function TeacherDashboardPage() {
                           }
                           className="text-muted-foreground hover:text-destructive"
                         >
-                          <Trash2 size={16} />
+                          {deletingCode === item.code ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Trash2 size={16} />
+                          )}
                         </Button>
 
                       </div>
@@ -357,9 +524,7 @@ export default function TeacherDashboardPage() {
                   )}
                   value={className}
                   onChange={(e) =>
-                    setClassName(
-                      e.target.value
-                    )
+                    setClassName(e.target.value)
                   }
                   required
                   className="bg-background h-11"
@@ -381,9 +546,7 @@ export default function TeacherDashboardPage() {
                   )}
                   value={schoolName}
                   onChange={(e) =>
-                    setSchoolName(
-                      e.target.value
-                    )
+                    setSchoolName(e.target.value)
                   }
                   required
                   className="bg-background h-11"
@@ -407,7 +570,9 @@ export default function TeacherDashboardPage() {
 
                 <Button
                   type="submit"
-                  disabled={submitting}
+                  disabled={
+                    submitting || !currentUserId
+                  }
                   className="w-1/2 h-11"
                 >
                   {submitting ? (
