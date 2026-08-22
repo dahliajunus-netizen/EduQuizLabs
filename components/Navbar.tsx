@@ -6,15 +6,16 @@ import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { LayoutDashboard, BookOpen, Users, LogOut } from 'lucide-react';
+import { translations, Language } from '@/lib/translations';
 
 export function Navbar() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [language, setLanguage] = useState('en');
+  const [language, setLanguage] = useState<Language>('en');
 
   useEffect(() => {
     try {
-      // Read the active signed-in user session securely
+      // Read the active signed-in user session
       const rawUser = localStorage.getItem('current_user');
 
       if (rawUser) {
@@ -32,16 +33,18 @@ export function Navbar() {
     }
   }, []);
 
+  // Translation object for the currently selected language
+  const t = translations[language];
+
   const handleLanguageChange = (
     event: React.ChangeEvent<HTMLSelectElement>
   ) => {
-    const newLanguage = event.target.value;
+    const newLanguage = event.target.value as Language;
 
     setLanguage(newLanguage);
     localStorage.setItem('language', newLanguage);
 
-    // Language is saved for now.
-    // The actual website translation can be connected later.
+    // The navbar immediately updates because language state changed.
   };
 
   const handleLogout = () => {
@@ -70,21 +73,23 @@ export function Navbar() {
           {/* Navigation */}
           <nav className="hidden md:flex items-center gap-4 text-sm font-medium text-muted-foreground">
 
+            {/* Overview */}
             <Link
               href={`/dashboard/${role}`}
               className="hover:text-foreground transition-colors flex items-center gap-1.5"
             >
               <LayoutDashboard size={16} />
-              Overview
+              {t.overview}
             </Link>
 
+            {/* Children */}
             {role === 'parent' && (
               <Link
                 href="/dashboard/parent/children"
                 className="hover:text-foreground transition-colors flex items-center gap-1.5"
               >
                 <Users size={16} />
-                Children
+                {t.children}
               </Link>
             )}
 
@@ -97,11 +102,11 @@ export function Navbar() {
           {/* User information */}
           <div className="hidden sm:flex flex-col text-right">
             <span className="text-sm font-medium text-foreground">
-              {user?.fullName || user?.full_name || 'Guest User'}
+              {user?.fullName || user?.full_name || t.guestUser}
             </span>
 
             <span className="text-xs text-muted-foreground capitalize">
-              Role: {role}
+              {t.role}: {role}
             </span>
           </div>
 
@@ -115,8 +120,8 @@ export function Navbar() {
             aria-label="Select language"
             className="rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none transition-colors hover:bg-muted focus:ring-2 focus:ring-primary"
           >
-            <option value="en">English</option>
-            <option value="id">Bahasa Indonesia</option>
+            <option value="en">{t.english}</option>
+            <option value="id">{t.indonesian}</option>
           </select>
 
           {/* Logout */}
@@ -127,7 +132,7 @@ export function Navbar() {
             className="gap-2"
           >
             <LogOut size={16} />
-            Exit
+            {t.exit}
           </Button>
 
         </div>
