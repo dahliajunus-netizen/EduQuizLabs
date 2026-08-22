@@ -1,16 +1,11 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
 
 export async function POST(request: Request) {
   try {
-    // ------------------------------------------------------------
-    // Read request
-    // ------------------------------------------------------------
-
     const body = await request.json();
 
     const link =
-      typeof body?.url === 'string'
+      typeof body.url === 'string'
         ? body.url.trim()
         : '';
 
@@ -24,10 +19,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // ------------------------------------------------------------
     // Validate URL
-    // ------------------------------------------------------------
-
     let url: URL;
 
     try {
@@ -57,10 +49,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // ------------------------------------------------------------
-    // Gemini API key
-    // ------------------------------------------------------------
-
     const apiKey =
       process.env.GEMINI_API_KEY;
 
@@ -79,55 +67,45 @@ export async function POST(request: Request) {
       );
     }
 
-    // ------------------------------------------------------------
-    // Create Gemini client
-    // ------------------------------------------------------------
+    /*
+     * Ask Gemini to classify the URL.
+     */
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
+        apiKey
+      )}`,
+      {
+        method: 'POST',
 
-    const ai = new GoogleGenAI({
-      apiKey,
-    });
+        headers: {
+          'Content-Type':
+            'application/json',
+        },
 
-    // ------------------------------------------------------------
-    // Ask Gemini to classify the URL
-    // ------------------------------------------------------------
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `You are a safety checker for an educational classroom platform.
 
-    const prompt = `
-You are a safety checker for an educational platform used by
-middle-school and high-school students.
+Evaluate the following URL based ONLY on the URL/domain information provided.
 
-Evaluate this URL as a proposed classroom learning resource.
+The link is being submitted by a teacher as classroom material for students.
 
-URL:
-${url.href}
+ALLOW normal educational, school, academic, reference, documentation, news, productivity, video, and general-purpose websites.
 
-Your job is to determine whether the URL appears to point to
-inappropriate material.
-
-Reject URLs that clearly indicate:
-- sexually explicit or adult material
+REJECT links that clearly indicate:
+- pornography or sexually explicit content
 - sexual services
-- pornography
-- content intended primarily for sexual purposes
+- adult-only sexual content
+- websites primarily intended for sexual content
+- links involving sexual content involving minors
+- obvious gambling/betting
+- obvious illegal drug sales
+- malware/phishing/scam websites when clearly identifiable from the URL
 
-Normal educational and general-purpose websites should be allowed,
-including:
-- school websites
-- universities
-- Wikipedia
-- documentation
-- educational articles
-- news websites
-- YouTube
-- Google Drive
-- Microsoft resources
-- coding websites
-- science resources
-- mathematics resources
-- reference websites
-
-IMPORTANT:
-Judge the URL/domain itself. Do not assume that an unfamiliar
-website is unsafe merely because you do not recognize it.
+Do NOT reject a normal website merely because it could theoretically contain inappropriate content.
 
 Return ONLY valid JSON in exactly this format:
 
@@ -142,76 +120,73 @@ or
   "safe": false,
   "reason": "Short explanation"
 }
-`;
 
-    const response =
-      await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-
-        contents: prompt,
-
-        config: {
-          temperature: 0,
-          maxOutputTokens: 150,
-
-          responseMimeType:
-            'application/json',
-
-          safetySettings: [
-            {
-              category:
-                'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-              threshold:
-                'BLOCK_LOW_AND_ABOVE',
-            },
-            {
-              category:
-                'HARM_CATEGORY_HATE_SPEECH',
-              threshold:
-                'BLOCK_MEDIUM_AND_ABOVE',
-            },
-            {
-              category:
-                'HARM_CATEGORY_HARASSMENT',
-              threshold:
-                'BLOCK_MEDIUM_AND_ABOVE',
-            },
-            {
-              category:
-                'HARM_CATEGORY_DANGEROUS_CONTENT',
-              threshold:
-                'BLOCK_MEDIUM_AND_ABOVE',
+URL:
+${url.href}`,
+                },
+              ],
             },
           ],
-        },
-      });
 
-    // ------------------------------------------------------------
-    // Read Gemini response
-    // ------------------------------------------------------------
+          generationConfig: {
+            temperature: 0,
+            responseMimeType:
+              'application/json',
+          },
+        }),
+      }
+    );
 
-    const text =
-      response.text?.trim();
+    if (!geminiResponse.ok) {
+      const errorText =
+        await geminiResponse.text();
 
-    if (!text) {
       console.error(
-        '[moderate-link] Gemini returned no text.'
+        '[moderate-link] Gemini API error:',
+        {
+          status: geminiResponse.status,
+          statusText:
+            geminiResponse.statusText,
+          body: errorText,
+        }
       );
 
       return NextResponse.json(
         {
           safe: false,
           reason:
-            'The link could not be checked right now. Please try again.',
+            'The link could not be checked. Please try again.',
         },
         { status: 503 }
       );
     }
 
-    // ------------------------------------------------------------
-    // Parse JSON
-    // ------------------------------------------------------------
+    const geminiData =
+      await geminiResponse.json();
 
+    const text =
+      geminiData?.candidates?.[0]
+        ?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      console.error(
+        '[moderate-link] Gemini returned no text:',
+        geminiData
+      );
+
+      return NextResponse.json(
+        {
+          safe: false,
+          reason:
+            'The link could not be checked. Please try again.',
+        },
+        { status: 503 }
+      );
+    }
+
+    /*
+     * Parse Gemini's JSON response.
+     */
     let result: {
       safe?: boolean;
       reason?: string;
@@ -219,30 +194,30 @@ or
 
     try {
       result = JSON.parse(text);
-    } catch (error) {
+    } catch {
       console.error(
         '[moderate-link] Invalid Gemini JSON:',
-        text,
-        error
+        text
       );
 
       return NextResponse.json(
         {
           safe: false,
           reason:
-            'The link could not be checked right now. Please try again.',
+            'The link could not be checked. Please try again.',
         },
         { status: 503 }
       );
     }
 
-    // ------------------------------------------------------------
-    // Validate Gemini result
-    // ------------------------------------------------------------
-
-    if (typeof result.safe !== 'boolean') {
+    /*
+     * Make sure "safe" is actually a boolean.
+     */
+    if (
+      typeof result.safe !== 'boolean'
+    ) {
       console.error(
-        '[moderate-link] Gemini returned invalid result:',
+        '[moderate-link] Invalid Gemini result:',
         result
       );
 
@@ -250,40 +225,27 @@ or
         {
           safe: false,
           reason:
-            'The link could not be checked right now. Please try again.',
+            'The link could not be checked. Please try again.',
         },
         { status: 503 }
       );
     }
 
-    // ------------------------------------------------------------
-    // Unsafe
-    // ------------------------------------------------------------
-
-    if (!result.safe) {
-      return NextResponse.json({
-        safe: false,
-
-        reason:
-          result.reason ||
-          'This link appears to contain inappropriate content and cannot be added as classroom material.',
-      });
-    }
-
-    // ------------------------------------------------------------
-    // Safe
-    // ------------------------------------------------------------
-
+    /*
+     * Return the exact format expected
+     * by your page.tsx.
+     */
     return NextResponse.json({
-      safe: true,
-
+      safe: result.safe,
       reason:
         result.reason ||
-        'Link passed the safety check.',
+        (result.safe
+          ? 'Link passed the safety check.'
+          : 'This link is not allowed as classroom material.'),
     });
   } catch (error) {
     console.error(
-      '[moderate-link] Gemini error:',
+      '[moderate-link] Route error:',
       error
     );
 
