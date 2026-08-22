@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { BookOpen, PlusCircle, Loader2 } from 'lucide-react';
-import { useLanguage } from '@/components/language.provider';
+import { useLanguage } from '@/components/language-provider';
 
 export default function StudentDashboard() {
   const { language } = useLanguage();
