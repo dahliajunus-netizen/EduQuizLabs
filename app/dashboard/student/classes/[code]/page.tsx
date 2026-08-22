@@ -19,6 +19,7 @@ import {
   BookOpen,
   ChevronDown,
   ChevronUp,
+  ClipboardList,
   Copy,
   FileText,
   Link as LinkIcon,
@@ -28,6 +29,8 @@ import {
   X,
   ShieldCheck,
   ShieldAlert,
+  ExternalLink,
+  Save,
 } from 'lucide-react';
 
 type ClassData = {
@@ -51,10 +54,30 @@ type Material = {
   link: string;
 };
 
+type Assignment = {
+  id?: string;
+  course_id: string;
+  name: string;
+  description: string;
+  created_at?: string;
+};
+
+type Submission = {
+  id?: string;
+  assignment_id: string;
+  nickname: string;
+  class: string;
+  link: string;
+  grade?: number | null;
+  created_at?: string;
+};
+
 type LinkCheckResult = {
   safe: boolean;
   reason?: string;
 };
+
+type AddType = 'material' | 'assignment';
 
 export default function ClassDetailsPage() {
   const params = useParams();
@@ -78,7 +101,14 @@ export default function ClassDetailsPage() {
   const [materials, setMaterials] =
     useState<Record<string, Material[]>>({});
 
-  const [loading, setLoading] = useState(true);
+  const [assignments, setAssignments] =
+    useState<Record<string, Assignment[]>>({});
+
+  const [submissions, setSubmissions] =
+    useState<Record<string, Submission[]>>({});
+
+  const [loading, setLoading] =
+    useState(true);
 
   const [error, setError] =
     useState<string | null>(null);
@@ -89,7 +119,10 @@ export default function ClassDetailsPage() {
   const [copiedCode, setCopiedCode] =
     useState(false);
 
-  // Create course modal
+  // ------------------------------------------------------------
+  // COURSE MODAL
+  // ------------------------------------------------------------
+
   const [isCourseModalOpen, setIsCourseModalOpen] =
     useState(false);
 
@@ -99,38 +132,91 @@ export default function ClassDetailsPage() {
   const [creatingCourse, setCreatingCourse] =
     useState(false);
 
-  // Open / closed courses
+  // ------------------------------------------------------------
+  // OPEN COURSES
+  // ------------------------------------------------------------
+
   const [openCourses, setOpenCourses] =
     useState<Record<string, boolean>>({});
 
-  // Add material modal
-  const [isMaterialModalOpen, setIsMaterialModalOpen] =
+  // ------------------------------------------------------------
+  // ADD MODAL
+  // ------------------------------------------------------------
+
+  const [isAddModalOpen, setIsAddModalOpen] =
     useState(false);
 
   const [selectedCourse, setSelectedCourse] =
     useState<Course | null>(null);
 
+  const [addType, setAddType] =
+    useState<AddType>('material');
+
+  // Material fields
   const [materialName, setMaterialName] =
     useState('');
 
   const [materialLink, setMaterialLink] =
     useState('');
 
-  const [creatingMaterial, setCreatingMaterial] =
+  // Assignment fields
+  const [assignmentName, setAssignmentName] =
+    useState('');
+
+  const [assignmentDescription, setAssignmentDescription] =
+    useState('');
+
+  const [creatingItem, setCreatingItem] =
     useState(false);
 
-  // AI link checking
+  // ------------------------------------------------------------
+  // LINK CHECK
+  // ------------------------------------------------------------
+
   const [checkingLink, setCheckingLink] =
     useState(false);
 
   const [linkCheckError, setLinkCheckError] =
     useState<string | null>(null);
 
-  /*
-   * ------------------------------------------------------------
-   * Copy join code
-   * ------------------------------------------------------------
-   */
+  // ------------------------------------------------------------
+  // STUDENT SUBMISSION MODAL
+  // ------------------------------------------------------------
+
+  const [isSubmissionModalOpen, setIsSubmissionModalOpen] =
+    useState(false);
+
+  const [selectedAssignment, setSelectedAssignment] =
+    useState<Assignment | null>(null);
+
+  const [submissionNickname, setSubmissionNickname] =
+    useState('');
+
+  const [submissionClass, setSubmissionClass] =
+    useState('');
+
+  const [submissionLink, setSubmissionLink] =
+    useState('');
+
+  const [submittingAssignment, setSubmittingAssignment] =
+    useState(false);
+
+  // ------------------------------------------------------------
+  // TEACHER SUBMISSIONS
+  // ------------------------------------------------------------
+
+  const [openAssignments, setOpenAssignments] =
+    useState<Record<string, boolean>>({});
+
+  const [gradeInputs, setGradeInputs] =
+    useState<Record<string, string>>({});
+
+  const [savingGrades, setSavingGrades] =
+    useState<Record<string, boolean>>({});
+
+  // ============================================================
+  // COPY JOIN CODE
+  // ============================================================
 
   const handleCopyCode = async () => {
     if (!isTeacher || !classData?.code) {
@@ -155,11 +241,9 @@ export default function ClassDetailsPage() {
     }
   };
 
-  /*
-   * ------------------------------------------------------------
-   * Detect current user's role
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // DETECT ROLE
+  // ============================================================
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -250,11 +334,9 @@ export default function ClassDetailsPage() {
     }
   }, []);
 
-  /*
-   * ------------------------------------------------------------
-   * Fetch class, courses, and materials
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // FETCH EVERYTHING
+  // ============================================================
 
   useEffect(() => {
     if (
@@ -276,6 +358,10 @@ export default function ClassDetailsPage() {
           Authorization:
             `Bearer ${supabaseAnonKey}`,
         };
+
+        // --------------------------------------------------------
+        // CLASS
+        // --------------------------------------------------------
 
         const classResponse = await fetch(
           `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(
@@ -300,10 +386,16 @@ export default function ClassDetailsPage() {
           setClassData(null);
           setCourses([]);
           setMaterials({});
+          setAssignments({});
+          setSubmissions({});
           return;
         }
 
         setClassData(classList[0]);
+
+        // --------------------------------------------------------
+        // COURSES
+        // --------------------------------------------------------
 
         const coursesResponse =
           await fetch(
@@ -326,13 +418,21 @@ export default function ClassDetailsPage() {
 
         setCourses(courseList);
 
+        // --------------------------------------------------------
+        // MATERIALS + ASSIGNMENTS
+        // --------------------------------------------------------
+
         const materialMap:
           Record<string, Material[]> = {};
+
+        const assignmentMap:
+          Record<string, Assignment[]> = {};
 
         await Promise.all(
           courseList.map(async (course) => {
             if (!course.id) return;
 
+            // MATERIALS
             try {
               const materialResponse =
                 await fetch(
@@ -345,21 +445,91 @@ export default function ClassDetailsPage() {
                 );
 
               if (materialResponse.ok) {
-                const data: Material[] =
-                  await materialResponse.json();
-
                 materialMap[course.id] =
-                  data;
+                  await materialResponse.json();
               } else {
                 materialMap[course.id] = [];
               }
             } catch {
               materialMap[course.id] = [];
             }
+
+            // ASSIGNMENTS
+            try {
+              const assignmentResponse =
+                await fetch(
+                  `${supabaseUrl}/rest/v1/course_assignments?course_id=eq.${encodeURIComponent(
+                    course.id
+                  )}&select=*&order=created_at.asc`,
+                  {
+                    headers,
+                  }
+                );
+
+              if (assignmentResponse.ok) {
+                assignmentMap[course.id] =
+                  await assignmentResponse.json();
+              } else {
+                assignmentMap[course.id] = [];
+              }
+            } catch {
+              assignmentMap[course.id] = [];
+            }
           })
         );
 
         setMaterials(materialMap);
+        setAssignments(assignmentMap);
+
+        // --------------------------------------------------------
+        // SUBMISSIONS
+        // --------------------------------------------------------
+
+        const allAssignments =
+          Object.values(
+            assignmentMap
+          ).flat();
+
+        const submissionMap:
+          Record<string, Submission[]> = {};
+
+        await Promise.all(
+          allAssignments.map(
+            async (assignment) => {
+              if (!assignment.id) return;
+
+              try {
+                const response =
+                  await fetch(
+                    `${supabaseUrl}/rest/v1/assignment_submissions?assignment_id=eq.${encodeURIComponent(
+                      assignment.id
+                    )}&select=*&order=created_at.asc`,
+                    {
+                      headers,
+                    }
+                  );
+
+                if (response.ok) {
+                  submissionMap[
+                    assignment.id
+                  ] = await response.json();
+                } else {
+                  submissionMap[
+                    assignment.id
+                  ] = [];
+                }
+              } catch {
+                submissionMap[
+                  assignment.id
+                ] = [];
+              }
+            }
+          )
+        );
+
+        setSubmissions(
+          submissionMap
+        );
       } catch (err) {
         console.error(
           'Error loading class:',
@@ -381,11 +551,9 @@ export default function ClassDetailsPage() {
     supabaseAnonKey,
   ]);
 
-  /*
-   * ------------------------------------------------------------
-   * Create course
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // CREATE COURSE
+  // ============================================================
 
   const handleCreateCourse = async (
     e: React.FormEvent
@@ -423,7 +591,6 @@ export default function ClassDetailsPage() {
           body: JSON.stringify({
             course_name:
               courseName.trim(),
-
             class_code: code,
           }),
         }
@@ -446,10 +613,25 @@ export default function ClassDetailsPage() {
       if (
         createdCourses.length > 0
       ) {
+        const created =
+          createdCourses[0];
+
         setCourses((previous) => [
           ...previous,
-          createdCourses[0],
+          created,
         ]);
+
+        if (created.id) {
+          setMaterials((previous) => ({
+            ...previous,
+            [created.id!]: [],
+          }));
+
+          setAssignments((previous) => ({
+            ...previous,
+            [created.id!]: [],
+          }));
+        }
       }
 
       setCourseName('');
@@ -468,11 +650,9 @@ export default function ClassDetailsPage() {
     }
   };
 
-  /*
-   * ------------------------------------------------------------
-   * Delete course
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // DELETE COURSE
+  // ============================================================
 
   const handleDeleteCourse = async (
     courseId: string
@@ -531,6 +711,16 @@ export default function ClassDetailsPage() {
 
         return updated;
       });
+
+      setAssignments((previous) => {
+        const updated = {
+          ...previous,
+        };
+
+        delete updated[courseId];
+
+        return updated;
+      });
     } catch (err) {
       console.error(
         'Error deleting course:',
@@ -543,11 +733,156 @@ export default function ClassDetailsPage() {
     }
   };
 
-  /*
-   * ------------------------------------------------------------
-   * Toggle course
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // DELETE MATERIAL
+  // ============================================================
+
+  const handleDeleteMaterial = async (
+    materialId: string,
+    courseId: string
+  ) => {
+    if (!isTeacher) return;
+
+    if (
+      !supabaseUrl ||
+      !supabaseAnonKey
+    ) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        'Are you sure you want to delete this material?'
+      );
+
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/course_materials?id=eq.${encodeURIComponent(
+          materialId
+        )}`,
+        {
+          method: 'DELETE',
+
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization:
+              `Bearer ${supabaseAnonKey}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          'Failed to delete material.'
+        );
+      }
+
+      setMaterials((previous) => ({
+        ...previous,
+
+        [courseId]: (
+          previous[courseId] || []
+        ).filter(
+          (material) =>
+            material.id !== materialId
+        ),
+      }));
+    } catch (err) {
+      console.error(
+        'Error deleting material:',
+        err
+      );
+
+      alert(
+        'Failed to delete material.'
+      );
+    }
+  };
+
+  // ============================================================
+  // DELETE ASSIGNMENT
+  // ============================================================
+
+  const handleDeleteAssignment = async (
+    assignmentId: string,
+    courseId: string
+  ) => {
+    if (!isTeacher) return;
+
+    if (
+      !supabaseUrl ||
+      !supabaseAnonKey
+    ) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        'Are you sure you want to delete this assignment? All submissions for it may also be removed depending on your Supabase foreign-key settings.'
+      );
+
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/course_assignments?id=eq.${encodeURIComponent(
+          assignmentId
+        )}`,
+        {
+          method: 'DELETE',
+
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization:
+              `Bearer ${supabaseAnonKey}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          'Failed to delete assignment.'
+        );
+      }
+
+      setAssignments((previous) => ({
+        ...previous,
+
+        [courseId]: (
+          previous[courseId] || []
+        ).filter(
+          (assignment) =>
+            assignment.id !==
+            assignmentId
+        ),
+      }));
+
+      setSubmissions((previous) => {
+        const updated = {
+          ...previous,
+        };
+
+        delete updated[assignmentId];
+
+        return updated;
+      });
+    } catch (err) {
+      console.error(
+        'Error deleting assignment:',
+        err
+      );
+
+      alert(
+        'Failed to delete assignment.'
+      );
+    }
+  };
+
+  // ============================================================
+  // TOGGLE COURSE
+  // ============================================================
 
   const toggleCourse = (
     courseId: string
@@ -559,13 +894,11 @@ export default function ClassDetailsPage() {
     }));
   };
 
-  /*
-   * ------------------------------------------------------------
-   * Open material modal
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // OPEN ADD MODAL
+  // ============================================================
 
-  const openMaterialModal = (
+  const openAddModal = (
     course: Course
   ) => {
     if (!isTeacher || !course.id) {
@@ -573,35 +906,44 @@ export default function ClassDetailsPage() {
     }
 
     setSelectedCourse(course);
+
+    setAddType('material');
+
     setMaterialName('');
     setMaterialLink('');
+
+    setAssignmentName('');
+    setAssignmentDescription('');
+
     setLinkCheckError(null);
     setCheckingLink(false);
-    setIsMaterialModalOpen(true);
+
+    setIsAddModalOpen(true);
   };
 
-  /*
-   * ------------------------------------------------------------
-   * Close material modal
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // CLOSE ADD MODAL
+  // ============================================================
 
-  const closeMaterialModal = () => {
-    if (creatingMaterial) return;
+  const closeAddModal = () => {
+    if (creatingItem) return;
 
-    setIsMaterialModalOpen(false);
+    setIsAddModalOpen(false);
     setSelectedCourse(null);
+
     setMaterialName('');
     setMaterialLink('');
+
+    setAssignmentName('');
+    setAssignmentDescription('');
+
     setLinkCheckError(null);
     setCheckingLink(false);
   };
 
-  /*
-   * ------------------------------------------------------------
-   * AI LINK SAFETY CHECK
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // LINK SAFETY CHECK
+  // ============================================================
 
   const checkMaterialLink = async (
     link: string
@@ -661,13 +1003,11 @@ export default function ClassDetailsPage() {
     }
   };
 
-  /*
-   * ------------------------------------------------------------
-   * Create material
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // CREATE MATERIAL OR ASSIGNMENT
+  // ============================================================
 
-  const handleCreateMaterial = async (
+  const handleCreateItem = async (
     e: React.FormEvent
   ) => {
     e.preventDefault();
@@ -679,71 +1019,170 @@ export default function ClassDetailsPage() {
     }
 
     if (
-      !materialName.trim() ||
-      !materialLink.trim()
-    ) {
-      return;
-    }
-
-    if (
       !supabaseUrl ||
       !supabaseAnonKey
     ) {
       return;
     }
 
-    setCreatingMaterial(true);
-    setCheckingLink(true);
+    if (
+      addType === 'material' &&
+      (
+        !materialName.trim() ||
+        !materialLink.trim()
+      )
+    ) {
+      return;
+    }
+
+    if (
+      addType === 'assignment' &&
+      (
+        !assignmentName.trim() ||
+        !assignmentDescription.trim()
+      )
+    ) {
+      return;
+    }
+
+    setCreatingItem(true);
     setLinkCheckError(null);
 
     try {
-      let parsedUrl: URL;
+      // --------------------------------------------------------
+      // MATERIAL
+      // --------------------------------------------------------
 
-      try {
-        parsedUrl =
-          new URL(
-            materialLink.trim()
+      if (addType === 'material') {
+        setCheckingLink(true);
+
+        let parsedUrl: URL;
+
+        try {
+          parsedUrl =
+            new URL(
+              materialLink.trim()
+            );
+        } catch {
+          throw new Error(
+            'Please enter a valid URL.'
           );
-      } catch {
-        throw new Error(
-          'Please enter a valid URL.'
+        }
+
+        if (
+          parsedUrl.protocol !==
+            'http:' &&
+          parsedUrl.protocol !==
+            'https:'
+        ) {
+          throw new Error(
+            'Only HTTP and HTTPS links are allowed.'
+          );
+        }
+
+        const cleanLink =
+          parsedUrl.toString();
+
+        const checkResult =
+          await checkMaterialLink(
+            cleanLink
+          );
+
+        setCheckingLink(false);
+
+        if (!checkResult.safe) {
+          throw new Error(
+            checkResult.reason ||
+              'This link does not appear appropriate for an educational platform.'
+          );
+        }
+
+        const response = await fetch(
+          `${supabaseUrl}/rest/v1/course_materials`,
+          {
+            method: 'POST',
+
+            headers: {
+              apikey: supabaseAnonKey,
+
+              Authorization:
+                `Bearer ${supabaseAnonKey}`,
+
+              'Content-Type':
+                'application/json',
+
+              Prefer:
+                'return=representation',
+            },
+
+            body: JSON.stringify({
+              course_id:
+                selectedCourse.id,
+
+              name:
+                materialName.trim(),
+
+              link:
+                cleanLink,
+            }),
+          }
         );
-      }
 
-      if (
-        parsedUrl.protocol !==
-          'http:' &&
-        parsedUrl.protocol !==
-          'https:'
-      ) {
-        throw new Error(
-          'Only HTTP and HTTPS links are allowed.'
-        );
-      }
+        const responseText =
+          await response.text();
 
-      const cleanLink =
-        parsedUrl.toString();
+        if (!response.ok) {
+          throw new Error(
+            responseText ||
+              'Failed to create material.'
+          );
+        }
 
-      const checkResult =
-        await checkMaterialLink(
-          cleanLink
-        );
+        const createdMaterials:
+          Material[] =
+          JSON.parse(responseText);
 
-      setCheckingLink(false);
+        if (
+          createdMaterials.length === 0
+        ) {
+          throw new Error(
+            'No material was returned.'
+          );
+        }
 
-      if (!checkResult.safe) {
-        const reason =
-          checkResult.reason ||
-          'This link does not appear appropriate for an educational platform.';
+        const createdMaterial =
+          createdMaterials[0];
 
-        setLinkCheckError(reason);
-        setCreatingMaterial(false);
+        setMaterials((previous) => ({
+          ...previous,
+
+          [selectedCourse.id!]: [
+            ...(previous[
+              selectedCourse.id!
+            ] || []),
+
+            createdMaterial,
+          ],
+        }));
+
+        setOpenCourses((previous) => ({
+          ...previous,
+
+          [selectedCourse.id!]:
+            true,
+        }));
+
+        closeAddModal();
 
         return;
       }
 
+      // --------------------------------------------------------
+      // ASSIGNMENT
+      // --------------------------------------------------------
+
       const response = await fetch(
-        `${supabaseUrl}/rest/v1/course_materials`,
+        `${supabaseUrl}/rest/v1/course_assignments`,
         {
           method: 'POST',
 
@@ -765,10 +1204,10 @@ export default function ClassDetailsPage() {
               selectedCourse.id,
 
             name:
-              materialName.trim(),
+              assignmentName.trim(),
 
-            link:
-              cleanLink,
+            description:
+              assignmentDescription.trim(),
           }),
         }
       );
@@ -779,26 +1218,26 @@ export default function ClassDetailsPage() {
       if (!response.ok) {
         throw new Error(
           responseText ||
-            'Failed to create material.'
+            'Failed to create assignment.'
         );
       }
 
-      const createdMaterials:
-        Material[] =
+      const createdAssignments:
+        Assignment[] =
         JSON.parse(responseText);
 
       if (
-        createdMaterials.length === 0
+        createdAssignments.length === 0
       ) {
         throw new Error(
-          'No material was returned.'
+          'No assignment was returned.'
         );
       }
 
-      const createdMaterial =
-        createdMaterials[0];
+      const createdAssignment =
+        createdAssignments[0];
 
-      setMaterials((previous) => ({
+      setAssignments((previous) => ({
         ...previous,
 
         [selectedCourse.id!]: [
@@ -806,9 +1245,16 @@ export default function ClassDetailsPage() {
             selectedCourse.id!
           ] || []),
 
-          createdMaterial,
+          createdAssignment,
         ],
       }));
+
+      if (createdAssignment.id) {
+        setSubmissions((previous) => ({
+          ...previous,
+          [createdAssignment.id!]: [],
+        }));
+      }
 
       setOpenCourses((previous) => ({
         ...previous,
@@ -817,10 +1263,10 @@ export default function ClassDetailsPage() {
           true,
       }));
 
-      closeMaterialModal();
+      closeAddModal();
     } catch (err) {
       console.error(
-        'Error creating material:',
+        'Error creating item:',
         err
       );
 
@@ -829,18 +1275,422 @@ export default function ClassDetailsPage() {
       setLinkCheckError(
         err instanceof Error
           ? err.message
-          : 'Failed to add material.'
+          : 'Failed to add item.'
       );
     } finally {
-      setCreatingMaterial(false);
+      setCreatingItem(false);
     }
   };
 
-  /*
-   * ------------------------------------------------------------
-   * Loading
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // OPEN STUDENT SUBMISSION MODAL
+  // ============================================================
+
+  const openSubmissionModal = (
+    assignment: Assignment
+  ) => {
+    if (isTeacher || !assignment.id) {
+      return;
+    }
+
+    setSelectedAssignment(
+      assignment
+    );
+
+    setSubmissionNickname('');
+    setSubmissionClass(
+      classData?.class_name || ''
+    );
+    setSubmissionLink('');
+
+    setLinkCheckError(null);
+    setCheckingLink(false);
+
+    setIsSubmissionModalOpen(true);
+  };
+
+  // ============================================================
+  // CLOSE STUDENT SUBMISSION MODAL
+  // ============================================================
+
+  const closeSubmissionModal = () => {
+    if (submittingAssignment) return;
+
+    setIsSubmissionModalOpen(false);
+    setSelectedAssignment(null);
+
+    setSubmissionNickname('');
+    setSubmissionClass('');
+    setSubmissionLink('');
+
+    setLinkCheckError(null);
+    setCheckingLink(false);
+  };
+
+  // ============================================================
+  // SUBMIT ASSIGNMENT
+  // ============================================================
+
+  const handleSubmitAssignment = async (
+    e: React.FormEvent
+  ) => {
+    e.preventDefault();
+
+    if (isTeacher) return;
+
+    if (!selectedAssignment?.id) {
+      return;
+    }
+
+    if (
+      !submissionNickname.trim() ||
+      !submissionClass.trim() ||
+      !submissionLink.trim()
+    ) {
+      return;
+    }
+
+    if (
+      !supabaseUrl ||
+      !supabaseAnonKey
+    ) {
+      return;
+    }
+
+    setSubmittingAssignment(true);
+    setCheckingLink(true);
+    setLinkCheckError(null);
+
+    try {
+      let parsedUrl: URL;
+
+      try {
+        parsedUrl =
+          new URL(
+            submissionLink.trim()
+          );
+      } catch {
+        throw new Error(
+          'Please enter a valid URL.'
+        );
+      }
+
+      if (
+        parsedUrl.protocol !==
+          'http:' &&
+        parsedUrl.protocol !==
+          'https:'
+      ) {
+        throw new Error(
+          'Only HTTP and HTTPS links are allowed.'
+        );
+      }
+
+      const cleanLink =
+        parsedUrl.toString();
+
+      // Same Gemini safety check
+      const checkResult =
+        await checkMaterialLink(
+          cleanLink
+        );
+
+      setCheckingLink(false);
+
+      if (!checkResult.safe) {
+        throw new Error(
+          checkResult.reason ||
+            'This link does not appear appropriate for an educational platform.'
+        );
+      }
+
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/assignment_submissions`,
+        {
+          method: 'POST',
+
+          headers: {
+            apikey: supabaseAnonKey,
+
+            Authorization:
+              `Bearer ${supabaseAnonKey}`,
+
+            'Content-Type':
+              'application/json',
+
+            Prefer:
+              'return=representation',
+          },
+
+          body: JSON.stringify({
+            assignment_id:
+              selectedAssignment.id,
+
+            nickname:
+              submissionNickname.trim(),
+
+            class:
+              submissionClass.trim(),
+
+            link:
+              cleanLink,
+
+            grade: null,
+          }),
+        }
+      );
+
+      const responseText =
+        await response.text();
+
+      if (!response.ok) {
+        throw new Error(
+          responseText ||
+            'Failed to submit assignment.'
+        );
+      }
+
+      const createdSubmissions:
+        Submission[] =
+        JSON.parse(responseText);
+
+      if (
+        createdSubmissions.length > 0
+      ) {
+        setSubmissions((previous) => ({
+          ...previous,
+
+          [selectedAssignment.id!]: [
+            ...(previous[
+              selectedAssignment.id!
+            ] || []),
+
+            createdSubmissions[0],
+          ],
+        }));
+      }
+
+      closeSubmissionModal();
+
+      alert(
+        'Assignment submitted successfully!'
+      );
+    } catch (err) {
+      console.error(
+        'Error submitting assignment:',
+        err
+      );
+
+      setCheckingLink(false);
+
+      setLinkCheckError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to submit assignment.'
+      );
+    } finally {
+      setSubmittingAssignment(false);
+    }
+  };
+
+  // ============================================================
+  // TOGGLE ASSIGNMENT
+  // ============================================================
+
+  const toggleAssignment = async (
+    assignmentId: string
+  ) => {
+    setOpenAssignments((previous) => ({
+      ...previous,
+
+      [assignmentId]:
+        !previous[assignmentId],
+    }));
+
+    // Load fresh submissions when teacher opens it
+    if (
+      isTeacher &&
+      !submissions[assignmentId] &&
+      supabaseUrl &&
+      supabaseAnonKey
+    ) {
+      try {
+        const response =
+          await fetch(
+            `${supabaseUrl}/rest/v1/assignment_submissions?assignment_id=eq.${encodeURIComponent(
+              assignmentId
+            )}&select=*&order=created_at.asc`,
+            {
+              headers: {
+                apikey:
+                  supabaseAnonKey,
+                Authorization:
+                  `Bearer ${supabaseAnonKey}`,
+              },
+            }
+          );
+
+        if (response.ok) {
+          const data:
+            Submission[] =
+            await response.json();
+
+          setSubmissions(
+            (previous) => ({
+              ...previous,
+              [assignmentId]:
+                data,
+            })
+          );
+        }
+      } catch (err) {
+        console.error(
+          'Error loading submissions:',
+          err
+        );
+      }
+    }
+  };
+
+  // ============================================================
+  // SAVE GRADE
+  // ============================================================
+
+  const handleSaveGrade = async (
+    submission: Submission
+  ) => {
+    if (
+      !isTeacher ||
+      !submission.id ||
+      !supabaseUrl ||
+      !supabaseAnonKey
+    ) {
+      return;
+    }
+
+    const rawGrade =
+      gradeInputs[
+        submission.id
+      ] ??
+      (
+        submission.grade ??
+        ''
+      ).toString();
+
+    const grade =
+      Number(rawGrade);
+
+    if (
+      !Number.isInteger(grade) ||
+      grade < 0 ||
+      grade > 100
+    ) {
+      alert(
+        'Grade must be a whole number between 0 and 100.'
+      );
+
+      return;
+    }
+
+    setSavingGrades((previous) => ({
+      ...previous,
+      [submission.id!]:
+        true,
+    }));
+
+    try {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/assignment_submissions?id=eq.${encodeURIComponent(
+          submission.id
+        )}`,
+        {
+          method: 'PATCH',
+
+          headers: {
+            apikey: supabaseAnonKey,
+
+            Authorization:
+              `Bearer ${supabaseAnonKey}`,
+
+            'Content-Type':
+              'application/json',
+
+            Prefer:
+              'return=representation',
+          },
+
+          body: JSON.stringify({
+            grade,
+          }),
+        }
+      );
+
+      const responseText =
+        await response.text();
+
+      if (!response.ok) {
+        throw new Error(
+          responseText ||
+            'Failed to save grade.'
+        );
+      }
+
+      const updated:
+        Submission[] =
+        JSON.parse(responseText);
+
+      const updatedSubmission =
+        updated[0];
+
+      setSubmissions((previous) => ({
+        ...previous,
+
+        [submission.assignment_id]:
+          (
+            previous[
+              submission.assignment_id
+            ] || []
+          ).map((item) =>
+            item.id === submission.id
+              ? {
+                  ...item,
+                  grade,
+                }
+              : item
+          ),
+      }));
+
+      if (updatedSubmission) {
+        setGradeInputs((previous) => ({
+          ...previous,
+          [submission.id!]:
+            String(
+              updatedSubmission.grade ??
+                grade
+            ),
+        }));
+      }
+    } catch (err) {
+      console.error(
+        'Error saving grade:',
+        err
+      );
+
+      alert(
+        'Failed to save grade.'
+      );
+    } finally {
+      setSavingGrades((previous) => ({
+        ...previous,
+        [submission.id!]:
+          false,
+      }));
+    }
+  };
+
+  // ============================================================
+  // LOADING
+  // ============================================================
 
   if (loading) {
     return (
@@ -854,11 +1704,9 @@ export default function ClassDetailsPage() {
     );
   }
 
-  /*
-   * ------------------------------------------------------------
-   * Error
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // ERROR
+  // ============================================================
 
   if (error || !classData) {
     return (
@@ -909,11 +1757,9 @@ export default function ClassDetailsPage() {
     ? '/dashboard/teacher'
     : '/dashboard/student';
 
-  /*
-   * ------------------------------------------------------------
-   * Main page
-   * ------------------------------------------------------------
-   */
+  // ============================================================
+  // MAIN PAGE
+  // ============================================================
 
   return (
     <div className="relative min-h-screen bg-background">
@@ -921,7 +1767,9 @@ export default function ClassDetailsPage() {
 
       <main className="container mx-auto space-y-8 px-6 py-8">
 
-        {/* Header */}
+        {/* ======================================================
+            HEADER
+            ====================================================== */}
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -948,8 +1796,6 @@ export default function ClassDetailsPage() {
               <span className="hidden sm:inline">
                 •
               </span>
-
-              {/* Join code */}
 
               <span className="flex items-center gap-1.5">
                 Code:{' '}
@@ -989,8 +1835,6 @@ export default function ClassDetailsPage() {
             </div>
           </div>
 
-          {/* Teacher only */}
-
           {isTeacher && (
             <Button
               onClick={() =>
@@ -1004,7 +1848,9 @@ export default function ClassDetailsPage() {
           )}
         </div>
 
-        {/* Courses */}
+        {/* ======================================================
+            COURSES
+            ====================================================== */}
 
         <section className="space-y-4">
           <div className="flex items-center justify-between">
@@ -1070,11 +1916,20 @@ export default function ClassDetailsPage() {
                         ] || []
                       : [];
 
+                  const courseAssignments =
+                    course.id
+                      ? assignments[
+                          course.id
+                        ] || []
+                      : [];
+
                   return (
                     <Card
                       key={courseId}
                       className="overflow-hidden bg-card transition hover:border-primary/40"
                     >
+                      {/* COURSE HEADER */}
+
                       <CardHeader className="flex flex-row items-center justify-between gap-3 py-4">
                         <div className="flex min-w-0 items-center gap-2">
                           <Button
@@ -1130,24 +1985,27 @@ export default function ClassDetailsPage() {
                           )}
                       </CardHeader>
 
+                      {/* COURSE CONTENT */}
+
                       {isOpen && (
-                        <CardContent className="space-y-5 border-t border-border pt-5">
-                          <p className="text-sm text-muted-foreground">
-                            Materials and learning
-                            resources for{' '}
-                            <span className="font-semibold text-foreground">
-                              {
-                                course.course_name
-                              }
-                            </span>
-                            .
-                          </p>
+                        <CardContent className="space-y-8 border-t border-border pt-5">
+
+                          {/* =================================================
+                              MATERIALS
+                              ================================================= */}
 
                           <div className="space-y-3">
                             <div className="flex items-center justify-between gap-3">
-                              <h3 className="font-semibold text-foreground">
-                                Materials
-                              </h3>
+                              <div>
+                                <h3 className="font-semibold text-foreground">
+                                  Materials
+                                </h3>
+
+                                <p className="text-xs text-muted-foreground">
+                                  Learning resources
+                                  for this course.
+                                </p>
+                              </div>
 
                               {isTeacher &&
                                 course.id && (
@@ -1155,7 +2013,7 @@ export default function ClassDetailsPage() {
                                     type="button"
                                     size="sm"
                                     onClick={() =>
-                                      openMaterialModal(
+                                      openAddModal(
                                         course
                                       )
                                     }
@@ -1166,7 +2024,7 @@ export default function ClassDetailsPage() {
                                         15
                                       }
                                     />
-                                    Add Material
+                                    Add
                                   </Button>
                                 )}
                             </div>
@@ -1176,7 +2034,7 @@ export default function ClassDetailsPage() {
                               <div className="rounded-lg border border-dashed border-border p-5">
                                 <p className="text-sm text-muted-foreground">
                                   {isTeacher
-                                    ? 'No materials have been added. Click "Add Material" to add one.'
+                                    ? 'No materials have been added yet. Click "Add" to add one.'
                                     : 'No materials have been added to this course yet.'}
                                 </p>
                               </div>
@@ -1187,41 +2045,386 @@ export default function ClassDetailsPage() {
                                     material,
                                     materialIndex
                                   ) => (
-                                    <a
+                                    <div
                                       key={
                                         material.id ||
                                         `${courseId}-material-${materialIndex}`
                                       }
-                                      href={
-                                        material.link
-                                      }
-                                      target="_blank"
-                                      rel="noopener noreferrer"
                                       className="group flex items-center gap-3 rounded-lg border border-border bg-background p-3 transition hover:border-primary/50 hover:bg-primary/5"
                                     >
-                                      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                                        <LinkIcon className="size-4 text-primary" />
-                                      </div>
+                                      <a
+                                        href={
+                                          material.link
+                                        }
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex min-w-0 flex-1 items-center gap-3"
+                                      >
+                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                                          <LinkIcon className="size-4 text-primary" />
+                                        </div>
 
-                                      <div className="min-w-0 flex-1">
-                                        <p className="truncate font-medium text-foreground">
-                                          {
-                                            material.name
-                                          }
-                                        </p>
+                                        <div className="min-w-0 flex-1">
+                                          <p className="truncate font-medium text-foreground">
+                                            {
+                                              material.name
+                                            }
+                                          </p>
 
-                                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                          {
-                                            material.link
-                                          }
-                                        </p>
-                                      </div>
+                                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                            {
+                                              material.link
+                                            }
+                                          </p>
+                                        </div>
 
-                                      <span className="shrink-0 text-xs text-primary opacity-0 transition group-hover:opacity-100">
-                                        Open
-                                      </span>
-                                    </a>
+                                        <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
+                                      </a>
+
+                                      {isTeacher &&
+                                        material.id && (
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() =>
+                                              handleDeleteMaterial(
+                                                material.id!,
+                                                course.id!
+                                              )
+                                            }
+                                            className="size-8 shrink-0 p-0 text-muted-foreground hover:text-destructive"
+                                            aria-label="Delete material"
+                                          >
+                                            <Trash2 size={15} />
+                                          </Button>
+                                        )}
+                                    </div>
                                   )
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* =================================================
+                              ASSIGNMENTS
+                              ================================================= */}
+
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <h3 className="font-semibold text-foreground">
+                                  Assignments
+                                </h3>
+
+                                <p className="text-xs text-muted-foreground">
+                                  {isTeacher
+                                    ? 'Click an assignment to view submissions and grades.'
+                                    : 'Click an assignment to submit your work.'}
+                                </p>
+                              </div>
+
+                              {isTeacher &&
+                                course.id && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() =>
+                                      openAddModal(
+                                        course
+                                      )
+                                    }
+                                    className="gap-2"
+                                  >
+                                    <PlusCircle
+                                      size={
+                                        15
+                                      }
+                                    />
+                                    Add
+                                  </Button>
+                                )}
+                            </div>
+
+                            {courseAssignments.length ===
+                            0 ? (
+                              <div className="rounded-lg border border-dashed border-border p-5">
+                                <p className="text-sm text-muted-foreground">
+                                  {isTeacher
+                                    ? 'No assignments have been created yet. Click "Add" and choose Assignment.'
+                                    : 'No assignments have been created for this course yet.'}
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {courseAssignments.map(
+                                  (
+                                    assignment
+                                  ) => {
+                                    const assignmentId =
+                                      assignment.id!;
+
+                                    const isAssignmentOpen =
+                                      !!openAssignments[
+                                        assignmentId
+                                      ];
+
+                                    const assignmentSubmissions =
+                                      submissions[
+                                        assignmentId
+                                      ] || [];
+
+                                    return (
+                                      <div
+                                        key={
+                                          assignmentId
+                                        }
+                                        className="overflow-hidden rounded-lg border border-border bg-background"
+                                      >
+                                        {/* ASSIGNMENT CARD */}
+
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (
+                                              isTeacher
+                                            ) {
+                                              toggleAssignment(
+                                                assignmentId
+                                              );
+                                            } else {
+                                              openSubmissionModal(
+                                                assignment
+                                              );
+                                            }
+                                          }}
+                                          className="flex w-full items-start gap-3 p-4 text-left transition hover:bg-primary/5"
+                                        >
+                                          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                                            <ClipboardList className="size-5 text-primary" />
+                                          </div>
+
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex items-center justify-between gap-3">
+                                              <p className="font-semibold text-foreground">
+                                                {
+                                                  assignment.name
+                                                }
+                                              </p>
+
+                                              {isTeacher && (
+                                                isAssignmentOpen ? (
+                                                  <ChevronUp className="size-4 shrink-0 text-muted-foreground" />
+                                                ) : (
+                                                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                                                )
+                                              )}
+                                            </div>
+
+                                            <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                                              {
+                                                assignment.description
+                                              }
+                                            </p>
+
+                                            {isTeacher && (
+                                              <p className="mt-2 text-xs text-primary">
+                                                {
+                                                  assignmentSubmissions.length
+                                                }{' '}
+                                                {assignmentSubmissions.length ===
+                                                1
+                                                  ? 'submission'
+                                                  : 'submissions'}
+                                              </p>
+                                            )}
+
+                                            {!isTeacher && (
+                                              <p className="mt-2 text-xs font-medium text-primary">
+                                                Click to submit →
+                                              </p>
+                                            )}
+                                          </div>
+                                        </button>
+
+                                        {/* TEACHER SUBMISSIONS */}
+
+                                        {isTeacher &&
+                                          isAssignmentOpen && (
+                                            <div className="border-t border-border p-4">
+                                              {assignmentSubmissions.length ===
+                                              0 ? (
+                                                <div className="rounded-lg border border-dashed border-border p-5 text-center">
+                                                  <ClipboardList className="mx-auto mb-2 size-7 text-muted-foreground" />
+
+                                                  <p className="text-sm text-muted-foreground">
+                                                    No students have submitted this assignment yet.
+                                                  </p>
+                                                </div>
+                                              ) : (
+                                                <div className="overflow-x-auto rounded-lg border border-border">
+                                                  <table className="w-full min-w-[700px] text-sm">
+                                                    <thead>
+                                                      <tr className="border-b border-border bg-muted/40">
+                                                        <th className="px-4 py-3 text-left font-semibold text-foreground">
+                                                          Nickname
+                                                        </th>
+
+                                                        <th className="px-4 py-3 text-left font-semibold text-foreground">
+                                                          Class
+                                                        </th>
+
+                                                        <th className="px-4 py-3 text-left font-semibold text-foreground">
+                                                          Submission
+                                                        </th>
+
+                                                        <th className="px-4 py-3 text-right font-semibold text-foreground">
+                                                          Grade
+                                                        </th>
+                                                      </tr>
+                                                    </thead>
+
+                                                    <tbody>
+                                                      {assignmentSubmissions.map(
+                                                        (
+                                                          submission
+                                                        ) => {
+                                                          const currentGrade =
+                                                            gradeInputs[
+                                                              submission.id!
+                                                            ] ??
+                                                            (
+                                                              submission.grade ??
+                                                              ''
+                                                            ).toString();
+
+                                                          return (
+                                                            <tr
+                                                              key={
+                                                                submission.id
+                                                              }
+                                                              className="border-b border-border last:border-0"
+                                                            >
+                                                              <td className="px-4 py-3 font-medium text-foreground">
+                                                                {
+                                                                  submission.nickname
+                                                                }
+                                                              </td>
+
+                                                              <td className="px-4 py-3 text-muted-foreground">
+                                                                {
+                                                                  submission.class
+                                                                }
+                                                              </td>
+
+                                                              <td className="px-4 py-3">
+                                                                <a
+                                                                  href={
+                                                                    submission.link
+                                                                  }
+                                                                  target="_blank"
+                                                                  rel="noopener noreferrer"
+                                                                  className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                                                                >
+                                                                  Open Link
+                                                                  <ExternalLink className="size-3.5" />
+                                                                </a>
+                                                              </td>
+
+                                                              <td className="px-4 py-3">
+                                                                <div className="flex items-center justify-end gap-2">
+                                                                  <Input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    max="100"
+                                                                    step="1"
+                                                                    value={
+                                                                      currentGrade
+                                                                    }
+                                                                    onChange={(
+                                                                      e
+                                                                    ) =>
+                                                                      setGradeInputs(
+                                                                        (
+                                                                          previous
+                                                                        ) => ({
+                                                                          ...previous,
+                                                                          [submission.id!]:
+                                                                            e.target.value,
+                                                                        })
+                                                                      )
+                                                                    }
+                                                                    placeholder="—"
+                                                                    className="h-9 w-20 text-right"
+                                                                  />
+
+                                                                  <span className="text-muted-foreground">
+                                                                    /100
+                                                                  </span>
+
+                                                                  <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    onClick={() =>
+                                                                      handleSaveGrade(
+                                                                        submission
+                                                                      )
+                                                                    }
+                                                                    disabled={
+                                                                      savingGrades[
+                                                                        submission.id!
+                                                                      ]
+                                                                    }
+                                                                    className="gap-1.5"
+                                                                  >
+                                                                    {savingGrades[
+                                                                      submission.id!
+                                                                    ] ? (
+                                                                      <Loader2 className="size-3.5 animate-spin" />
+                                                                    ) : (
+                                                                      <Save className="size-3.5" />
+                                                                    )}
+
+                                                                    Save
+                                                                  </Button>
+                                                                </div>
+                                                              </td>
+                                                            </tr>
+                                                          );
+                                                        }
+                                                      )}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+
+                                        {/* TEACHER DELETE */}
+
+                                        {isTeacher &&
+                                          (
+                                            <div className="flex justify-end border-t border-border px-4 py-2">
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() =>
+                                                  handleDeleteAssignment(
+                                                    assignmentId,
+                                                    course.id!
+                                                  )
+                                                }
+                                                className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
+                                              >
+                                                <Trash2 className="size-3.5" />
+                                                Delete Assignment
+                                              </Button>
+                                            </div>
+                                          )}
+                                      </div>
+                                    );
+                                  }
                                 )}
                               </div>
                             )}
@@ -1337,17 +2540,17 @@ export default function ClassDetailsPage() {
       )}
 
       {/* =========================================================
-          ADD MATERIAL MODAL
+          ADD MATERIAL / ASSIGNMENT MODAL
           ========================================================= */}
 
-      {isMaterialModalOpen && (
+      {isAddModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
 
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-foreground">
-                  Add Material
+                  Add
                 </h3>
 
                 {selectedCourse && (
@@ -1365,10 +2568,10 @@ export default function ClassDetailsPage() {
               <button
                 type="button"
                 onClick={
-                  closeMaterialModal
+                  closeAddModal
                 }
                 disabled={
-                  creatingMaterial
+                  creatingItem
                 }
                 className="text-muted-foreground transition hover:text-foreground disabled:opacity-50"
               >
@@ -1378,67 +2581,167 @@ export default function ClassDetailsPage() {
 
             <form
               onSubmit={
-                handleCreateMaterial
+                handleCreateItem
               }
-              className="space-y-4"
+              className="space-y-5"
             >
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-muted-foreground">
-                  Material Name
-                </label>
 
-                <Input
-                  type="text"
-                  placeholder="e.g. Chapter 1 Notes"
-                  value={materialName}
-                  onChange={(e) =>
-                    setMaterialName(
-                      e.target.value
-                    )
-                  }
-                  required
-                  autoFocus
-                  disabled={
-                    creatingMaterial
-                  }
-                  className="h-11 bg-background"
-                />
-              </div>
+              {/* TYPE */}
 
               <div className="space-y-2">
                 <label className="block text-xs font-medium text-muted-foreground">
-                  Material Link
+                  Select type
                 </label>
 
-                <Input
-                  type="url"
-                  placeholder="https://example.com/material"
-                  value={materialLink}
+                <select
+                  value={addType}
                   onChange={(e) => {
-                    setMaterialLink(
-                      e.target.value
+                    setAddType(
+                      e.target.value as AddType
                     );
 
                     setLinkCheckError(
                       null
                     );
                   }}
-                  required
                   disabled={
-                    creatingMaterial
+                    creatingItem
                   }
-                  className="h-11 bg-background"
-                />
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="material">
+                    Material
+                  </option>
 
-                <p className="text-xs text-muted-foreground">
-                  Paste the URL students
-                  should use to access
-                  this material. The link
-                  will be automatically
-                  checked for
-                  inappropriate content.
-                </p>
+                  <option value="assignment">
+                    Assignment
+                  </option>
+                </select>
               </div>
+
+              {/* =====================================================
+                  MATERIAL FIELDS
+                  ===================================================== */}
+
+              {addType === 'material' && (
+                <>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-medium text-muted-foreground">
+                      Material Name
+                    </label>
+
+                    <Input
+                      type="text"
+                      placeholder="e.g. Chapter 1 Notes"
+                      value={materialName}
+                      onChange={(e) => {
+                        setMaterialName(
+                          e.target.value
+                        );
+
+                        setLinkCheckError(
+                          null
+                        );
+                      }}
+                      required
+                      autoFocus
+                      disabled={
+                        creatingItem
+                      }
+                      className="h-11 bg-background"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-medium text-muted-foreground">
+                      Material Link
+                    </label>
+
+                    <Input
+                      type="url"
+                      placeholder="https://example.com/material"
+                      value={materialLink}
+                      onChange={(e) => {
+                        setMaterialLink(
+                          e.target.value
+                        );
+
+                        setLinkCheckError(
+                          null
+                        );
+                      }}
+                      required
+                      disabled={
+                        creatingItem
+                      }
+                      className="h-11 bg-background"
+                    />
+
+                    <p className="text-xs text-muted-foreground">
+                      The link will be
+                      automatically checked
+                      before it is published.
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {/* =====================================================
+                  ASSIGNMENT FIELDS
+                  ===================================================== */}
+
+              {addType === 'assignment' && (
+                <>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-medium text-muted-foreground">
+                      Assignment Name
+                    </label>
+
+                    <Input
+                      type="text"
+                      placeholder="e.g. Create a science poster"
+                      value={assignmentName}
+                      onChange={(e) =>
+                        setAssignmentName(
+                          e.target.value
+                        )
+                      }
+                      required
+                      autoFocus
+                      disabled={
+                        creatingItem
+                      }
+                      className="h-11 bg-background"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-medium text-muted-foreground">
+                      Description
+                    </label>
+
+                    <textarea
+                      value={
+                        assignmentDescription
+                      }
+                      onChange={(e) =>
+                        setAssignmentDescription(
+                          e.target.value
+                        )
+                      }
+                      placeholder="Explain what students need to do..."
+                      required
+                      disabled={
+                        creatingItem
+                      }
+                      rows={5}
+                      className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* ERROR */}
 
               {linkCheckError && (
                 <div className="flex gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
@@ -1461,6 +2764,8 @@ export default function ClassDetailsPage() {
                 </div>
               )}
 
+              {/* CHECKING */}
+
               {checkingLink && (
                 <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
                   <Loader2 className="size-5 animate-spin text-primary" />
@@ -1479,7 +2784,10 @@ export default function ClassDetailsPage() {
                 </div>
               )}
 
-              {!checkingLink &&
+              {/* SAFETY */}
+
+              {addType === 'material' &&
+                !checkingLink &&
                 !linkCheckError && (
                   <div className="flex gap-3 rounded-lg border border-border bg-muted/30 p-3">
                     <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
@@ -1499,15 +2807,17 @@ export default function ClassDetailsPage() {
                   </div>
                 )}
 
+              {/* BUTTONS */}
+
               <div className="flex gap-3 pt-2">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={
-                    closeMaterialModal
+                    closeAddModal
                   }
                   disabled={
-                    creatingMaterial
+                    creatingItem
                   }
                   className="h-11 w-1/2"
                 >
@@ -1517,10 +2827,20 @@ export default function ClassDetailsPage() {
                 <Button
                   type="submit"
                   disabled={
-                    creatingMaterial ||
+                    creatingItem ||
                     checkingLink ||
-                    !materialName.trim() ||
-                    !materialLink.trim()
+                    (addType ===
+                      'material' &&
+                      (
+                        !materialName.trim() ||
+                        !materialLink.trim()
+                      )) ||
+                    (addType ===
+                      'assignment' &&
+                      (
+                        !assignmentName.trim() ||
+                        !assignmentDescription.trim()
+                      ))
                   }
                   className="h-11 w-1/2"
                 >
@@ -1529,10 +2849,15 @@ export default function ClassDetailsPage() {
                       <Loader2 className="mr-2 size-4 animate-spin" />
                       Checking...
                     </>
-                  ) : creatingMaterial ? (
+                  ) : creatingItem ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
-                    'Add Material'
+                    `Add ${
+                      addType ===
+                      'material'
+                        ? 'Material'
+                        : 'Assignment'
+                    }`
                   )}
                 </Button>
               </div>
@@ -1540,6 +2865,233 @@ export default function ClassDetailsPage() {
           </div>
         </div>
       )}
+
+      {/* =========================================================
+          STUDENT SUBMISSION MODAL
+          ========================================================= */}
+
+      {isSubmissionModalOpen &&
+        selectedAssignment && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
+
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">
+                    Submit Assignment
+                  </h3>
+
+                  <p className="mt-1 text-sm font-medium text-foreground">
+                    {
+                      selectedAssignment.name
+                    }
+                  </p>
+
+                  <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
+                    {
+                      selectedAssignment.description
+                    }
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={
+                    closeSubmissionModal
+                  }
+                  disabled={
+                    submittingAssignment
+                  }
+                  className="text-muted-foreground transition hover:text-foreground disabled:opacity-50"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form
+                onSubmit={
+                  handleSubmitAssignment
+                }
+                className="space-y-4"
+              >
+
+                {/* NICKNAME */}
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-muted-foreground">
+                    Nickname
+                  </label>
+
+                  <Input
+                    type="text"
+                    placeholder="e.g. Aidan"
+                    value={
+                      submissionNickname
+                    }
+                    onChange={(e) =>
+                      setSubmissionNickname(
+                        e.target.value
+                      )
+                    }
+                    required
+                    autoFocus
+                    disabled={
+                      submittingAssignment
+                    }
+                    className="h-11 bg-background"
+                  />
+                </div>
+
+                {/* CLASS */}
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-muted-foreground">
+                    Class
+                  </label>
+
+                  <Input
+                    type="text"
+                    placeholder="e.g. 8A"
+                    value={
+                      submissionClass
+                    }
+                    onChange={(e) =>
+                      setSubmissionClass(
+                        e.target.value
+                      )
+                    }
+                    required
+                    disabled={
+                      submittingAssignment
+                    }
+                    className="h-11 bg-background"
+                  />
+                </div>
+
+                {/* LINK */}
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-muted-foreground">
+                    Submission Link
+                  </label>
+
+                  <Input
+                    type="url"
+                    placeholder="https://drive.google.com/..."
+                    value={
+                      submissionLink
+                    }
+                    onChange={(e) => {
+                      setSubmissionLink(
+                        e.target.value
+                      );
+
+                      setLinkCheckError(
+                        null
+                      );
+                    }}
+                    required
+                    disabled={
+                      submittingAssignment
+                    }
+                    className="h-11 bg-background"
+                  />
+
+                  <p className="text-xs text-muted-foreground">
+                    Paste a link to your
+                    video, poster, document,
+                    or other work.
+                  </p>
+                </div>
+
+                {/* ERROR */}
+
+                {linkCheckError && (
+                  <div className="flex gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+                    <ShieldAlert className="mt-0.5 size-5 shrink-0 text-destructive" />
+
+                    <div>
+                      <p className="font-medium text-destructive">
+                        Link not allowed
+                      </p>
+
+                      <p className="mt-1 text-sm text-destructive/80">
+                        {linkCheckError}
+                      </p>
+
+                      <p className="mt-2 text-xs text-destructive/70">
+                        Your assignment was
+                        not submitted.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* CHECKING */}
+
+                {checkingLink && (
+                  <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                    <Loader2 className="size-5 animate-spin text-primary" />
+
+                    <div>
+                      <p className="font-medium text-foreground">
+                        Checking link...
+                      </p>
+
+                      <p className="text-xs text-muted-foreground">
+                        Checking the
+                        submission before
+                        sending it to your
+                        teacher.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* BUTTONS */}
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={
+                      closeSubmissionModal
+                    }
+                    disabled={
+                      submittingAssignment
+                    }
+                    className="h-11 w-1/2"
+                  >
+                    Cancel
+                  </Button>
+
+                  <Button
+                    type="submit"
+                    disabled={
+                      submittingAssignment ||
+                      checkingLink ||
+                      !submissionNickname.trim() ||
+                      !submissionClass.trim() ||
+                      !submissionLink.trim()
+                    }
+                    className="h-11 w-1/2"
+                  >
+                    {checkingLink ? (
+                      <>
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                        Checking...
+                      </>
+                    ) : submittingAssignment ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      'Submit Work'
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
     </div>
   );
 }
