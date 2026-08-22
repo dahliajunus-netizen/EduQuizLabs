@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Navbar } from '@/components/Navbar';
 import {
@@ -27,6 +27,13 @@ type StudentClass = {
   code: string;
   school: string;
   course_id?: string | null;
+};
+
+type TeacherClass = {
+  id: string;
+  class_name: string;
+  code: string;
+  school_name?: string | null;
 };
 
 type Assignment = {
@@ -65,20 +72,19 @@ export default function StudentDashboard() {
   const [codeError, setCodeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
-
   const [showGrades, setShowGrades] = useState(false);
 
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-  const headers = {
-    apikey: SUPABASE_KEY,
-    Authorization: `Bearer ${SUPABASE_KEY}`,
-  };
+  const headers = useMemo(
+    () => ({
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    }),
+    [SUPABASE_KEY]
+  );
 
-  /*
-   * Translations
-   */
   const t = {
     en: {
       dashboardTitle: 'Student Dashboard',
@@ -97,26 +103,29 @@ export default function StudentDashboard() {
       active: 'Active',
 
       assignmentsDue: 'Assignments Due',
-      noAssignments: 'No upcoming assignments.',
+      assignmentCount: 'assignments',
+      assignment: 'Assignment',
+      assignments: 'Assignments',
+
+      dueToday: 'Due today',
+      dueTomorrow: 'Due tomorrow',
+      dueIn: 'Due in',
+      days: 'days',
+      overdue: 'Overdue',
+      noDueDate: 'No due date',
 
       averageGrades: 'Average Grades',
       noGrades: 'No grades yet',
-
       gradeHistory: 'Grade History',
-      assignment: 'Assignment',
-      test: 'Test',
 
-      due: 'Due',
-      overdue: 'Overdue',
-      noDueDate: 'No due date',
+      test: 'Test',
+      close: 'Close',
 
       codeInvalid: 'Code is invalid',
       alreadyJoined: 'You have already joined this class.',
       networkError: 'Network error joining class.',
       failedToJoin: 'Failed to join:',
       unknownError: 'Unknown error',
-
-      close: 'Close',
     },
 
     id: {
@@ -135,134 +144,251 @@ export default function StudentDashboard() {
       school: 'Sekolah:',
       active: 'Aktif',
 
-      assignmentsDue: 'Tugas yang Akan Datang',
-      noAssignments: 'Tidak ada tugas yang akan datang.',
+      assignmentsDue: 'Tugas',
+      assignmentCount: 'tugas',
+      assignment: 'Tugas',
+      assignments: 'Tugas',
+
+      dueToday: 'Jatuh tempo hari ini',
+      dueTomorrow: 'Jatuh tempo besok',
+      dueIn: 'Jatuh tempo dalam',
+      days: 'hari',
+      overdue: 'Terlambat',
+      noDueDate: 'Tidak ada batas waktu',
 
       averageGrades: 'Nilai Rata-Rata',
       noGrades: 'Belum ada nilai',
-
       gradeHistory: 'Riwayat Nilai',
-      assignment: 'Tugas',
-      test: 'Ujian',
 
-      due: 'Batas',
-      overdue: 'Terlambat',
-      noDueDate: 'Tidak ada batas waktu',
+      test: 'Ujian',
+      close: 'Tutup',
 
       codeInvalid: 'Kode tidak valid',
       alreadyJoined: 'Anda sudah bergabung dengan kelas ini.',
       networkError: 'Terjadi kesalahan jaringan saat bergabung ke kelas.',
       failedToJoin: 'Gagal bergabung:',
       unknownError: 'Kesalahan tidak diketahui',
-
-      close: 'Tutup',
     },
   };
 
   const text = language === 'id' ? t.id : t.en;
 
   /*
-   * Fetch student's classes
+   * Fetch all dashboard data.
+   *
+   * Important:
+   * student_classes does NOT need course_id to already exist.
+   * We use the class code to find the matching teacher_classes row,
+   * then use teacher_classes.id as course_assignments.course_id.
    */
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setLoading(true);
 
-        /*
-         * 1. Fetch enrolled classes
-         */
-        const classesResponse = await fetch(
-          `${SUPABASE_URL}/rest/v1/student_classes?select=*`,
-          {
-            headers,
-          }
-        );
-
-        if (!classesResponse.ok) {
-          throw new Error('Failed to fetch student classes');
+      /*
+       * 1. Get student's enrolled classes
+       */
+      const classesResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/student_classes?select=*`,
+        {
+          headers,
+          cache: 'no-store',
         }
+      );
 
-        const classesData: StudentClass[] =
-          await classesResponse.json();
-
-        setMyClasses(classesData);
-
-        /*
-         * 2. Get course UUIDs
-         */
-        const courseIds = classesData
-          .map((item) => item.course_id)
-          .filter(
-            (id): id is string =>
-              typeof id === 'string' && id.length > 0
-          );
-
-        if (courseIds.length === 0) {
-          setAssignments([]);
-          setSubmissions([]);
-          return;
-        }
-
-        /*
-         * 3. Fetch assignments for those courses
-         */
-        const courseFilter = courseIds
-          .map((id) => `"${id}"`)
-          .join(',');
-
-        const assignmentsResponse = await fetch(
-          `${SUPABASE_URL}/rest/v1/course_assignments?course_id=in.(${courseFilter})&select=*`,
-          {
-            headers,
-          }
-        );
-
-        if (assignmentsResponse.ok) {
-          const assignmentsData: Assignment[] =
-            await assignmentsResponse.json();
-
-          setAssignments(assignmentsData);
-
-          /*
-           * 4. Fetch submissions for those assignments
-           */
-          if (assignmentsData.length > 0) {
-            const assignmentIds = assignmentsData
-              .map((assignment) => assignment.id)
-              .filter(Boolean);
-
-            const assignmentFilter = assignmentIds
-              .map((id) => `"${id}"`)
-              .join(',');
-
-            const submissionsResponse = await fetch(
-              `${SUPABASE_URL}/rest/v1/assignment_submissions?assignment_id=in.(${assignmentFilter})&select=*`,
-              {
-                headers,
-              }
-            );
-
-            if (submissionsResponse.ok) {
-              const submissionsData: Submission[] =
-                await submissionsResponse.json();
-
-              setSubmissions(submissionsData);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching student dashboard:', error);
-      } finally {
-        setLoading(false);
+      if (!classesResponse.ok) {
+        throw new Error('Failed to fetch student classes');
       }
-    }
 
-    fetchData();
-  }, []);
+      const classesData: StudentClass[] = await classesResponse.json();
+
+      setMyClasses(classesData);
+
+      if (classesData.length === 0) {
+        setAssignments([]);
+        setSubmissions([]);
+        return;
+      }
+
+      /*
+       * 2. Get the teacher class records using the class codes.
+       *
+       * This is what connects:
+       *
+       * student_classes.code
+       *        ↓
+       * teacher_classes.code
+       *        ↓
+       * teacher_classes.id
+       *        ↓
+       * course_assignments.course_id
+       */
+      const classCodes = classesData
+        .map((item) => item.code)
+        .filter(Boolean);
+
+      const codeFilter = classCodes
+        .map((code) => `"${String(code).replace(/"/g, '\\"')}"`)
+        .join(',');
+
+      const teacherClassesResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/teacher_classes?code=in.(${codeFilter})&select=id,class_name,code,school_name`,
+        {
+          headers,
+          cache: 'no-store',
+        }
+      );
+
+      if (!teacherClassesResponse.ok) {
+        throw new Error('Failed to fetch teacher classes');
+      }
+
+      const teacherClasses: TeacherClass[] =
+        await teacherClassesResponse.json();
+
+      /*
+       * 3. Build course UUID list.
+       */
+      const courseIds = teacherClasses
+        .map((item) => item.id)
+        .filter(Boolean);
+
+      /*
+       * Also use student_classes.course_id if it exists.
+       * This makes the system compatible with the new column.
+       */
+      classesData.forEach((studentClass) => {
+        if (
+          studentClass.course_id &&
+          !courseIds.includes(studentClass.course_id)
+        ) {
+          courseIds.push(studentClass.course_id);
+        }
+      });
+
+      if (courseIds.length === 0) {
+        setAssignments([]);
+        setSubmissions([]);
+        return;
+      }
+
+      /*
+       * 4. Fetch ALL assignments belonging to the student's courses.
+       */
+      const courseFilter = courseIds
+        .map((id) => `"${id}"`)
+        .join(',');
+
+      const assignmentsResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/course_assignments?course_id=in.(${courseFilter})&select=id,course_id,name,description,created_at,due_date&order=due_date.asc.nullslast`,
+        {
+          headers,
+          cache: 'no-store',
+        }
+      );
+
+      if (!assignmentsResponse.ok) {
+        const error = await assignmentsResponse.text();
+        console.error('Assignment fetch error:', error);
+
+        setAssignments([]);
+        setSubmissions([]);
+        return;
+      }
+
+      const assignmentsData: Assignment[] =
+        await assignmentsResponse.json();
+
+      setAssignments(assignmentsData);
+
+      /*
+       * 5. Fetch submissions for the assignments.
+       *
+       * We fetch every submission belonging to these assignments.
+       * The submission is then matched to the assignment by
+       * assignment_id.
+       */
+      if (assignmentsData.length === 0) {
+        setSubmissions([]);
+        return;
+      }
+
+      const assignmentIds = assignmentsData.map(
+        (assignment) => assignment.id
+      );
+
+      const assignmentFilter = assignmentIds
+        .map((id) => `"${id}"`)
+        .join(',');
+
+      const submissionsResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/assignment_submissions?assignment_id=in.(${assignmentFilter})&select=id,assignment_id,nickname,class,link,grade,created_at&order=created_at.desc`,
+        {
+          headers,
+          cache: 'no-store',
+        }
+      );
+
+      if (!submissionsResponse.ok) {
+        const error = await submissionsResponse.text();
+        console.error('Submission fetch error:', error);
+
+        setSubmissions([]);
+        return;
+      }
+
+      const submissionsData: Submission[] =
+        await submissionsResponse.json();
+
+      setSubmissions(submissionsData);
+    } catch (error) {
+      console.error('Error fetching student dashboard:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [SUPABASE_URL, headers]);
 
   /*
-   * Join a class
+   * Initial load
+   */
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  /*
+   * Refresh when the student returns to the dashboard.
+   *
+   * This makes a teacher's newly saved grade appear after
+   * navigating back / switching back to the tab.
+   */
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchDashboardData();
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchDashboardData();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibility
+    );
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibility
+      );
+    };
+  }, [fetchDashboardData]);
+
+  /*
+   * Join class
    */
   const handleJoinClass = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,7 +402,7 @@ export default function StudentDashboard() {
 
     try {
       /*
-       * 1. Find class by code
+       * Find teacher class.
        */
       const codeCheckResponse = await fetch(
         `${SUPABASE_URL}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(
@@ -284,6 +410,7 @@ export default function StudentDashboard() {
         )}&select=*`,
         {
           headers,
+          cache: 'no-store',
         }
       );
 
@@ -300,7 +427,7 @@ export default function StudentDashboard() {
       }
 
       /*
-       * 2. Check whether already joined
+       * Check duplicate enrollment.
        */
       const alreadyJoined = myClasses.some(
         (c) => c.code === foundClass.code
@@ -312,7 +439,9 @@ export default function StudentDashboard() {
       }
 
       /*
-       * 3. Save enrollment INCLUDING course UUID
+       * Save enrollment.
+       *
+       * course_id is included now.
        */
       const insertResponse = await fetch(
         `${SUPABASE_URL}/rest/v1/student_classes`,
@@ -346,41 +475,14 @@ export default function StudentDashboard() {
         return;
       }
 
-      const newEnrollment = await insertResponse.json();
-
-      setMyClasses((prev) => [...prev, newEnrollment[0]]);
       setClassCode('');
 
       /*
-       * Fetch assignments for the newly joined course
+       * Reload everything so assignments appear immediately.
        */
-      const newCourseId = foundClass.id;
-
-      const assignmentsResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/course_assignments?course_id=eq.${encodeURIComponent(
-          newCourseId
-        )}&select=*`,
-        {
-          headers,
-        }
-      );
-
-      if (assignmentsResponse.ok) {
-        const newAssignments: Assignment[] =
-          await assignmentsResponse.json();
-
-        setAssignments((prev) => [
-          ...prev,
-          ...newAssignments.filter(
-            (newAssignment) =>
-              !prev.some(
-                (existing) => existing.id === newAssignment.id
-              )
-          ),
-        ]);
-      }
-    } catch (err) {
-      console.error('Error joining class:', err);
+      await fetchDashboardData();
+    } catch (error) {
+      console.error('Error joining class:', error);
       setCodeError(text.networkError);
     } finally {
       setJoining(false);
@@ -388,25 +490,31 @@ export default function StudentDashboard() {
   };
 
   /*
-   * Find grades
-   *
-   * IMPORTANT:
-   * A submission belongs to an assignment through:
-   *
-   * assignment_submissions.assignment_id
-   *              ↓
-   * course_assignments.id
+   * Match every graded submission to its assignment.
    */
   const gradeHistory: GradeHistoryItem[] = assignments
     .map((assignment) => {
-      const submission = submissions.find(
-        (item) => item.assignment_id === assignment.id
-      );
+      /*
+       * Use the newest submission for the assignment.
+       */
+      const matchingSubmissions = submissions
+        .filter(
+          (submission) =>
+            submission.assignment_id === assignment.id
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() -
+            new Date(a.created_at).getTime()
+        );
+
+      const submission = matchingSubmissions[0];
 
       if (
         !submission ||
         submission.grade === null ||
-        submission.grade === undefined
+        submission.grade === undefined ||
+        Number.isNaN(Number(submission.grade))
       ) {
         return null;
       }
@@ -422,7 +530,7 @@ export default function StudentDashboard() {
     );
 
   /*
-   * Calculate average
+   * Average grade.
    */
   const averageGrade =
     gradeHistory.length > 0
@@ -437,39 +545,146 @@ export default function StudentDashboard() {
       : null;
 
   /*
-   * Upcoming assignments
+   * Get assignments belonging to a class.
    */
-  const now = new Date();
+  const getClassAssignments = (studentClass: StudentClass) => {
+    const matchingTeacherClass = teacherClassesForDisplay.find(
+      (teacherClass) =>
+        teacherClass.code === studentClass.code
+    );
 
-  const upcomingAssignments = assignments
-    .filter((assignment) => {
-      if (!assignment.due_date) return true;
+    const courseId =
+      studentClass.course_id ||
+      matchingTeacherClass?.id ||
+      null;
 
-      return new Date(assignment.due_date) >= now;
-    })
-    .sort((a, b) => {
-      if (!a.due_date) return 1;
-      if (!b.due_date) return -1;
-
-      return (
-        new Date(a.due_date).getTime() -
-        new Date(b.due_date).getTime()
-      );
-    });
-
-  /*
-   * Get assignments for a specific class
-   */
-  const getClassAssignments = (courseId?: string | null) => {
     if (!courseId) return [];
 
-    return upcomingAssignments.filter(
+    return assignments.filter(
       (assignment) => assignment.course_id === courseId
     );
   };
 
   /*
-   * Format due date
+   * We don't need to store this separately.
+   * Reconstruct the teacher class data from assignments/classes
+   * isn't enough, so fetch it directly for display matching.
+   */
+  const [teacherClassesForDisplay, setTeacherClassesForDisplay] =
+    useState<TeacherClass[]>([]);
+
+  /*
+   * Keep teacher class data available.
+   */
+  useEffect(() => {
+    async function fetchTeacherClassesForDisplay() {
+      if (myClasses.length === 0) {
+        setTeacherClassesForDisplay([]);
+        return;
+      }
+
+      try {
+        const classCodes = myClasses
+          .map((item) => item.code)
+          .filter(Boolean);
+
+        if (classCodes.length === 0) {
+          setTeacherClassesForDisplay([]);
+          return;
+        }
+
+        const codeFilter = classCodes
+          .map((code) => `"${String(code).replace(/"/g, '\\"')}"`)
+          .join(',');
+
+        const response = await fetch(
+          `${SUPABASE_URL}/rest/v1/teacher_classes?code=in.(${codeFilter})&select=id,class_name,code,school_name`,
+          {
+            headers,
+            cache: 'no-store',
+          }
+        );
+
+        if (response.ok) {
+          const data: TeacherClass[] = await response.json();
+          setTeacherClassesForDisplay(data);
+        }
+      } catch (error) {
+        console.error(
+          'Error fetching teacher class information:',
+          error
+        );
+      }
+    }
+
+    fetchTeacherClassesForDisplay();
+  }, [myClasses, SUPABASE_URL, headers]);
+
+  /*
+   * Assignment status.
+   */
+  const getDueStatus = (dueDate?: string | null) => {
+    if (!dueDate) {
+      return {
+        label: text.noDueDate,
+        className: 'text-muted-foreground',
+      };
+    }
+
+    const due = new Date(dueDate);
+    const now = new Date();
+
+    /*
+     * Compare calendar days instead of raw hours.
+     */
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+
+    const startOfDueDay = new Date(
+      due.getFullYear(),
+      due.getMonth(),
+      due.getDate()
+    );
+
+    const difference =
+      Math.round(
+        (startOfDueDay.getTime() -
+          startOfToday.getTime()) /
+          (1000 * 60 * 60 * 24)
+      );
+
+    if (difference < 0) {
+      return {
+        label: text.overdue,
+        className: 'text-red-500',
+      };
+    }
+
+    if (difference === 0) {
+      return {
+        label: text.dueToday,
+        className: 'text-orange-500',
+      };
+    }
+
+    if (difference === 1) {
+      return {
+        label: text.dueTomorrow,
+        className: 'text-yellow-500',
+      };
+    }
+
+    return {
+      label: `${text.dueIn} ${difference} ${text.days}`,
+      className: 'text-primary',
+    };
+  };
+
+  /*
+   * Format exact due date.
    */
   const formatDueDate = (date?: string | null) => {
     if (!date) return text.noDueDate;
@@ -483,6 +698,21 @@ export default function StudentDashboard() {
       }
     );
   };
+
+  /*
+   * ALL assignments.
+   *
+   * Nothing is hidden because it is overdue.
+   */
+  const sortedAssignments = [...assignments].sort((a, b) => {
+    if (!a.due_date) return 1;
+    if (!b.due_date) return -1;
+
+    return (
+      new Date(a.due_date).getTime() -
+      new Date(b.due_date).getTime()
+    );
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -605,7 +835,6 @@ export default function StudentDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
           <Card className="lg:col-span-2 bg-card">
-
             <CardHeader>
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
                 <BookOpen className="h-5 w-5 text-primary" />
@@ -614,7 +843,6 @@ export default function StudentDashboard() {
             </CardHeader>
 
             <CardContent>
-
               <div className="space-y-3">
 
                 {loading ? (
@@ -628,17 +856,17 @@ export default function StudentDashboard() {
                 ) : (
                   myClasses.map((item, index) => {
                     const classAssignments =
-                      getClassAssignments(item.course_id);
+                      getClassAssignments(item);
 
                     return (
                       <Link
                         key={item.id || index}
                         href={`/dashboard/student/classes/${item.code}`}
                       >
-                        <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition cursor-pointer mb-2">
+                        <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition cursor-pointer mb-2">
 
                           <div className="min-w-0">
-                            <h4 className="font-medium text-foreground">
+                            <h4 className="font-medium text-foreground truncate">
                               {item.class_name}
                             </h4>
 
@@ -649,13 +877,13 @@ export default function StudentDashboard() {
 
                           <div className="flex items-center gap-3 shrink-0">
 
-                            {/* Assignments Due */}
+                            {/* Assignment count */}
                             <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                               <CalendarDays className="h-4 w-4 text-primary" />
 
                               <span>
                                 {classAssignments.length}{' '}
-                                {text.assignmentsDue}
+                                {text.assignmentCount}
                               </span>
                             </div>
 
@@ -664,7 +892,6 @@ export default function StudentDashboard() {
                             </span>
 
                           </div>
-
                         </div>
                       </Link>
                     );
@@ -672,13 +899,12 @@ export default function StudentDashboard() {
                 )}
 
               </div>
-
             </CardContent>
           </Card>
 
         </div>
 
-        {/* Assignment Due Section */}
+        {/* Assignments */}
         {myClasses.length > 0 && (
           <Card className="bg-card">
             <CardHeader>
@@ -690,23 +916,40 @@ export default function StudentDashboard() {
 
             <CardContent>
 
-              {upcomingAssignments.length === 0 ? (
+              {loading ? (
+                <div className="flex justify-center py-6">
+                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : sortedAssignments.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  {text.noAssignments}
+                  No assignments found.
                 </p>
               ) : (
                 <div className="space-y-3">
 
-                  {upcomingAssignments.map((assignment) => {
-                    const parentClass = myClasses.find(
-                      (item) =>
-                        item.course_id === assignment.course_id
+                  {sortedAssignments.map((assignment) => {
+                    const dueStatus = getDueStatus(
+                      assignment.due_date
                     );
+
+                    const parentClass =
+                      myClasses.find((studentClass) => {
+                        const teacherClass =
+                          teacherClassesForDisplay.find(
+                            (teacher) =>
+                              teacher.code === studentClass.code
+                          );
+
+                        return (
+                          teacherClass?.id ===
+                          assignment.course_id
+                        );
+                      });
 
                     return (
                       <div
                         key={assignment.id}
-                        className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20"
+                        className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20"
                       >
 
                         <div className="min-w-0">
@@ -722,15 +965,19 @@ export default function StudentDashboard() {
                         </div>
 
                         <div className="text-right shrink-0">
-                          <p className="text-xs text-muted-foreground">
-                            {text.due}
+
+                          <p
+                            className={`text-sm font-semibold ${dueStatus.className}`}
+                          >
+                            {dueStatus.label}
                           </p>
 
-                          <p className="text-sm font-semibold text-foreground">
+                          <p className="text-xs text-muted-foreground mt-1">
                             {formatDueDate(
                               assignment.due_date
                             )}
                           </p>
+
                         </div>
 
                       </div>
@@ -753,11 +1000,11 @@ export default function StudentDashboard() {
           onClick={() => setShowGrades(false)}
         >
           <div
-            className="w-full max-w-lg bg-card border border-border rounded-xl shadow-xl"
+            className="w-full max-w-lg max-h-[80vh] overflow-hidden bg-card border border-border rounded-xl shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
 
-            {/* Modal Header */}
+            {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-border">
 
               <div>
@@ -785,8 +1032,8 @@ export default function StudentDashboard() {
 
             </div>
 
-            {/* Grade List */}
-            <div className="p-5">
+            {/* Grades */}
+            <div className="p-5 overflow-y-auto max-h-[55vh]">
 
               {gradeHistory.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">
@@ -801,8 +1048,8 @@ export default function StudentDashboard() {
                       className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20"
                     >
 
-                      <div>
-                        <p className="font-medium text-foreground">
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground truncate">
                           {item.name}
                         </p>
 
@@ -813,7 +1060,7 @@ export default function StudentDashboard() {
                         </p>
                       </div>
 
-                      <p className="text-lg font-bold text-primary">
+                      <p className="text-lg font-bold text-primary ml-4">
                         {item.grade}
                       </p>
 
@@ -825,8 +1072,8 @@ export default function StudentDashboard() {
 
             </div>
 
-            {/* Close */}
-            <div className="flex justify-end p-5 pt-0">
+            {/* Footer */}
+            <div className="flex justify-end p-5 border-t border-border">
               <Button
                 variant="outline"
                 onClick={() => setShowGrades(false)}
