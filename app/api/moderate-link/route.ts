@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { GoogleGenAI } from '@google/genai';
 
 export async function POST(request: Request) {
   try {
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Only permit normal web URLs.
+    // Only allow normal web links
     if (
       url.protocol !== 'http:' &&
       url.protocol !== 'https:'
@@ -57,15 +58,15 @@ export async function POST(request: Request) {
     }
 
     // ------------------------------------------------------------
-    // Get OpenAI API key
+    // Gemini API key
     // ------------------------------------------------------------
 
     const apiKey =
-      process.env.OPENAI_API_KEY;
+      process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       console.error(
-        '[moderate-link] OPENAI_API_KEY is missing'
+        '[moderate-link] GEMINI_API_KEY is missing.'
       );
 
       return NextResponse.json(
@@ -79,93 +80,124 @@ export async function POST(request: Request) {
     }
 
     // ------------------------------------------------------------
-    // Ask OpenAI Moderation API
+    // Create Gemini client
     // ------------------------------------------------------------
 
-    const moderationResponse =
-      await fetch(
-        'https://api.openai.com/v1/moderations',
-        {
-          method: 'POST',
+    const ai = new GoogleGenAI({
+      apiKey,
+    });
 
-          headers: {
-            'Content-Type':
-              'application/json',
-            Authorization:
-              `Bearer ${apiKey}`,
-          },
+    // ------------------------------------------------------------
+    // Ask Gemini to classify the URL
+    // ------------------------------------------------------------
 
-          body: JSON.stringify({
-            model:
-              'omni-moderation-latest',
+    const prompt = `
+You are a safety checker for an educational platform used by
+middle-school and high-school students.
 
-            input:
-              `This URL is being submitted as educational material for a school classroom.
-
-Assess the URL string for signs that it represents inappropriate, adult, or sexually explicit material.
+Evaluate this URL as a proposed classroom learning resource.
 
 URL:
 ${url.href}
 
-Educational resources such as school websites, documentation, articles, videos, reference pages, and learning platforms should be allowed.`,
-          }),
+Your job is to determine whether the URL appears to point to
+inappropriate material.
 
-          // Don't let a hanging OpenAI request
-          // keep the Vercel function running forever.
-          signal: AbortSignal.timeout(15000),
-        }
-      );
+Reject URLs that clearly indicate:
+- sexually explicit or adult material
+- sexual services
+- pornography
+- content intended primarily for sexual purposes
+
+Normal educational and general-purpose websites should be allowed,
+including:
+- school websites
+- universities
+- Wikipedia
+- documentation
+- educational articles
+- news websites
+- YouTube
+- Google Drive
+- Microsoft resources
+- coding websites
+- science resources
+- mathematics resources
+- reference websites
+
+IMPORTANT:
+Judge the URL/domain itself. Do not assume that an unfamiliar
+website is unsafe merely because you do not recognize it.
+
+Return ONLY valid JSON in exactly this format:
+
+{
+  "safe": true,
+  "reason": "Short explanation"
+}
+
+or
+
+{
+  "safe": false,
+  "reason": "Short explanation"
+}
+`;
+
+    const response =
+      await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+
+        contents: prompt,
+
+        config: {
+          temperature: 0,
+          maxOutputTokens: 150,
+
+          responseMimeType:
+            'application/json',
+
+          safetySettings: [
+            {
+              category:
+                'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+              threshold:
+                'BLOCK_LOW_AND_ABOVE',
+            },
+            {
+              category:
+                'HARM_CATEGORY_HATE_SPEECH',
+              threshold:
+                'BLOCK_MEDIUM_AND_ABOVE',
+            },
+            {
+              category:
+                'HARM_CATEGORY_HARASSMENT',
+              threshold:
+                'BLOCK_MEDIUM_AND_ABOVE',
+            },
+            {
+              category:
+                'HARM_CATEGORY_DANGEROUS_CONTENT',
+              threshold:
+                'BLOCK_MEDIUM_AND_ABOVE',
+            },
+          ],
+        },
+      });
 
     // ------------------------------------------------------------
-    // Handle OpenAI errors
+    // Read Gemini response
     // ------------------------------------------------------------
 
-    if (!moderationResponse.ok) {
-      const errorText =
-        await moderationResponse.text();
+    const text =
+      response.text?.trim();
 
+    if (!text) {
       console.error(
-        '[moderate-link] OpenAI API error:',
-        {
-          status:
-            moderationResponse.status,
-          statusText:
-            moderationResponse.statusText,
-          body: errorText,
-        }
+        '[moderate-link] Gemini returned no text.'
       );
 
-      // Rate limit / quota problem
-      if (
-        moderationResponse.status ===
-          429
-      ) {
-        return NextResponse.json(
-          {
-            safe: false,
-            reason:
-              'The link safety checker is temporarily unavailable because the API rate limit was reached. Please try again later.',
-          },
-          { status: 503 }
-        );
-      }
-
-      // Authentication problem
-      if (
-        moderationResponse.status ===
-          401
-      ) {
-        return NextResponse.json(
-          {
-            safe: false,
-            reason:
-              'The link safety checker is not configured correctly.',
-          },
-          { status: 500 }
-        );
-      }
-
-      // Other OpenAI error
       return NextResponse.json(
         {
           safe: false,
@@ -177,36 +209,21 @@ Educational resources such as school websites, documentation, articles, videos, 
     }
 
     // ------------------------------------------------------------
-    // Parse moderation response
+    // Parse JSON
     // ------------------------------------------------------------
 
-    let moderationData: any;
+    let result: {
+      safe?: boolean;
+      reason?: string;
+    };
 
     try {
-      moderationData =
-        await moderationResponse.json();
-    } catch {
+      result = JSON.parse(text);
+    } catch (error) {
       console.error(
-        '[moderate-link] Could not parse OpenAI response.'
-      );
-
-      return NextResponse.json(
-        {
-          safe: false,
-          reason:
-            'The link could not be checked right now. Please try again.',
-        },
-        { status: 503 }
-      );
-    }
-
-    const result =
-      moderationData?.results?.[0];
-
-    if (!result) {
-      console.error(
-        '[moderate-link] No moderation result:',
-        moderationData
+        '[moderate-link] Invalid Gemini JSON:',
+        text,
+        error
       );
 
       return NextResponse.json(
@@ -220,70 +237,55 @@ Educational resources such as school websites, documentation, articles, videos, 
     }
 
     // ------------------------------------------------------------
-    // Check moderation categories
+    // Validate Gemini result
     // ------------------------------------------------------------
 
-    const categories =
-      result.categories || {};
-
-    const isSexual =
-      categories.sexual === true;
-
-    const isSexualMinors =
-      categories['sexual/minors'] === true;
-
-    // Reject sexual/adult content.
-    if (
-      isSexual ||
-      isSexualMinors
-    ) {
-      console.log(
-        '[moderate-link] Link rejected by moderation.'
+    if (typeof result.safe !== 'boolean') {
+      console.error(
+        '[moderate-link] Gemini returned invalid result:',
+        result
       );
 
+      return NextResponse.json(
+        {
+          safe: false,
+          reason:
+            'The link could not be checked right now. Please try again.',
+        },
+        { status: 503 }
+      );
+    }
+
+    // ------------------------------------------------------------
+    // Unsafe
+    // ------------------------------------------------------------
+
+    if (!result.safe) {
       return NextResponse.json({
         safe: false,
+
         reason:
+          result.reason ||
           'This link appears to contain inappropriate content and cannot be added as classroom material.',
       });
     }
 
     // ------------------------------------------------------------
-    // Link passed moderation
+    // Safe
     // ------------------------------------------------------------
-
-    console.log(
-      '[moderate-link] Link passed moderation.'
-    );
 
     return NextResponse.json({
       safe: true,
+
       reason:
+        result.reason ||
         'Link passed the safety check.',
     });
   } catch (error) {
-    // ------------------------------------------------------------
-    // Unexpected error
-    // ------------------------------------------------------------
-
     console.error(
-      '[moderate-link] Unexpected error:',
+      '[moderate-link] Gemini error:',
       error
     );
-
-    if (
-      error instanceof Error &&
-      error.name === 'TimeoutError'
-    ) {
-      return NextResponse.json(
-        {
-          safe: false,
-          reason:
-            'The link safety check timed out. Please try again.',
-        },
-        { status: 504 }
-      );
-    }
 
     return NextResponse.json(
       {
