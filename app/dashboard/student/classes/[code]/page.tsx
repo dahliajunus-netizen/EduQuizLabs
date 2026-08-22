@@ -120,6 +120,16 @@ export default function ClassDetailsPage() {
     useState(false);
 
   // ------------------------------------------------------------
+  // STUDENT ACCOUNT INFO
+  // ------------------------------------------------------------
+
+  const [studentFullName, setStudentFullName] =
+    useState('');
+
+  const [studentClass, setStudentClass] =
+    useState('');
+
+  // ------------------------------------------------------------
   // COURSE MODAL
   // ------------------------------------------------------------
 
@@ -213,6 +223,74 @@ export default function ClassDetailsPage() {
 
   const [savingGrades, setSavingGrades] =
     useState<Record<string, boolean>>({});
+
+  // ============================================================
+  // GET STUDENT ACCOUNT INFORMATION
+  // ============================================================
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const currentUserRaw =
+        localStorage.getItem('current_user');
+
+      if (!currentUserRaw) return;
+
+      const currentUser =
+        JSON.parse(currentUserRaw);
+
+      const user =
+        currentUser?.user || currentUser;
+
+      /*
+       * Try the most likely full-name fields.
+       * This keeps the page compatible with the
+       * existing account structure.
+       */
+      const fullName =
+        user?.fullName ||
+        user?.full_name ||
+        user?.name ||
+        user?.user_metadata?.fullName ||
+        user?.user_metadata?.full_name ||
+        user?.user_metadata?.name ||
+        '';
+
+      /*
+       * Try the most likely class fields.
+       *
+       * IMPORTANT:
+       * We want the actual class code such as 8A,
+       * 8F, etc., NOT the teacher's class name.
+       */
+      const classCode =
+        user?.class_code ||
+        user?.classCode ||
+        user?.student_class ||
+        user?.studentClass ||
+        user?.class ||
+        user?.user_metadata?.class_code ||
+        user?.user_metadata?.classCode ||
+        user?.user_metadata?.student_class ||
+        user?.user_metadata?.studentClass ||
+        user?.user_metadata?.class ||
+        '';
+
+      setStudentFullName(
+        String(fullName).trim()
+      );
+
+      setStudentClass(
+        String(classCode).trim()
+      );
+    } catch (err) {
+      console.error(
+        'Could not load student account information:',
+        err
+      );
+    }
+  }, []);
 
   // ============================================================
   // COPY JOIN CODE
@@ -1297,10 +1375,18 @@ export default function ClassDetailsPage() {
       assignment
     );
 
-    setSubmissionNickname('');
-    setSubmissionClass(
-      classData?.class_name || ''
+    /*
+     * These are locked to the account.
+     * Students cannot change them in the UI.
+     */
+    setSubmissionNickname(
+      studentFullName
     );
+
+    setSubmissionClass(
+      studentClass
+    );
+
     setSubmissionLink('');
 
     setLinkCheckError(null);
@@ -1342,11 +1428,22 @@ export default function ClassDetailsPage() {
       return;
     }
 
+    /*
+     * Do not allow the submission to proceed without
+     * account information.
+     */
     if (
-      !submissionNickname.trim() ||
-      !submissionClass.trim() ||
-      !submissionLink.trim()
+      !studentFullName.trim() ||
+      !studentClass.trim()
     ) {
+      alert(
+        'Your account name or class could not be loaded. Please sign in again.'
+      );
+
+      return;
+    }
+
+    if (!submissionLink.trim()) {
       return;
     }
 
@@ -1426,11 +1523,16 @@ export default function ClassDetailsPage() {
             assignment_id:
               selectedAssignment.id,
 
+            /*
+             * IMPORTANT:
+             * Use the account values, not user-editable
+             * form values.
+             */
             nickname:
-              submissionNickname.trim(),
+              studentFullName.trim(),
 
             class:
-              submissionClass.trim(),
+              studentClass.trim(),
 
             link:
               cleanLink,
@@ -1491,6 +1593,44 @@ export default function ClassDetailsPage() {
     } finally {
       setSubmittingAssignment(false);
     }
+  };
+
+  // ============================================================
+  // SORT SUBMISSIONS BY CLASS
+  // ============================================================
+
+  const sortSubmissionsByClass = (
+    items: Submission[]
+  ) => {
+    return [...items].sort((a, b) => {
+      const classCompare =
+        a.class.trim().localeCompare(
+          b.class.trim(),
+          undefined,
+          {
+            numeric: true,
+            sensitivity: 'base',
+          }
+        );
+
+      if (classCompare !== 0) {
+        return classCompare;
+      }
+
+      /*
+       * If two students are in the same class,
+       * sort alphabetically by name.
+       */
+      return a.nickname
+        .trim()
+        .localeCompare(
+          b.nickname.trim(),
+          undefined,
+          {
+            sensitivity: 'base',
+          }
+        );
+    });
   };
 
   // ============================================================
@@ -1577,10 +1717,24 @@ export default function ClassDetailsPage() {
         ''
       ).toString();
 
+    /*
+     * Strictly validate the grade.
+     */
+    if (
+      rawGrade.trim() === ''
+    ) {
+      alert(
+        'Please enter a grade between 0 and 100.'
+      );
+
+      return;
+    }
+
     const grade =
       Number(rawGrade);
 
     if (
+      !Number.isFinite(grade) ||
       !Number.isInteger(grade) ||
       grade < 0 ||
       grade > 100
@@ -1966,23 +2120,46 @@ export default function ClassDetailsPage() {
                           </CardTitle>
                         </div>
 
-                        {isTeacher &&
-                          course.id && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleDeleteCourse(
-                                  course.id!
-                                )
-                              }
-                              className="size-8 shrink-0 p-0 text-muted-foreground hover:text-destructive"
-                              aria-label="Delete course"
-                            >
-                              <Trash2 size={15} />
-                            </Button>
-                          )}
+                        {/* ONE ADD BUTTON + DELETE */}
+
+                        <div className="flex shrink-0 items-center gap-1">
+                          {isTeacher &&
+                            course.id && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() =>
+                                  openAddModal(
+                                    course
+                                  )
+                                }
+                                className="gap-2"
+                              >
+                                <PlusCircle
+                                  size={15}
+                                />
+                                Add
+                              </Button>
+                            )}
+
+                          {isTeacher &&
+                            course.id && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleDeleteCourse(
+                                    course.id!
+                                  )
+                                }
+                                className="size-8 shrink-0 p-0 text-muted-foreground hover:text-destructive"
+                                aria-label="Delete course"
+                              >
+                                <Trash2 size={15} />
+                              </Button>
+                            )}
+                        </div>
                       </CardHeader>
 
                       {/* COURSE CONTENT */}
@@ -1995,38 +2172,15 @@ export default function ClassDetailsPage() {
                               ================================================= */}
 
                           <div className="space-y-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <h3 className="font-semibold text-foreground">
-                                  Materials
-                                </h3>
+                            <div>
+                              <h3 className="font-semibold text-foreground">
+                                Materials
+                              </h3>
 
-                                <p className="text-xs text-muted-foreground">
-                                  Learning resources
-                                  for this course.
-                                </p>
-                              </div>
-
-                              {isTeacher &&
-                                course.id && (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() =>
-                                      openAddModal(
-                                        course
-                                      )
-                                    }
-                                    className="gap-2"
-                                  >
-                                    <PlusCircle
-                                      size={
-                                        15
-                                      }
-                                    />
-                                    Add
-                                  </Button>
-                                )}
+                              <p className="text-xs text-muted-foreground">
+                                Learning resources
+                                for this course.
+                              </p>
                             </div>
 
                             {courseMaterials.length ===
@@ -2034,7 +2188,7 @@ export default function ClassDetailsPage() {
                               <div className="rounded-lg border border-dashed border-border p-5">
                                 <p className="text-sm text-muted-foreground">
                                   {isTeacher
-                                    ? 'No materials have been added yet. Click "Add" to add one.'
+                                    ? 'No materials have been added yet. Click "Add" above to add one.'
                                     : 'No materials have been added to this course yet.'}
                                 </p>
                               </div>
@@ -2111,39 +2265,16 @@ export default function ClassDetailsPage() {
                               ================================================= */}
 
                           <div className="space-y-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <h3 className="font-semibold text-foreground">
-                                  Assignments
-                                </h3>
+                            <div>
+                              <h3 className="font-semibold text-foreground">
+                                Assignments
+                              </h3>
 
-                                <p className="text-xs text-muted-foreground">
-                                  {isTeacher
-                                    ? 'Click an assignment to view submissions and grades.'
-                                    : 'Click an assignment to submit your work.'}
-                                </p>
-                              </div>
-
-                              {isTeacher &&
-                                course.id && (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() =>
-                                      openAddModal(
-                                        course
-                                      )
-                                    }
-                                    className="gap-2"
-                                  >
-                                    <PlusCircle
-                                      size={
-                                        15
-                                      }
-                                    />
-                                    Add
-                                  </Button>
-                                )}
+                              <p className="text-xs text-muted-foreground">
+                                {isTeacher
+                                  ? 'Click an assignment to view submissions and grades.'
+                                  : 'Click an assignment to submit your work.'}
+                              </p>
                             </div>
 
                             {courseAssignments.length ===
@@ -2151,7 +2282,7 @@ export default function ClassDetailsPage() {
                               <div className="rounded-lg border border-dashed border-border p-5">
                                 <p className="text-sm text-muted-foreground">
                                   {isTeacher
-                                    ? 'No assignments have been created yet. Click "Add" and choose Assignment.'
+                                    ? 'No assignments have been created yet. Click "Add" above and choose Assignment.'
                                     : 'No assignments have been created for this course yet.'}
                                 </p>
                               </div>
@@ -2173,6 +2304,17 @@ export default function ClassDetailsPage() {
                                       submissions[
                                         assignmentId
                                       ] || [];
+
+                                    /*
+                                     * ALWAYS sort teacher submissions
+                                     * by class first.
+                                     */
+                                    const sortedSubmissions =
+                                      isTeacher
+                                        ? sortSubmissionsByClass(
+                                            assignmentSubmissions
+                                          )
+                                        : assignmentSubmissions;
 
                                     return (
                                       <div
@@ -2252,7 +2394,7 @@ export default function ClassDetailsPage() {
                                         {isTeacher &&
                                           isAssignmentOpen && (
                                             <div className="border-t border-border p-4">
-                                              {assignmentSubmissions.length ===
+                                              {sortedSubmissions.length ===
                                               0 ? (
                                                 <div className="rounded-lg border border-dashed border-border p-5 text-center">
                                                   <ClipboardList className="mx-auto mb-2 size-7 text-muted-foreground" />
@@ -2267,7 +2409,7 @@ export default function ClassDetailsPage() {
                                                     <thead>
                                                       <tr className="border-b border-border bg-muted/40">
                                                         <th className="px-4 py-3 text-left font-semibold text-foreground">
-                                                          Nickname
+                                                          Name
                                                         </th>
 
                                                         <th className="px-4 py-3 text-left font-semibold text-foreground">
@@ -2285,7 +2427,7 @@ export default function ClassDetailsPage() {
                                                     </thead>
 
                                                     <tbody>
-                                                      {assignmentSubmissions.map(
+                                                      {sortedSubmissions.map(
                                                         (
                                                           submission
                                                         ) => {
@@ -2311,7 +2453,7 @@ export default function ClassDetailsPage() {
                                                                 }
                                                               </td>
 
-                                                              <td className="px-4 py-3 text-muted-foreground">
+                                                              <td className="px-4 py-3 font-medium text-muted-foreground">
                                                                 {
                                                                   submission.class
                                                                 }
@@ -2343,17 +2485,104 @@ export default function ClassDetailsPage() {
                                                                     }
                                                                     onChange={(
                                                                       e
-                                                                    ) =>
+                                                                    ) => {
+                                                                      const value =
+                                                                        e.target.value;
+
+                                                                      /*
+                                                                       * Prevent values above 100
+                                                                       * from being entered into
+                                                                       * the state.
+                                                                       */
+                                                                      if (
+                                                                        value ===
+                                                                        ''
+                                                                      ) {
+                                                                        setGradeInputs(
+                                                                          (
+                                                                            previous
+                                                                          ) => ({
+                                                                            ...previous,
+                                                                            [submission.id!]:
+                                                                              '',
+                                                                          })
+                                                                        );
+
+                                                                        return;
+                                                                      }
+
+                                                                      const numericValue =
+                                                                        Number(
+                                                                          value
+                                                                        );
+
+                                                                      if (
+                                                                        numericValue >
+                                                                        100
+                                                                      ) {
+                                                                        setGradeInputs(
+                                                                          (
+                                                                            previous
+                                                                          ) => ({
+                                                                            ...previous,
+                                                                            [submission.id!]:
+                                                                              '100',
+                                                                          })
+                                                                        );
+
+                                                                        return;
+                                                                      }
+
+                                                                      if (
+                                                                        numericValue <
+                                                                        0
+                                                                      ) {
+                                                                        setGradeInputs(
+                                                                          (
+                                                                            previous
+                                                                          ) => ({
+                                                                            ...previous,
+                                                                            [submission.id!]:
+                                                                              '0',
+                                                                          })
+                                                                        );
+
+                                                                        return;
+                                                                      }
+
                                                                       setGradeInputs(
                                                                         (
                                                                           previous
                                                                         ) => ({
                                                                           ...previous,
                                                                           [submission.id!]:
-                                                                            e.target.value,
+                                                                            value,
                                                                         })
-                                                                      )
-                                                                    }
+                                                                      );
+                                                                    }}
+                                                                    onKeyDown={(
+                                                                      e
+                                                                    ) => {
+                                                                      /*
+                                                                       * Block common ways of
+                                                                       * entering values above
+                                                                       * 100, while the save
+                                                                       * validation below remains
+                                                                       * the final protection.
+                                                                       */
+                                                                      if (
+                                                                        e.key ===
+                                                                          'e' ||
+                                                                        e.key ===
+                                                                          'E' ||
+                                                                        e.key ===
+                                                                          '+' ||
+                                                                        e.key ===
+                                                                          '-'
+                                                                      ) {
+                                                                        e.preventDefault();
+                                                                      }
+                                                                    }}
                                                                     placeholder="—"
                                                                     className="h-9 w-20 text-right"
                                                                   />
@@ -2619,9 +2848,7 @@ export default function ClassDetailsPage() {
                 </select>
               </div>
 
-              {/* =====================================================
-                  MATERIAL FIELDS
-                  ===================================================== */}
+              {/* MATERIAL */}
 
               {addType === 'material' && (
                 <>
@@ -2686,9 +2913,7 @@ export default function ClassDetailsPage() {
                 </>
               )}
 
-              {/* =====================================================
-                  ASSIGNMENT FIELDS
-                  ===================================================== */}
+              {/* ASSIGNMENT */}
 
               {addType === 'assignment' && (
                 <>
@@ -2915,34 +3140,30 @@ export default function ClassDetailsPage() {
                 className="space-y-4"
               >
 
-                {/* NICKNAME */}
+                {/* LOCKED NAME */}
 
                 <div className="space-y-2">
                   <label className="block text-xs font-medium text-muted-foreground">
-                    Nickname
+                    Name
                   </label>
 
                   <Input
                     type="text"
-                    placeholder="e.g. Aidan"
                     value={
                       submissionNickname
                     }
-                    onChange={(e) =>
-                      setSubmissionNickname(
-                        e.target.value
-                      )
-                    }
-                    required
-                    autoFocus
-                    disabled={
-                      submittingAssignment
-                    }
-                    className="h-11 bg-background"
+                    readOnly
+                    disabled
+                    className="h-11 bg-muted"
                   />
+
+                  <p className="text-xs text-muted-foreground">
+                    This is taken from your
+                    account and cannot be changed.
+                  </p>
                 </div>
 
-                {/* CLASS */}
+                {/* LOCKED CLASS */}
 
                 <div className="space-y-2">
                   <label className="block text-xs font-medium text-muted-foreground">
@@ -2951,21 +3172,18 @@ export default function ClassDetailsPage() {
 
                   <Input
                     type="text"
-                    placeholder="e.g. 8A"
                     value={
                       submissionClass
                     }
-                    onChange={(e) =>
-                      setSubmissionClass(
-                        e.target.value
-                      )
-                    }
-                    required
-                    disabled={
-                      submittingAssignment
-                    }
-                    className="h-11 bg-background"
+                    readOnly
+                    disabled
+                    className="h-11 bg-muted"
                   />
+
+                  <p className="text-xs text-muted-foreground">
+                    Your class is taken from
+                    your account.
+                  </p>
                 </div>
 
                 {/* LINK */}
@@ -2991,6 +3209,7 @@ export default function ClassDetailsPage() {
                       );
                     }}
                     required
+                    autoFocus
                     disabled={
                       submittingAssignment
                     }
@@ -3070,8 +3289,8 @@ export default function ClassDetailsPage() {
                     disabled={
                       submittingAssignment ||
                       checkingLink ||
-                      !submissionNickname.trim() ||
-                      !submissionClass.trim() ||
+                      !studentFullName.trim() ||
+                      !studentClass.trim() ||
                       !submissionLink.trim()
                     }
                     className="h-11 w-1/2"
