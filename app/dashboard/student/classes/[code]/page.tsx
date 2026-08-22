@@ -31,6 +31,7 @@ import {
   ShieldAlert,
   ExternalLink,
   Save,
+  RotateCcw,
 } from 'lucide-react';
 
 type ClassData = {
@@ -116,22 +117,23 @@ export default function ClassDetailsPage() {
   const [isTeacher, setIsTeacher] =
     useState(false);
 
-  const [copiedCode, setCopiedCode] =
-    useState(false);
-
-  // ------------------------------------------------------------
-  // STUDENT ACCOUNT INFO
-  // ------------------------------------------------------------
+  // ============================================================
+  // CURRENT STUDENT
+  // ============================================================
 
   const [studentFullName, setStudentFullName] =
     useState('');
 
-  const [studentClass, setStudentClass] =
-    useState('');
+  // ============================================================
+  // COPY JOIN CODE
+  // ============================================================
 
-  // ------------------------------------------------------------
+  const [copiedCode, setCopiedCode] =
+    useState(false);
+
+  // ============================================================
   // COURSE MODAL
-  // ------------------------------------------------------------
+  // ============================================================
 
   const [isCourseModalOpen, setIsCourseModalOpen] =
     useState(false);
@@ -142,16 +144,16 @@ export default function ClassDetailsPage() {
   const [creatingCourse, setCreatingCourse] =
     useState(false);
 
-  // ------------------------------------------------------------
+  // ============================================================
   // OPEN COURSES
-  // ------------------------------------------------------------
+  // ============================================================
 
   const [openCourses, setOpenCourses] =
     useState<Record<string, boolean>>({});
 
-  // ------------------------------------------------------------
+  // ============================================================
   // ADD MODAL
-  // ------------------------------------------------------------
+  // ============================================================
 
   const [isAddModalOpen, setIsAddModalOpen] =
     useState(false);
@@ -179,9 +181,9 @@ export default function ClassDetailsPage() {
   const [creatingItem, setCreatingItem] =
     useState(false);
 
-  // ------------------------------------------------------------
+  // ============================================================
   // LINK CHECK
-  // ------------------------------------------------------------
+  // ============================================================
 
   const [checkingLink, setCheckingLink] =
     useState(false);
@@ -189,18 +191,15 @@ export default function ClassDetailsPage() {
   const [linkCheckError, setLinkCheckError] =
     useState<string | null>(null);
 
-  // ------------------------------------------------------------
-  // STUDENT SUBMISSION MODAL
-  // ------------------------------------------------------------
+  // ============================================================
+  // STUDENT SUBMISSION
+  // ============================================================
 
   const [isSubmissionModalOpen, setIsSubmissionModalOpen] =
     useState(false);
 
   const [selectedAssignment, setSelectedAssignment] =
     useState<Assignment | null>(null);
-
-  const [submissionNickname, setSubmissionNickname] =
-    useState('');
 
   const [submissionClass, setSubmissionClass] =
     useState('');
@@ -211,9 +210,12 @@ export default function ClassDetailsPage() {
   const [submittingAssignment, setSubmittingAssignment] =
     useState(false);
 
-  // ------------------------------------------------------------
+  const [undoingSubmission, setUndoingSubmission] =
+    useState(false);
+
+  // ============================================================
   // TEACHER SUBMISSIONS
-  // ------------------------------------------------------------
+  // ============================================================
 
   const [openAssignments, setOpenAssignments] =
     useState<Record<string, boolean>>({});
@@ -223,74 +225,6 @@ export default function ClassDetailsPage() {
 
   const [savingGrades, setSavingGrades] =
     useState<Record<string, boolean>>({});
-
-  // ============================================================
-  // GET STUDENT ACCOUNT INFORMATION
-  // ============================================================
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      const currentUserRaw =
-        localStorage.getItem('current_user');
-
-      if (!currentUserRaw) return;
-
-      const currentUser =
-        JSON.parse(currentUserRaw);
-
-      const user =
-        currentUser?.user || currentUser;
-
-      /*
-       * Try the most likely full-name fields.
-       * This keeps the page compatible with the
-       * existing account structure.
-       */
-      const fullName =
-        user?.fullName ||
-        user?.full_name ||
-        user?.name ||
-        user?.user_metadata?.fullName ||
-        user?.user_metadata?.full_name ||
-        user?.user_metadata?.name ||
-        '';
-
-      /*
-       * Try the most likely class fields.
-       *
-       * IMPORTANT:
-       * We want the actual class code such as 8A,
-       * 8F, etc., NOT the teacher's class name.
-       */
-      const classCode =
-        user?.class_code ||
-        user?.classCode ||
-        user?.student_class ||
-        user?.studentClass ||
-        user?.class ||
-        user?.user_metadata?.class_code ||
-        user?.user_metadata?.classCode ||
-        user?.user_metadata?.student_class ||
-        user?.user_metadata?.studentClass ||
-        user?.user_metadata?.class ||
-        '';
-
-      setStudentFullName(
-        String(fullName).trim()
-      );
-
-      setStudentClass(
-        String(classCode).trim()
-      );
-    } catch (err) {
-      console.error(
-        'Could not load student account information:',
-        err
-      );
-    }
-  }, []);
 
   // ============================================================
   // COPY JOIN CODE
@@ -320,7 +254,7 @@ export default function ClassDetailsPage() {
   };
 
   // ============================================================
-  // DETECT ROLE
+  // DETECT ROLE + STUDENT NAME
   // ============================================================
 
   useEffect(() => {
@@ -328,6 +262,7 @@ export default function ClassDetailsPage() {
 
     try {
       let detectedRole = '';
+      let detectedFullName = '';
 
       const directRole =
         localStorage.getItem('user_role');
@@ -355,6 +290,21 @@ export default function ClassDetailsPage() {
             detectedRole =
               String(role).toLowerCase();
           }
+
+          detectedFullName =
+            currentUser?.fullName ||
+            currentUser?.full_name ||
+            currentUser?.name ||
+            currentUser?.user?.fullName ||
+            currentUser?.user?.full_name ||
+            currentUser?.user?.name ||
+            currentUser?.user?.user_metadata?.fullName ||
+            currentUser?.user?.user_metadata?.full_name ||
+            currentUser?.user?.user_metadata?.name ||
+            currentUser?.user_metadata?.fullName ||
+            currentUser?.user_metadata?.full_name ||
+            currentUser?.user_metadata?.name ||
+            '';
         } catch {
           // Ignore invalid JSON
         }
@@ -393,6 +343,23 @@ export default function ClassDetailsPage() {
               detectedRole =
                 String(role).toLowerCase();
             }
+
+            if (!detectedFullName) {
+              detectedFullName =
+                parsed?.fullName ||
+                parsed?.full_name ||
+                parsed?.name ||
+                parsed?.user?.fullName ||
+                parsed?.user?.full_name ||
+                parsed?.user?.name ||
+                parsed?.user?.user_metadata?.fullName ||
+                parsed?.user?.user_metadata?.full_name ||
+                parsed?.user?.user_metadata?.name ||
+                parsed?.user_metadata?.fullName ||
+                parsed?.user_metadata?.full_name ||
+                parsed?.user_metadata?.name ||
+                '';
+            }
           } catch {
             // Ignore invalid JSON
           }
@@ -402,9 +369,13 @@ export default function ClassDetailsPage() {
       setIsTeacher(
         detectedRole === 'teacher'
       );
+
+      setStudentFullName(
+        String(detectedFullName || '').trim()
+      );
     } catch (err) {
       console.error(
-        'Could not determine user role:',
+        'Could not determine user:',
         err
       );
 
@@ -1361,6 +1332,26 @@ export default function ClassDetailsPage() {
   };
 
   // ============================================================
+  // CHECK WHETHER CURRENT STUDENT HAS SUBMITTED
+  // ============================================================
+
+  const getStudentSubmission = (
+    assignmentId: string
+  ) => {
+    if (!studentFullName.trim()) {
+      return undefined;
+    }
+
+    return (
+      submissions[assignmentId] || []
+    ).find(
+      (submission) =>
+        submission.nickname.trim().toLowerCase() ===
+        studentFullName.trim().toLowerCase()
+    );
+  };
+
+  // ============================================================
   // OPEN STUDENT SUBMISSION MODAL
   // ============================================================
 
@@ -1371,22 +1362,27 @@ export default function ClassDetailsPage() {
       return;
     }
 
+    if (!studentFullName.trim()) {
+      alert(
+        'Your account full name could not be found. Please sign in again.'
+      );
+      return;
+    }
+
+    const existingSubmission =
+      getStudentSubmission(
+        assignment.id
+      );
+
+    if (existingSubmission) {
+      return;
+    }
+
     setSelectedAssignment(
       assignment
     );
 
-    /*
-     * These are locked to the account.
-     * Students cannot change them in the UI.
-     */
-    setSubmissionNickname(
-      studentFullName
-    );
-
-    setSubmissionClass(
-      studentClass
-    );
-
+    setSubmissionClass('');
     setSubmissionLink('');
 
     setLinkCheckError(null);
@@ -1405,7 +1401,6 @@ export default function ClassDetailsPage() {
     setIsSubmissionModalOpen(false);
     setSelectedAssignment(null);
 
-    setSubmissionNickname('');
     setSubmissionClass('');
     setSubmissionLink('');
 
@@ -1428,22 +1423,17 @@ export default function ClassDetailsPage() {
       return;
     }
 
-    /*
-     * Do not allow the submission to proceed without
-     * account information.
-     */
-    if (
-      !studentFullName.trim() ||
-      !studentClass.trim()
-    ) {
+    if (!studentFullName.trim()) {
       alert(
-        'Your account name or class could not be loaded. Please sign in again.'
+        'Your account full name could not be found. Please sign in again.'
       );
-
       return;
     }
 
-    if (!submissionLink.trim()) {
+    if (
+      !submissionClass.trim() ||
+      !submissionLink.trim()
+    ) {
       return;
     }
 
@@ -1451,6 +1441,21 @@ export default function ClassDetailsPage() {
       !supabaseUrl ||
       !supabaseAnonKey
     ) {
+      return;
+    }
+
+    // Prevent duplicate submissions
+    const alreadySubmitted =
+      getStudentSubmission(
+        selectedAssignment.id
+      );
+
+    if (alreadySubmitted) {
+      alert(
+        'You have already submitted this assignment.'
+      );
+
+      closeSubmissionModal();
       return;
     }
 
@@ -1523,16 +1528,13 @@ export default function ClassDetailsPage() {
             assignment_id:
               selectedAssignment.id,
 
-            /*
-             * IMPORTANT:
-             * Use the account values, not user-editable
-             * form values.
-             */
+            // ALWAYS use account full name
             nickname:
               studentFullName.trim(),
 
+            // Manual class input
             class:
-              studentClass.trim(),
+              submissionClass.trim().toUpperCase(),
 
             link:
               cleanLink,
@@ -1596,41 +1598,96 @@ export default function ClassDetailsPage() {
   };
 
   // ============================================================
-  // SORT SUBMISSIONS BY CLASS
+  // UNDO SUBMISSION
   // ============================================================
 
-  const sortSubmissionsByClass = (
-    items: Submission[]
+  const handleUndoSubmission = async (
+    assignment: Assignment
   ) => {
-    return [...items].sort((a, b) => {
-      const classCompare =
-        a.class.trim().localeCompare(
-          b.class.trim(),
-          undefined,
-          {
-            numeric: true,
-            sensitivity: 'base',
-          }
-        );
+    if (
+      isTeacher ||
+      !assignment.id ||
+      !studentFullName.trim() ||
+      !supabaseUrl ||
+      !supabaseAnonKey
+    ) {
+      return;
+    }
 
-      if (classCompare !== 0) {
-        return classCompare;
+    const existingSubmission =
+      getStudentSubmission(
+        assignment.id
+      );
+
+    if (!existingSubmission?.id) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        'Undo your submission? Your teacher will no longer see it, and you will be able to submit again.'
+      );
+
+    if (!confirmed) return;
+
+    setUndoingSubmission(true);
+
+    try {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/assignment_submissions?id=eq.${encodeURIComponent(
+          existingSubmission.id
+        )}`,
+        {
+          method: 'DELETE',
+
+          headers: {
+            apikey: supabaseAnonKey,
+
+            Authorization:
+              `Bearer ${supabaseAnonKey}`,
+          },
+        }
+      );
+
+      const responseText =
+        await response.text();
+
+      if (!response.ok) {
+        throw new Error(
+          responseText ||
+            'Failed to undo submission.'
+        );
       }
 
-      /*
-       * If two students are in the same class,
-       * sort alphabetically by name.
-       */
-      return a.nickname
-        .trim()
-        .localeCompare(
-          b.nickname.trim(),
-          undefined,
-          {
-            sensitivity: 'base',
-          }
-        );
-    });
+      setSubmissions((previous) => ({
+        ...previous,
+
+        [assignment.id!]: (
+          previous[
+            assignment.id!
+          ] || []
+        ).filter(
+          (submission) =>
+            submission.id !==
+            existingSubmission.id
+        ),
+      }));
+
+      alert(
+        'Submission undone. You can submit the assignment again.'
+      );
+    } catch (err) {
+      console.error(
+        'Error undoing submission:',
+        err
+      );
+
+      alert(
+        'Failed to undo submission.'
+      );
+    } finally {
+      setUndoingSubmission(false);
+    }
   };
 
   // ============================================================
@@ -1717,24 +1774,10 @@ export default function ClassDetailsPage() {
         ''
       ).toString();
 
-    /*
-     * Strictly validate the grade.
-     */
-    if (
-      rawGrade.trim() === ''
-    ) {
-      alert(
-        'Please enter a grade between 0 and 100.'
-      );
-
-      return;
-    }
-
     const grade =
       Number(rawGrade);
 
     if (
-      !Number.isFinite(grade) ||
       !Number.isInteger(grade) ||
       grade < 0 ||
       grade > 100
@@ -2120,9 +2163,9 @@ export default function ClassDetailsPage() {
                           </CardTitle>
                         </div>
 
-                        {/* ONE ADD BUTTON + DELETE */}
-
                         <div className="flex shrink-0 items-center gap-1">
+                          {/* ONLY ONE ADD BUTTON PER COURSE */}
+
                           {isTeacher &&
                             course.id && (
                               <Button
@@ -2136,7 +2179,9 @@ export default function ClassDetailsPage() {
                                 className="gap-2"
                               >
                                 <PlusCircle
-                                  size={15}
+                                  size={
+                                    15
+                                  }
                                 />
                                 Add
                               </Button>
@@ -2188,7 +2233,7 @@ export default function ClassDetailsPage() {
                               <div className="rounded-lg border border-dashed border-border p-5">
                                 <p className="text-sm text-muted-foreground">
                                   {isTeacher
-                                    ? 'No materials have been added yet. Click "Add" above to add one.'
+                                    ? 'No materials have been added yet. Click "Add" at the top of the course.'
                                     : 'No materials have been added to this course yet.'}
                                 </p>
                               </div>
@@ -2282,7 +2327,7 @@ export default function ClassDetailsPage() {
                               <div className="rounded-lg border border-dashed border-border p-5">
                                 <p className="text-sm text-muted-foreground">
                                   {isTeacher
-                                    ? 'No assignments have been created yet. Click "Add" above and choose Assignment.'
+                                    ? 'No assignments have been created yet. Click "Add" and choose Assignment.'
                                     : 'No assignments have been created for this course yet.'}
                                 </p>
                               </div>
@@ -2305,16 +2350,12 @@ export default function ClassDetailsPage() {
                                         assignmentId
                                       ] || [];
 
-                                    /*
-                                     * ALWAYS sort teacher submissions
-                                     * by class first.
-                                     */
-                                    const sortedSubmissions =
-                                      isTeacher
-                                        ? sortSubmissionsByClass(
-                                            assignmentSubmissions
+                                    const studentSubmission =
+                                      !isTeacher
+                                        ? getStudentSubmission(
+                                            assignmentId
                                           )
-                                        : assignmentSubmissions;
+                                        : undefined;
 
                                     return (
                                       <div
@@ -2334,13 +2375,22 @@ export default function ClassDetailsPage() {
                                               toggleAssignment(
                                                 assignmentId
                                               );
+                                            } else if (
+                                              studentSubmission
+                                            ) {
+                                              handleUndoSubmission(
+                                                assignment
+                                              );
                                             } else {
                                               openSubmissionModal(
                                                 assignment
                                               );
                                             }
                                           }}
-                                          className="flex w-full items-start gap-3 p-4 text-left transition hover:bg-primary/5"
+                                          disabled={
+                                            undoingSubmission
+                                          }
+                                          className="flex w-full items-start gap-3 p-4 text-left transition hover:bg-primary/5 disabled:cursor-wait"
                                         >
                                           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                                             <ClipboardList className="size-5 text-primary" />
@@ -2381,11 +2431,29 @@ export default function ClassDetailsPage() {
                                               </p>
                                             )}
 
-                                            {!isTeacher && (
-                                              <p className="mt-2 text-xs font-medium text-primary">
-                                                Click to submit →
-                                              </p>
-                                            )}
+                                            {!isTeacher &&
+                                              studentSubmission && (
+                                                <div className="mt-2 flex items-center gap-2 text-xs font-medium text-primary">
+                                                  <span>
+                                                    ✓ Submitted
+                                                  </span>
+
+                                                  <span className="text-muted-foreground">
+                                                    •
+                                                  </span>
+
+                                                  <span>
+                                                    Click to undo submission
+                                                  </span>
+                                                </div>
+                                              )}
+
+                                            {!isTeacher &&
+                                              !studentSubmission && (
+                                                <p className="mt-2 text-xs font-medium text-primary">
+                                                  Click to submit →
+                                                </p>
+                                              )}
                                           </div>
                                         </button>
 
@@ -2394,7 +2462,7 @@ export default function ClassDetailsPage() {
                                         {isTeacher &&
                                           isAssignmentOpen && (
                                             <div className="border-t border-border p-4">
-                                              {sortedSubmissions.length ===
+                                              {assignmentSubmissions.length ===
                                               0 ? (
                                                 <div className="rounded-lg border border-dashed border-border p-5 text-center">
                                                   <ClipboardList className="mx-auto mb-2 size-7 text-muted-foreground" />
@@ -2409,7 +2477,7 @@ export default function ClassDetailsPage() {
                                                     <thead>
                                                       <tr className="border-b border-border bg-muted/40">
                                                         <th className="px-4 py-3 text-left font-semibold text-foreground">
-                                                          Name
+                                                          Nickname
                                                         </th>
 
                                                         <th className="px-4 py-3 text-left font-semibold text-foreground">
@@ -2427,201 +2495,186 @@ export default function ClassDetailsPage() {
                                                     </thead>
 
                                                     <tbody>
-                                                      {sortedSubmissions.map(
-                                                        (
-                                                          submission
-                                                        ) => {
-                                                          const currentGrade =
-                                                            gradeInputs[
-                                                              submission.id!
-                                                            ] ??
-                                                            (
-                                                              submission.grade ??
-                                                              ''
-                                                            ).toString();
-
-                                                          return (
-                                                            <tr
-                                                              key={
-                                                                submission.id
+                                                      {[
+                                                        ...assignmentSubmissions,
+                                                      ]
+                                                        .sort(
+                                                          (
+                                                            a,
+                                                            b
+                                                          ) =>
+                                                            a.class.localeCompare(
+                                                              b.class,
+                                                              undefined,
+                                                              {
+                                                                numeric:
+                                                                  true,
+                                                                sensitivity:
+                                                                  'base',
                                                               }
-                                                              className="border-b border-border last:border-0"
-                                                            >
-                                                              <td className="px-4 py-3 font-medium text-foreground">
-                                                                {
-                                                                  submission.nickname
-                                                                }
-                                                              </td>
+                                                            ) ||
+                                                            a.nickname.localeCompare(
+                                                              b.nickname,
+                                                              undefined,
+                                                              {
+                                                                sensitivity:
+                                                                  'base',
+                                                              }
+                                                            )
+                                                        )
+                                                        .map(
+                                                          (
+                                                            submission
+                                                          ) => {
+                                                            const currentGrade =
+                                                              gradeInputs[
+                                                                submission.id!
+                                                              ] ??
+                                                              (
+                                                                submission.grade ??
+                                                                ''
+                                                              ).toString();
 
-                                                              <td className="px-4 py-3 font-medium text-muted-foreground">
-                                                                {
-                                                                  submission.class
+                                                            return (
+                                                              <tr
+                                                                key={
+                                                                  submission.id
                                                                 }
-                                                              </td>
-
-                                                              <td className="px-4 py-3">
-                                                                <a
-                                                                  href={
-                                                                    submission.link
+                                                                className="border-b border-border last:border-0"
+                                                              >
+                                                                <td className="px-4 py-3 font-medium text-foreground">
+                                                                  {
+                                                                    submission.nickname
                                                                   }
-                                                                  target="_blank"
-                                                                  rel="noopener noreferrer"
-                                                                  className="inline-flex items-center gap-1.5 text-primary hover:underline"
-                                                                >
-                                                                  Open Link
-                                                                  <ExternalLink className="size-3.5" />
-                                                                </a>
-                                                              </td>
+                                                                </td>
 
-                                                              <td className="px-4 py-3">
-                                                                <div className="flex items-center justify-end gap-2">
-                                                                  <Input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    max="100"
-                                                                    step="1"
-                                                                    value={
-                                                                      currentGrade
+                                                                <td className="px-4 py-3 font-medium uppercase text-muted-foreground">
+                                                                  {
+                                                                    submission.class
+                                                                  }
+                                                                </td>
+
+                                                                <td className="px-4 py-3">
+                                                                  <a
+                                                                    href={
+                                                                      submission.link
                                                                     }
-                                                                    onChange={(
-                                                                      e
-                                                                    ) => {
-                                                                      const value =
-                                                                        e.target.value;
-
-                                                                      /*
-                                                                       * Prevent values above 100
-                                                                       * from being entered into
-                                                                       * the state.
-                                                                       */
-                                                                      if (
-                                                                        value ===
-                                                                        ''
-                                                                      ) {
-                                                                        setGradeInputs(
-                                                                          (
-                                                                            previous
-                                                                          ) => ({
-                                                                            ...previous,
-                                                                            [submission.id!]:
-                                                                              '',
-                                                                          })
-                                                                        );
-
-                                                                        return;
-                                                                      }
-
-                                                                      const numericValue =
-                                                                        Number(
-                                                                          value
-                                                                        );
-
-                                                                      if (
-                                                                        numericValue >
-                                                                        100
-                                                                      ) {
-                                                                        setGradeInputs(
-                                                                          (
-                                                                            previous
-                                                                          ) => ({
-                                                                            ...previous,
-                                                                            [submission.id!]:
-                                                                              '100',
-                                                                          })
-                                                                        );
-
-                                                                        return;
-                                                                      }
-
-                                                                      if (
-                                                                        numericValue <
-                                                                        0
-                                                                      ) {
-                                                                        setGradeInputs(
-                                                                          (
-                                                                            previous
-                                                                          ) => ({
-                                                                            ...previous,
-                                                                            [submission.id!]:
-                                                                              '0',
-                                                                          })
-                                                                        );
-
-                                                                        return;
-                                                                      }
-
-                                                                      setGradeInputs(
-                                                                        (
-                                                                          previous
-                                                                        ) => ({
-                                                                          ...previous,
-                                                                          [submission.id!]:
-                                                                            value,
-                                                                        })
-                                                                      );
-                                                                    }}
-                                                                    onKeyDown={(
-                                                                      e
-                                                                    ) => {
-                                                                      /*
-                                                                       * Block common ways of
-                                                                       * entering values above
-                                                                       * 100, while the save
-                                                                       * validation below remains
-                                                                       * the final protection.
-                                                                       */
-                                                                      if (
-                                                                        e.key ===
-                                                                          'e' ||
-                                                                        e.key ===
-                                                                          'E' ||
-                                                                        e.key ===
-                                                                          '+' ||
-                                                                        e.key ===
-                                                                          '-'
-                                                                      ) {
-                                                                        e.preventDefault();
-                                                                      }
-                                                                    }}
-                                                                    placeholder="—"
-                                                                    className="h-9 w-20 text-right"
-                                                                  />
-
-                                                                  <span className="text-muted-foreground">
-                                                                    /100
-                                                                  </span>
-
-                                                                  <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    onClick={() =>
-                                                                      handleSaveGrade(
-                                                                        submission
-                                                                      )
-                                                                    }
-                                                                    disabled={
-                                                                      savingGrades[
-                                                                        submission.id!
-                                                                      ]
-                                                                    }
-                                                                    className="gap-1.5"
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-flex items-center gap-1.5 text-primary hover:underline"
                                                                   >
-                                                                    {savingGrades[
-                                                                      submission.id!
-                                                                    ] ? (
-                                                                      <Loader2 className="size-3.5 animate-spin" />
-                                                                    ) : (
-                                                                      <Save className="size-3.5" />
-                                                                    )}
+                                                                    Open Link
+                                                                    <ExternalLink className="size-3.5" />
+                                                                  </a>
+                                                                </td>
 
-                                                                    Save
-                                                                  </Button>
-                                                                </div>
-                                                              </td>
-                                                            </tr>
-                                                          );
-                                                        }
-                                                      )}
+                                                                <td className="px-4 py-3">
+                                                                  <div className="flex items-center justify-end gap-2">
+                                                                    <Input
+                                                                      type="number"
+                                                                      min="0"
+                                                                      max="100"
+                                                                      step="1"
+                                                                      value={
+                                                                        currentGrade
+                                                                      }
+                                                                      onChange={(
+                                                                        e
+                                                                      ) => {
+                                                                        let value =
+                                                                          e.target.value;
+
+                                                                        if (
+                                                                          value !==
+                                                                            ''
+                                                                        ) {
+                                                                          const numeric =
+                                                                            Number(
+                                                                              value
+                                                                            );
+
+                                                                          if (
+                                                                            numeric >
+                                                                            100
+                                                                          ) {
+                                                                            value =
+                                                                              '100';
+                                                                          }
+
+                                                                          if (
+                                                                            numeric <
+                                                                            0
+                                                                          ) {
+                                                                            value =
+                                                                              '0';
+                                                                          }
+                                                                        }
+
+                                                                        setGradeInputs(
+                                                                          (
+                                                                            previous
+                                                                          ) => ({
+                                                                            ...previous,
+                                                                            [submission.id!]:
+                                                                              value,
+                                                                          })
+                                                                        );
+                                                                      }}
+                                                                      onKeyDown={(
+                                                                        e
+                                                                      ) => {
+                                                                        if (
+                                                                          e.key ===
+                                                                            'e' ||
+                                                                          e.key ===
+                                                                            'E' ||
+                                                                          e.key ===
+                                                                            '+' ||
+                                                                          e.key ===
+                                                                            '-'
+                                                                        ) {
+                                                                          e.preventDefault();
+                                                                        }
+                                                                      }}
+                                                                      placeholder="—"
+                                                                      className="h-9 w-20 text-right"
+                                                                    />
+
+                                                                    <span className="text-muted-foreground">
+                                                                      /100
+                                                                    </span>
+
+                                                                    <Button
+                                                                      type="button"
+                                                                      size="sm"
+                                                                      onClick={() =>
+                                                                        handleSaveGrade(
+                                                                          submission
+                                                                        )
+                                                                      }
+                                                                      disabled={
+                                                                        savingGrades[
+                                                                          submission.id!
+                                                                        ]
+                                                                      }
+                                                                      className="gap-1.5"
+                                                                    >
+                                                                      {savingGrades[
+                                                                        submission.id!
+                                                                      ] ? (
+                                                                        <Loader2 className="size-3.5 animate-spin" />
+                                                                      ) : (
+                                                                        <Save className="size-3.5" />
+                                                                      )}
+
+                                                                      Save
+                                                                    </Button>
+                                                                  </div>
+                                                                </td>
+                                                              </tr>
+                                                            );
+                                                          }
+                                                        )}
                                                     </tbody>
                                                   </table>
                                                 </div>
@@ -2631,26 +2684,25 @@ export default function ClassDetailsPage() {
 
                                         {/* TEACHER DELETE */}
 
-                                        {isTeacher &&
-                                          (
-                                            <div className="flex justify-end border-t border-border px-4 py-2">
-                                              <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() =>
-                                                  handleDeleteAssignment(
-                                                    assignmentId,
-                                                    course.id!
-                                                  )
-                                                }
-                                                className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
-                                              >
-                                                <Trash2 className="size-3.5" />
-                                                Delete Assignment
-                                              </Button>
-                                            </div>
-                                          )}
+                                        {isTeacher && (
+                                          <div className="flex justify-end border-t border-border px-4 py-2">
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() =>
+                                                handleDeleteAssignment(
+                                                  assignmentId,
+                                                  course.id!
+                                                )
+                                              }
+                                              className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
+                                            >
+                                              <Trash2 className="size-3.5" />
+                                              Delete Assignment
+                                            </Button>
+                                          </div>
+                                        )}
                                       </div>
                                     );
                                   }
@@ -3140,17 +3192,17 @@ export default function ClassDetailsPage() {
                 className="space-y-4"
               >
 
-                {/* LOCKED NAME */}
+                {/* FULL NAME — LOCKED */}
 
                 <div className="space-y-2">
                   <label className="block text-xs font-medium text-muted-foreground">
-                    Name
+                    Full Name
                   </label>
 
                   <Input
                     type="text"
                     value={
-                      submissionNickname
+                      studentFullName
                     }
                     readOnly
                     disabled
@@ -3158,12 +3210,13 @@ export default function ClassDetailsPage() {
                   />
 
                   <p className="text-xs text-muted-foreground">
-                    This is taken from your
-                    account and cannot be changed.
+                    Your name is taken from
+                    your account and cannot
+                    be changed.
                   </p>
                 </div>
 
-                {/* LOCKED CLASS */}
+                {/* CLASS — MANUAL */}
 
                 <div className="space-y-2">
                   <label className="block text-xs font-medium text-muted-foreground">
@@ -3172,17 +3225,25 @@ export default function ClassDetailsPage() {
 
                   <Input
                     type="text"
+                    placeholder="e.g. 8A"
                     value={
                       submissionClass
                     }
-                    readOnly
-                    disabled
-                    className="h-11 bg-muted"
+                    onChange={(e) =>
+                      setSubmissionClass(
+                        e.target.value.toUpperCase()
+                      )
+                    }
+                    required
+                    disabled={
+                      submittingAssignment
+                    }
+                    className="h-11 bg-background uppercase"
                   />
 
                   <p className="text-xs text-muted-foreground">
-                    Your class is taken from
-                    your account.
+                    Enter your class, such as
+                    8A, 8B, or 8F.
                   </p>
                 </div>
 
@@ -3209,7 +3270,6 @@ export default function ClassDetailsPage() {
                       );
                     }}
                     required
-                    autoFocus
                     disabled={
                       submittingAssignment
                     }
@@ -3289,9 +3349,9 @@ export default function ClassDetailsPage() {
                     disabled={
                       submittingAssignment ||
                       checkingLink ||
-                      !studentFullName.trim() ||
-                      !studentClass.trim() ||
-                      !submissionLink.trim()
+                      !submissionClass.trim() ||
+                      !submissionLink.trim() ||
+                      !studentFullName.trim()
                     }
                     className="h-11 w-1/2"
                   >
