@@ -31,6 +31,7 @@ type TeacherClass = {
 type CurrentUser = {
   id?: string | number;
   fullName?: string;
+  full_name?: string;
   email?: string;
   role?: string;
 };
@@ -42,7 +43,6 @@ export default function TeacherDashboardPage() {
   const [className, setClassName] = useState('');
   const [schoolName, setSchoolName] = useState('');
   const [teacherClasses, setTeacherClasses] = useState<TeacherClass[]>([]);
-
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -61,79 +61,77 @@ export default function TeacherDashboardPage() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const getCurrentUser = () => {
-      try {
-        const rawUser = localStorage.getItem('current_user');
+    try {
+      const rawUser = localStorage.getItem('current_user');
 
-        console.log(
-          '[Teacher Dashboard] current_user:',
-          rawUser
-        );
+      console.log('[Teacher Dashboard] current_user:', rawUser);
 
-        if (!rawUser) {
-          console.error(
-            '[Teacher Dashboard] No current_user found.'
-          );
-
-          setCurrentUserId(null);
-          setLoading(false);
-          return;
-        }
-
-        const parsedUser: CurrentUser =
-          JSON.parse(rawUser);
-
-        console.log(
-          '[Teacher Dashboard] Parsed user:',
-          parsedUser
-        );
-
-        if (
-          parsedUser &&
-          parsedUser.id !== undefined &&
-          parsedUser.id !== null &&
-          String(parsedUser.id).trim() !== ''
-        ) {
-          const id = String(parsedUser.id);
-
-          setCurrentUserId(id);
-
-          console.log(
-            '[Teacher Dashboard] Current teacher ID:',
-            id
-          );
-        } else {
-          console.error(
-            '[Teacher Dashboard] current_user exists but has no ID.'
-          );
-
-          setCurrentUserId(null);
-          setLoading(false);
-        }
-      } catch (error) {
+      if (!rawUser) {
         console.error(
-          '[Teacher Dashboard] Failed to parse current_user:',
-          error
+          '[Teacher Dashboard] No current_user found.'
         );
 
         setCurrentUserId(null);
         setLoading(false);
+        return;
       }
-    };
 
-    getCurrentUser();
+      const parsedUser: CurrentUser = JSON.parse(rawUser);
+
+      console.log(
+        '[Teacher Dashboard] Parsed user:',
+        parsedUser
+      );
+
+      if (
+        parsedUser &&
+        parsedUser.id !== undefined &&
+        parsedUser.id !== null &&
+        String(parsedUser.id).trim() !== ''
+      ) {
+        const id = String(parsedUser.id).trim();
+
+        setCurrentUserId(id);
+
+        console.log(
+          '[Teacher Dashboard] Current teacher ID:',
+          id
+        );
+      } else {
+        console.error(
+          '[Teacher Dashboard] current_user exists but has no ID.'
+        );
+
+        /*
+         * Remove the broken login session so the user
+         * does not keep getting the same error.
+         */
+        localStorage.removeItem('current_user');
+
+        setCurrentUserId(null);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error(
+        '[Teacher Dashboard] Failed to parse current_user:',
+        error
+      );
+
+      localStorage.removeItem('current_user');
+
+      setCurrentUserId(null);
+      setLoading(false);
+    }
   }, []);
 
   /*
    * ============================================================
-   * FETCH CLASSES
+   * FETCH ONLY THIS TEACHER'S CLASSES
    * ============================================================
    */
 
   useEffect(() => {
-    if (!currentUserId) {
-      return;
-    }
+    if (!currentUserId) return;
 
     if (!supabaseUrl || !supabaseAnonKey) {
       console.error(
@@ -176,11 +174,10 @@ export default function TeacherDashboardPage() {
           );
         }
 
-        const data: TeacherClass[] =
-          JSON.parse(responseText);
+        const data: TeacherClass[] = JSON.parse(responseText);
 
         /*
-         * Extra ownership check.
+         * Extra client-side ownership check.
          */
         const ownClasses = data.filter(
           (item) =>
@@ -226,14 +223,14 @@ export default function TeacherDashboardPage() {
 
     if (!currentUserId) {
       console.error(
-        'Cannot create class: no teacher ID.'
+        '[Teacher Dashboard] Cannot create class: no teacher ID.'
       );
       return;
     }
 
     if (!supabaseUrl || !supabaseAnonKey) {
       console.error(
-        'Supabase environment variables are missing.'
+        '[Teacher Dashboard] Supabase environment variables are missing.'
       );
       return;
     }
@@ -294,8 +291,8 @@ export default function TeacherDashboardPage() {
       }
 
       /*
-       * Only put the class into the dashboard if
-       * it actually belongs to this teacher.
+       * Only add the class if it belongs to the
+       * currently signed-in teacher.
        */
       if (
         String(createdClass.teacher_id) ===
@@ -333,19 +330,18 @@ export default function TeacherDashboardPage() {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!currentUserId) {
-      return;
-    }
+    if (!currentUserId) return;
 
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return;
-    }
+    if (!supabaseUrl || !supabaseAnonKey) return;
 
     setDeletingCode(code);
 
     try {
       /*
-       * BOTH code AND teacher_id are checked.
+       * Both the class code AND teacher ID are checked.
+       *
+       * This prevents a teacher from accidentally deleting
+       * another teacher's class through this dashboard.
        */
       const url =
         `${supabaseUrl}/rest/v1/teacher_classes` +
@@ -456,12 +452,20 @@ export default function TeacherDashboardPage() {
               ) : (
                 teacherClasses.map(
                   (item, index) => (
+                    /*
+                     * IMPORTANT:
+                     * This is currently pointing to the existing
+                     * class route in your project.
+                     *
+                     * We can create a dedicated teacher class
+                     * page later.
+                     */
                     <Link
                       key={
                         item.id ||
                         `${item.code}-${index}`
                       }
-                      href={`/dashboard/teacher/classes/${item.code}`}
+                      href={`/dashboard/student/classes/${item.code}`}
                     >
                       <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/25 hover:bg-accent/40 transition cursor-pointer mb-2">
 
