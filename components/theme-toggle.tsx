@@ -18,30 +18,30 @@ export function ThemeToggle() {
 
   const isDark = resolvedTheme === 'dark'
 
-  const toggleTheme = async () => {
+  const toggleTheme = () => {
     const nextTheme = isDark ? 'light' : 'dark'
 
-    // Icon pop animation
+    const button = buttonRef.current
+
+    const reducedMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
+
+    // Icon animation
     setPop(true)
 
     window.setTimeout(() => {
       setPop(false)
     }, 400)
 
-    const button = buttonRef.current
-
-    const prefersReducedMotion = window.matchMedia(
-      '(prefers-reduced-motion: reduce)',
-    ).matches
-
-    // If the user prefers reduced motion, instantly switch.
-    if (prefersReducedMotion) {
+    // No animation if the user/device requests reduced motion
+    if (reducedMotion) {
       setTheme(nextTheme)
       return
     }
 
     /*
-     * Get the button position.
+     * Get the center of the theme button.
      */
     const rect = button?.getBoundingClientRect()
 
@@ -53,112 +53,105 @@ export function ThemeToggle() {
       ? rect.top + rect.height / 2
       : window.innerHeight / 2
 
-    const endRadius = Math.hypot(
-      Math.max(x, window.innerWidth - x),
-      Math.max(y, window.innerHeight - y),
-    )
+    /*
+     * Find the furthest corner from the button.
+     * The circle needs to be large enough to cover
+     * the entire screen.
+     */
+    const distances = [
+      Math.hypot(x, y),
+      Math.hypot(window.innerWidth - x, y),
+      Math.hypot(x, window.innerHeight - y),
+      Math.hypot(
+        window.innerWidth - x,
+        window.innerHeight - y,
+      ),
+    ]
+
+    const radius = Math.max(...distances)
 
     /*
-     * =========================================================
-     * MODERN BROWSER
-     * Use View Transitions API when available.
-     * =========================================================
+     * ============================================================
+     * Create the transition circle
+     * ============================================================
      */
 
-    const documentWithTransition = document as Document & {
-      startViewTransition?: (
-        callback: () => void | Promise<void>,
-      ) => {
-        ready: Promise<void>
-        finished: Promise<void>
-      }
-    }
+    const circle = document.createElement('div')
 
-    if (documentWithTransition.startViewTransition) {
-      try {
-        const transition =
-          documentWithTransition.startViewTransition(() => {
-            setTheme(nextTheme)
-          })
+    const diameter = radius * 2
 
-        await transition.ready
+    circle.style.position = 'fixed'
+    circle.style.left = `${x - radius}px`
+    circle.style.top = `${y - radius}px`
+    circle.style.width = `${diameter}px`
+    circle.style.height = `${diameter}px`
 
-        document.documentElement.animate(
-          {
-            clipPath: [
-              `circle(0px at ${x}px ${y}px)`,
-              `circle(${endRadius}px at ${x}px ${y}px)`,
-            ],
-          },
-          {
-            duration: 500,
-            easing: 'ease-in-out',
-            pseudoElement: '::view-transition-new(root)',
-          },
-        )
-
-        return
-      } catch (error) {
-        console.warn(
-          'View Transition failed, using fallback animation.',
-          error,
-        )
-      }
-    }
+    circle.style.borderRadius = '50%'
+    circle.style.pointerEvents = 'none'
 
     /*
-     * =========================================================
-     * FALLBACK
-     * Works on browsers without View Transitions API.
-     * =========================================================
+     * Extremely high z-index so the circle is above
+     * the entire application.
      */
-
-    const overlay = document.createElement('div')
-
-    overlay.style.position = 'fixed'
-    overlay.style.left = '0'
-    overlay.style.top = '0'
-    overlay.style.width = '100vw'
-    overlay.style.height = '100vh'
-    overlay.style.pointerEvents = 'none'
-    overlay.style.zIndex = '99999'
-    overlay.style.backgroundColor =
-      nextTheme === 'dark' ? '#020617' : '#ffffff'
-
-    overlay.style.clipPath = `circle(0px at ${x}px ${y}px)`
-
-    document.body.appendChild(overlay)
+    circle.style.zIndex = '2147483647'
 
     /*
-     * First switch the theme while the overlay is invisible.
+     * The circle has the COLOR OF THE NEW THEME.
+     */
+    circle.style.background =
+      nextTheme === 'dark'
+        ? 'hsl(222 47% 11%)'
+        : 'hsl(0 0% 100%)'
+
+    /*
+     * Start completely collapsed.
+     */
+    circle.style.transform = 'scale(0)'
+    circle.style.transformOrigin = 'center center'
+
+    document.body.appendChild(circle)
+
+    /*
+     * Force the browser to acknowledge the initial
+     * scale(0) before we change it.
+     */
+    void circle.offsetWidth
+
+    /*
+     * Change the actual theme BEFORE expanding the circle.
+     *
+     * The circle hides the change, then expands over it.
      */
     setTheme(nextTheme)
 
     /*
-     * Let React/next-themes apply the new theme before
-     * starting the expansion.
+     * Give next-themes/React a frame to apply the new theme.
      */
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const animation = overlay.animate(
-          {
-            clipPath: [
-              `circle(0px at ${x}px ${y}px)`,
-              `circle(${endRadius}px at ${x}px ${y}px)`,
-            ],
-          },
+        const animation = circle.animate(
+          [
+            {
+              transform: 'scale(0)',
+            },
+            {
+              transform: 'scale(1)',
+            },
+          ],
           {
             duration: 500,
-            easing: 'ease-in-out',
+            easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
             fill: 'forwards',
           },
         )
 
-        animation.finished
-          .catch(() => {})
-          .finally(() => {
-            overlay.remove()
-          })
+        animation.onfinish = () => {
+          circle.remove()
+        }
+
+        animation.oncancel = () => {
+          circle.remove()
+        }
       })
     })
   }
