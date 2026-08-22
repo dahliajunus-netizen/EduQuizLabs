@@ -19,6 +19,7 @@ import {
   BookOpen,
   ChevronDown,
   ChevronUp,
+  Copy,
   FileText,
   Link as LinkIcon,
   Loader2,
@@ -85,6 +86,9 @@ export default function ClassDetailsPage() {
   const [isTeacher, setIsTeacher] =
     useState(false);
 
+  const [copiedCode, setCopiedCode] =
+    useState(false);
+
   // Create course modal
   const [isCourseModalOpen, setIsCourseModalOpen] =
     useState(false);
@@ -122,9 +126,34 @@ export default function ClassDetailsPage() {
   const [linkCheckError, setLinkCheckError] =
     useState<string | null>(null);
 
-  // Material deletion
-  const [deletingMaterialId, setDeletingMaterialId] =
-    useState<string | null>(null);
+  /*
+   * ------------------------------------------------------------
+   * Copy join code
+   * ------------------------------------------------------------
+   */
+
+  const handleCopyCode = async () => {
+    if (!isTeacher || !classData?.code) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(
+        classData.code
+      );
+
+      setCopiedCode(true);
+
+      setTimeout(() => {
+        setCopiedCode(false);
+      }, 2000);
+    } catch (err) {
+      console.error(
+        'Failed to copy join code:',
+        err
+      );
+    }
+  };
 
   /*
    * ------------------------------------------------------------
@@ -248,7 +277,6 @@ export default function ClassDetailsPage() {
             `Bearer ${supabaseAnonKey}`,
         };
 
-        // Fetch class
         const classResponse = await fetch(
           `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(
             code
@@ -277,7 +305,6 @@ export default function ClassDetailsPage() {
 
         setClassData(classList[0]);
 
-        // Fetch courses
         const coursesResponse =
           await fetch(
             `${supabaseUrl}/rest/v1/class_courses?class_code=eq.${encodeURIComponent(
@@ -299,7 +326,6 @@ export default function ClassDetailsPage() {
 
         setCourses(courseList);
 
-        // Fetch materials
         const materialMap:
           Record<string, Material[]> = {};
 
@@ -519,102 +545,6 @@ export default function ClassDetailsPage() {
 
   /*
    * ------------------------------------------------------------
-   * DELETE MATERIAL
-   * ------------------------------------------------------------
-   */
-
-  const handleDeleteMaterial = async (
-    material: Material,
-    courseId: string
-  ) => {
-    if (!isTeacher) return;
-
-    if (!material.id) {
-      alert(
-        'This material cannot be deleted because it has no ID.'
-      );
-      return;
-    }
-
-    if (
-      !supabaseUrl ||
-      !supabaseAnonKey
-    ) {
-      return;
-    }
-
-    const confirmed =
-      window.confirm(
-        `Are you sure you want to delete "${material.name}"?`
-      );
-
-    if (!confirmed) return;
-
-    setDeletingMaterialId(
-      material.id
-    );
-
-    try {
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/course_materials?id=eq.${encodeURIComponent(
-          material.id
-        )}`,
-        {
-          method: 'DELETE',
-
-          headers: {
-            apikey: supabaseAnonKey,
-
-            Authorization:
-              `Bearer ${supabaseAnonKey}`,
-
-            Prefer:
-              'return=minimal',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const responseText =
-          await response.text();
-
-        console.error(
-          'Delete material response:',
-          responseText
-        );
-
-        throw new Error(
-          'Failed to delete material.'
-        );
-      }
-
-      // Remove it immediately from the UI
-      setMaterials((previous) => ({
-        ...previous,
-
-        [courseId]: (
-          previous[courseId] || []
-        ).filter(
-          (item) =>
-            item.id !== material.id
-        ),
-      }));
-    } catch (err) {
-      console.error(
-        'Error deleting material:',
-        err
-      );
-
-      alert(
-        'Failed to delete material. Please try again.'
-      );
-    } finally {
-      setDeletingMaterialId(null);
-    }
-  };
-
-  /*
-   * ------------------------------------------------------------
    * Toggle course
    * ------------------------------------------------------------
    */
@@ -724,7 +654,9 @@ export default function ClassDetailsPage() {
       );
 
       throw new Error(
-        'We could not check this link right now. Please try again.'
+        err instanceof Error
+          ? err.message
+          : 'We could not check this link right now. Please try again.'
       );
     }
   };
@@ -809,10 +741,6 @@ export default function ClassDetailsPage() {
 
         return;
       }
-
-      /*
-       * Safe link — save to Supabase
-       */
 
       const response = await fetch(
         `${supabaseUrl}/rest/v1/course_materials`,
@@ -1021,14 +949,47 @@ export default function ClassDetailsPage() {
                 •
               </span>
 
-              <span>
+              {/* Join code */}
+
+              <span className="flex items-center gap-1.5">
                 Code:{' '}
+
                 <span className="font-mono font-semibold text-primary">
                   {classData.code}
                 </span>
+
+                {isTeacher && (
+                  <button
+                    type="button"
+                    onClick={
+                      handleCopyCode
+                    }
+                    title={
+                      copiedCode
+                        ? 'Copied!'
+                        : 'Copy join code'
+                    }
+                    aria-label={
+                      copiedCode
+                        ? 'Copied join code'
+                        : 'Copy join code'
+                    }
+                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
+                  >
+                    {copiedCode ? (
+                      <span className="text-xs font-bold text-primary">
+                        ✓
+                      </span>
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                  </button>
+                )}
               </span>
             </div>
           </div>
+
+          {/* Teacher only */}
 
           {isTeacher && (
             <Button
@@ -1114,8 +1075,6 @@ export default function ClassDetailsPage() {
                       key={courseId}
                       className="overflow-hidden bg-card transition hover:border-primary/40"
                     >
-                      {/* Course header */}
-
                       <CardHeader className="flex flex-row items-center justify-between gap-3 py-4">
                         <div className="flex min-w-0 items-center gap-2">
                           <Button
@@ -1171,8 +1130,6 @@ export default function ClassDetailsPage() {
                           )}
                       </CardHeader>
 
-                      {/* Course content */}
-
                       {isOpen && (
                         <CardContent className="space-y-5 border-t border-border pt-5">
                           <p className="text-sm text-muted-foreground">
@@ -1185,8 +1142,6 @@ export default function ClassDetailsPage() {
                             </span>
                             .
                           </p>
-
-                          {/* Materials */}
 
                           <div className="space-y-3">
                             <div className="flex items-center justify-between gap-3">
@@ -1231,95 +1186,42 @@ export default function ClassDetailsPage() {
                                   (
                                     material,
                                     materialIndex
-                                  ) => {
-                                    const materialId =
-                                      material.id ||
-                                      `${courseId}-material-${materialIndex}`;
-
-                                    const isDeleting =
-                                      !!material.id &&
-                                      deletingMaterialId ===
-                                        material.id;
-
-                                    return (
-                                      <div
-                                        key={
-                                          materialId
-                                        }
-                                        className="group flex items-center gap-3 rounded-lg border border-border bg-background p-3 transition hover:border-primary/50 hover:bg-primary/5"
-                                      >
-                                        {/* Material icon */}
-
-                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                                          <LinkIcon className="size-4 text-primary" />
-                                        </div>
-
-                                        {/* Material link */}
-
-                                        <a
-                                          href={
-                                            material.link
-                                          }
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="min-w-0 flex-1"
-                                        >
-                                          <p className="truncate font-medium text-foreground">
-                                            {
-                                              material.name
-                                            }
-                                          </p>
-
-                                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                            {
-                                              material.link
-                                            }
-                                          </p>
-                                        </a>
-
-                                        {/* Open */}
-
-                                        <a
-                                          href={
-                                            material.link
-                                          }
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="hidden shrink-0 text-xs text-primary transition group-hover:block"
-                                        >
-                                          Open
-                                        </a>
-
-                                        {/* DELETE MATERIAL */}
-
-                                        {isTeacher &&
-                                          material.id && (
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="sm"
-                                              disabled={
-                                                isDeleting
-                                              }
-                                              onClick={() =>
-                                                handleDeleteMaterial(
-                                                  material,
-                                                  course.id!
-                                                )
-                                              }
-                                              className="size-8 shrink-0 p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                                              aria-label={`Delete ${material.name}`}
-                                            >
-                                              {isDeleting ? (
-                                                <Loader2 className="size-4 animate-spin" />
-                                              ) : (
-                                                <Trash2 className="size-4" />
-                                              )}
-                                            </Button>
-                                          )}
+                                  ) => (
+                                    <a
+                                      key={
+                                        material.id ||
+                                        `${courseId}-material-${materialIndex}`
+                                      }
+                                      href={
+                                        material.link
+                                      }
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="group flex items-center gap-3 rounded-lg border border-border bg-background p-3 transition hover:border-primary/50 hover:bg-primary/5"
+                                    >
+                                      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                                        <LinkIcon className="size-4 text-primary" />
                                       </div>
-                                    );
-                                  }
+
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate font-medium text-foreground">
+                                          {
+                                            material.name
+                                          }
+                                        </p>
+
+                                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                          {
+                                            material.link
+                                          }
+                                        </p>
+                                      </div>
+
+                                      <span className="shrink-0 text-xs text-primary opacity-0 transition group-hover:opacity-100">
+                                        Open
+                                      </span>
+                                    </a>
+                                  )
                                 )}
                               </div>
                             )}
@@ -1480,8 +1382,6 @@ export default function ClassDetailsPage() {
               }
               className="space-y-4"
             >
-              {/* Material name */}
-
               <div className="space-y-2">
                 <label className="block text-xs font-medium text-muted-foreground">
                   Material Name
@@ -1504,8 +1404,6 @@ export default function ClassDetailsPage() {
                   className="h-11 bg-background"
                 />
               </div>
-
-              {/* Material link */}
 
               <div className="space-y-2">
                 <label className="block text-xs font-medium text-muted-foreground">
@@ -1542,8 +1440,6 @@ export default function ClassDetailsPage() {
                 </p>
               </div>
 
-              {/* Link blocked */}
-
               {linkCheckError && (
                 <div className="flex gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
                   <ShieldAlert className="mt-0.5 size-5 shrink-0 text-destructive" />
@@ -1565,8 +1461,6 @@ export default function ClassDetailsPage() {
                 </div>
               )}
 
-              {/* Checking */}
-
               {checkingLink && (
                 <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
                   <Loader2 className="size-5 animate-spin text-primary" />
@@ -1584,8 +1478,6 @@ export default function ClassDetailsPage() {
                   </div>
                 </div>
               )}
-
-              {/* Safety information */}
 
               {!checkingLink &&
                 !linkCheckError && (
@@ -1606,8 +1498,6 @@ export default function ClassDetailsPage() {
                     </div>
                   </div>
                 )}
-
-              {/* Buttons */}
 
               <div className="flex gap-3 pt-2">
                 <Button
