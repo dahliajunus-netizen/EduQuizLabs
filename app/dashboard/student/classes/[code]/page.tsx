@@ -95,7 +95,7 @@ export default function ClassDetailsPage() {
   const [creatingCourse, setCreatingCourse] =
     useState(false);
 
-  // Open/closed courses
+  // Open / closed courses
   const [openCourses, setOpenCourses] =
     useState<Record<string, boolean>>({});
 
@@ -134,6 +134,7 @@ export default function ClassDetailsPage() {
     try {
       let detectedRole = '';
 
+      // Direct role
       const directRole =
         localStorage.getItem('user_role');
 
@@ -142,6 +143,7 @@ export default function ClassDetailsPage() {
           directRole.toLowerCase();
       }
 
+      // Current user
       const currentUserRaw =
         localStorage.getItem('current_user');
 
@@ -161,7 +163,7 @@ export default function ClassDetailsPage() {
               String(role).toLowerCase();
           }
         } catch {
-          // Ignore invalid current_user JSON
+          // Ignore invalid JSON
         }
       }
 
@@ -186,7 +188,8 @@ export default function ClassDetailsPage() {
           if (!raw) continue;
 
           try {
-            const parsed = JSON.parse(raw);
+            const parsed =
+              JSON.parse(raw);
 
             const role =
               parsed?.role ||
@@ -244,10 +247,7 @@ export default function ClassDetailsPage() {
             `Bearer ${supabaseAnonKey}`,
         };
 
-        /*
-         * Fetch class
-         */
-
+        // Fetch class
         const classResponse = await fetch(
           `${supabaseUrl}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(
             code
@@ -276,10 +276,7 @@ export default function ClassDetailsPage() {
 
         setClassData(classList[0]);
 
-        /*
-         * Fetch courses
-         */
-
+        // Fetch courses
         const coursesResponse =
           await fetch(
             `${supabaseUrl}/rest/v1/class_courses?class_code=eq.${encodeURIComponent(
@@ -301,10 +298,7 @@ export default function ClassDetailsPage() {
 
         setCourses(courseList);
 
-        /*
-         * Fetch materials for each course
-         */
-
+        // Fetch materials
         const materialMap:
           Record<string, Material[]> = {};
 
@@ -555,6 +549,7 @@ export default function ClassDetailsPage() {
     setMaterialName('');
     setMaterialLink('');
     setLinkCheckError(null);
+    setCheckingLink(false);
     setIsMaterialModalOpen(true);
   };
 
@@ -579,8 +574,8 @@ export default function ClassDetailsPage() {
    * ------------------------------------------------------------
    * AI LINK SAFETY CHECK
    *
-   * The URL is sent to /api/check-link.
-   * The API route should perform the actual AI moderation.
+   * Uses:
+   * /api/moderate-link
    * ------------------------------------------------------------
    */
 
@@ -589,7 +584,7 @@ export default function ClassDetailsPage() {
   ): Promise<LinkCheckResult> => {
     try {
       const response = await fetch(
-        '/api/check-link',
+        '/api/moderate-link',
         {
           method: 'POST',
 
@@ -604,8 +599,13 @@ export default function ClassDetailsPage() {
         }
       );
 
-      const data =
-        await response.json();
+      let data: any = null;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
 
       if (!response.ok) {
         throw new Error(
@@ -671,7 +671,7 @@ export default function ClassDetailsPage() {
 
     try {
       /*
-       * First validate that the URL is actually a URL.
+       * Validate URL
        */
 
       let parsedUrl: URL;
@@ -688,9 +688,7 @@ export default function ClassDetailsPage() {
       }
 
       /*
-       * Only allow normal web URLs.
-       * This prevents things such as javascript:
-       * URLs from being submitted.
+       * Only HTTP / HTTPS
        */
 
       if (
@@ -708,9 +706,7 @@ export default function ClassDetailsPage() {
         parsedUrl.toString();
 
       /*
-       * --------------------------------------------------------
        * AI CHECK
-       * --------------------------------------------------------
        */
 
       const checkResult =
@@ -721,8 +717,7 @@ export default function ClassDetailsPage() {
       setCheckingLink(false);
 
       /*
-       * If AI says the link is unsafe,
-       * DO NOT save it to Supabase.
+       * Unsafe link
        */
 
       if (!checkResult.safe) {
@@ -731,16 +726,13 @@ export default function ClassDetailsPage() {
           'This link does not appear appropriate for an educational platform.';
 
         setLinkCheckError(reason);
-
         setCreatingMaterial(false);
 
         return;
       }
 
       /*
-       * --------------------------------------------------------
-       * Link is safe — now save it.
-       * --------------------------------------------------------
+       * Safe link — save to Supabase
        */
 
       const response = await fetch(
@@ -812,7 +804,7 @@ export default function ClassDetailsPage() {
       }));
 
       /*
-       * Automatically open the course.
+       * Automatically open course
        */
 
       setOpenCourses((previous) => ({
@@ -843,7 +835,7 @@ export default function ClassDetailsPage() {
 
   /*
    * ------------------------------------------------------------
-   * Loading state
+   * Loading
    * ------------------------------------------------------------
    */
 
@@ -861,7 +853,7 @@ export default function ClassDetailsPage() {
 
   /*
    * ------------------------------------------------------------
-   * Error state
+   * Error
    * ------------------------------------------------------------
    */
 
@@ -883,7 +875,6 @@ export default function ClassDetailsPage() {
               className="mb-6 gap-2"
             >
               <ArrowLeft className="size-4" />
-
               Back to Dashboard
             </Button>
           </Link>
@@ -931,15 +922,12 @@ export default function ClassDetailsPage() {
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Link
-              href={dashboardUrl}
-            >
+            <Link href={dashboardUrl}>
               <Button
                 variant="ghost"
                 className="-ml-3 mb-3 gap-2"
               >
                 <ArrowLeft className="size-4" />
-
                 Back to Dashboard
               </Button>
             </Link>
@@ -977,7 +965,6 @@ export default function ClassDetailsPage() {
               className="gap-2"
             >
               <PlusCircle size={18} />
-
               Create New Course
             </Button>
           )}
@@ -1024,7 +1011,6 @@ export default function ClassDetailsPage() {
                     className="mt-5 gap-2"
                   >
                     <PlusCircle size={16} />
-
                     Create Course
                   </Button>
                 )}
@@ -1119,8 +1105,7 @@ export default function ClassDetailsPage() {
                       {isOpen && (
                         <CardContent className="space-y-5 border-t border-border pt-5">
                           <p className="text-sm text-muted-foreground">
-                            Materials and
-                            learning
+                            Materials and learning
                             resources for{' '}
                             <span className="font-semibold text-foreground">
                               {
@@ -1157,7 +1142,6 @@ export default function ClassDetailsPage() {
                                         15
                                       }
                                     />
-
                                     Add Material
                                   </Button>
                                 )}
@@ -1393,6 +1377,9 @@ export default function ClassDetailsPage() {
                   }
                   required
                   autoFocus
+                  disabled={
+                    creatingMaterial
+                  }
                   className="h-11 bg-background"
                 />
               </div>
@@ -1434,7 +1421,7 @@ export default function ClassDetailsPage() {
                 </p>
               </div>
 
-              {/* AI warning */}
+              {/* Link blocked */}
 
               {linkCheckError && (
                 <div className="flex gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
@@ -1457,7 +1444,7 @@ export default function ClassDetailsPage() {
                 </div>
               )}
 
-              {/* Checking indicator */}
+              {/* Checking */}
 
               {checkingLink && (
                 <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
@@ -1470,9 +1457,8 @@ export default function ClassDetailsPage() {
 
                     <p className="text-xs text-muted-foreground">
                       Making sure this
-                      material is
-                      appropriate for
-                      students.
+                      material is appropriate
+                      for students.
                     </p>
                   </div>
                 </div>
