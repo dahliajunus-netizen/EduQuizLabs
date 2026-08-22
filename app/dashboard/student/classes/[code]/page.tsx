@@ -226,7 +226,7 @@ export default function ClassDetailsPage() {
                   <Card key={cId} className="bg-card hover:border-primary/50 transition w-full">
                     <CardHeader className="flex flex-row items-center justify-between py-4">
                       <div className="flex items-center gap-3">
-                        {/* Green Circle Area: Dropdown Toggle Button */}
+                        {/* Dropdown Toggle Button */}
                         <Button 
                           variant="ghost" 
                           size="sm" 
@@ -258,7 +258,7 @@ export default function ClassDetailsPage() {
                         <p>Course materials, assignments, and lessons for <span className="text-foreground font-semibold">{course.course_name}</span> will appear here.</p>
                       </CardContent>
                     )}
-                  </CardCard>
+                  </Card>
                 );
               })}
             </div>
