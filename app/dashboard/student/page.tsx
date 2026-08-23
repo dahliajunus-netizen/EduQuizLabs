@@ -32,10 +32,7 @@ export default function StudentDashboard() {
 
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  const headers = useMemo(() => ({
-    apikey: SUPABASE_KEY,
-    Authorization: `Bearer ${SUPABASE_KEY}`,
-  }), [SUPABASE_KEY]);
+  const headers = useMemo(() => ({ apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }), [SUPABASE_KEY]);
 
   const text = language === 'id' ? {
     dashboardTitle: 'Dasbor Siswa', dashboardDescription: 'Pantau tugas sekolah, bergabung ke kelas dengan kode, dan lihat tugas yang akan datang.',
@@ -58,12 +55,9 @@ export default function StudentDashboard() {
       const raw = localStorage.getItem('current_user');
       if (!raw) return null;
       const user: CurrentUser = JSON.parse(raw);
-      // The signup/login account UUID is the student's student_id.
       const id = user.student_id ?? user.id ?? user.user_id ?? user.uid;
       return id ? String(id).trim() : null;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }, []);
 
   const fetchDashboardData = useCallback(async () => {
@@ -71,196 +65,78 @@ export default function StudentDashboard() {
     try {
       const studentId = getStudentId();
       if (!studentId) {
-        console.error('[Student Dashboard] No student UUID in current_user.');
         setMyClasses([]); setTeacherClasses([]); setCourses([]); setAssignments([]); setSubmissions([]);
         return;
       }
-
-      const classesResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/student_classes?student_id=eq.${encodeURIComponent(studentId)}&select=id,class_name,code,school,course_id,student_id`,
-        { headers, cache: 'no-store' }
-      );
+      const classesResponse = await fetch(`${SUPABASE_URL}/rest/v1/student_classes?student_id=eq.${encodeURIComponent(studentId)}&select=id,class_name,code,school,course_id,student_id`, { headers, cache: 'no-store' });
       if (!classesResponse.ok) throw new Error(await classesResponse.text());
       const classesData: StudentClass[] = await classesResponse.json();
       setMyClasses(classesData);
-
       const codes = [...new Set(classesData.map(x => x.code).filter(Boolean))];
-      if (!codes.length) {
-        setTeacherClasses([]); setCourses([]); setAssignments([]); setSubmissions([]);
-        return;
-      }
-
+      if (!codes.length) { setTeacherClasses([]); setCourses([]); setAssignments([]); setSubmissions([]); return; }
       const filter = codes.map(x => `"${String(x).replace(/"/g, '\\"')}"`).join(',');
-
-      const teacherResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/teacher_classes?code=in.(${filter})&select=id,code,school_name,class_name,teacher_id`,
-        { headers, cache: 'no-store' }
-      );
+      const teacherResponse = await fetch(`${SUPABASE_URL}/rest/v1/teacher_classes?code=in.(${filter})&select=id,code,school_name,class_name,teacher_id`, { headers, cache: 'no-store' });
       if (teacherResponse.ok) setTeacherClasses(await teacherResponse.json());
-
-      const coursesResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/class_courses?class_code=in.(${filter})&select=id,course_name,class_code&order=id.asc`,
-        { headers, cache: 'no-store' }
-      );
+      const coursesResponse = await fetch(`${SUPABASE_URL}/rest/v1/class_courses?class_code=in.(${filter})&select=id,course_name,class_code&order=id.asc`, { headers, cache: 'no-store' });
       if (!coursesResponse.ok) throw new Error(await coursesResponse.text());
       const coursesData: Course[] = await coursesResponse.json();
       setCourses(coursesData);
-
       const courseIds = [...new Set(coursesData.map(x => x.id).filter(Boolean))];
-      if (!courseIds.length) {
-        setAssignments([]); setSubmissions([]); return;
-      }
-
+      if (!courseIds.length) { setAssignments([]); setSubmissions([]); return; }
       const courseFilter = courseIds.map(x => `"${x}"`).join(',');
-      const assignmentsResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/course_assignments?course_id=in.(${courseFilter})&select=id,course_id,name,description,created_at,due_date&order=due_date.asc.nullslast`,
-        { headers, cache: 'no-store' }
-      );
+      const assignmentsResponse = await fetch(`${SUPABASE_URL}/rest/v1/course_assignments?course_id=in.(${courseFilter})&select=id,course_id,name,description,created_at,due_date&order=due_date.asc.nullslast`, { headers, cache: 'no-store' });
       if (!assignmentsResponse.ok) throw new Error(await assignmentsResponse.text());
       const assignmentsData: Assignment[] = await assignmentsResponse.json();
       setAssignments(assignmentsData);
-
-      if (!assignmentsData.length) {
-        setSubmissions([]); return;
-      }
-
+      if (!assignmentsData.length) { setSubmissions([]); return; }
       const assignmentFilter = assignmentsData.map(x => `"${x.id}"`).join(',');
-      const submissionsResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/assignment_submissions?assignment_id=in.(${assignmentFilter})&select=id,assignment_id,student_id,nickname,class,link,grade,created_at&order=created_at.desc`,
-        { headers, cache: 'no-store' }
-      );
+      const submissionsResponse = await fetch(`${SUPABASE_URL}/rest/v1/assignment_submissions?assignment_id=in.(${assignmentFilter})&select=id,assignment_id,student_id,nickname,class,link,grade,created_at&order=created_at.desc`, { headers, cache: 'no-store' });
       if (!submissionsResponse.ok) throw new Error(await submissionsResponse.text());
       const allSubmissions: Submission[] = await submissionsResponse.json();
       setSubmissions(allSubmissions.filter(x => String(x.student_id ?? '').trim() === studentId));
-    } catch (error) {
-      console.error('[Student Dashboard] Error loading dashboard:', error);
-      setSubmissions([]);
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { console.error('[Student Dashboard] Error loading dashboard:', error); setSubmissions([]); }
+    finally { setLoading(false); }
   }, [SUPABASE_URL, headers, getStudentId]);
 
   useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
-
   useEffect(() => {
     const refresh = () => fetchDashboardData();
     const visibility = () => { if (document.visibilityState === 'visible') fetchDashboardData(); };
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('focus', refresh); document.addEventListener('visibilitychange', visibility);
     const interval = setInterval(refresh, 10000);
-    return () => {
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', visibility);
-      clearInterval(interval);
-    };
+    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', visibility); clearInterval(interval); };
   }, [fetchDashboardData]);
 
   const handleJoinClass = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCodeError(null);
-
-    const code = classCode.trim();
-    if (!code) return;
+    e.preventDefault(); setCodeError(null);
+    const code = classCode.trim(); if (!code) return;
     setJoining(true);
-
     try {
-      if (!SUPABASE_URL || !SUPABASE_KEY) {
-        throw new Error('Supabase environment variables are missing.');
-      }
-
+      if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('Supabase environment variables are missing.');
       const studentId = getStudentId();
-      if (!studentId) {
-        throw new Error('Student UUID not found in current_user. Please sign in again.');
-      }
-
-      console.log('[Student Dashboard] Joining:', { code, studentId });
-
-      // Find the teacher's class. ilike prevents a lowercase/uppercase mismatch.
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/teacher_classes?code=ilike.${encodeURIComponent(code)}&select=id,code,class_name,school_name,teacher_id&limit=1`,
-        { headers, cache: 'no-store' }
-      );
-
-      if (!response.ok) {
-        const body = await response.text();
-        throw new Error(`Could not look up class (${response.status}): ${body}`);
-      }
-
+      if (!studentId) throw new Error('Student UUID not found in current_user. Please sign in again.');
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/teacher_classes?code=ilike.${encodeURIComponent(code)}&select=id,code,class_name,school_name,teacher_id&limit=1`, { headers, cache: 'no-store' });
+      if (!response.ok) throw new Error(`Could not look up class (${response.status}): ${await response.text()}`);
       const found = (await response.json())?.[0];
-      if (!found) {
-        setCodeError(text.codeInvalid);
-        return;
-      }
-
+      if (!found) { setCodeError(text.codeInvalid); return; }
       const actualCode = String(found.code);
-
-      // Check membership using BOTH student UUID and class code.
-      const existingResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/student_classes?student_id=eq.${encodeURIComponent(studentId)}&code=ilike.${encodeURIComponent(actualCode)}&select=id&limit=1`,
-        { headers, cache: 'no-store' }
-      );
-      if (!existingResponse.ok) {
-        const body = await existingResponse.text();
-        throw new Error(`Could not check membership (${existingResponse.status}): ${body}`);
-      }
-
-      const existingRows = await existingResponse.json();
-      if (existingRows.length) {
-        setCodeError(text.alreadyJoined);
-        return;
-      }
-
-      // IMPORTANT FIX:
-      // Insert exactly ONE membership row. The old code inserted one row for
-      // every course, which can violate a unique student/class constraint.
-      // course_id is intentionally null; courses are resolved by class code
-      // when the dashboard loads.
-      const insertBody = {
-        class_name: found.class_name,
-        code: actualCode,
-        school: found.school_name ?? null,
-        course_id: null,
-        student_id: studentId,
-      };
-
-      const insert = await fetch(`${SUPABASE_URL}/rest/v1/student_classes`, {
-        method: 'POST',
-        headers: {
-          ...headers,
-          'Content-Type': 'application/json',
-          Prefer: 'return=representation',
-        },
-        body: JSON.stringify(insertBody),
-      });
-
+      const existingResponse = await fetch(`${SUPABASE_URL}/rest/v1/student_classes?student_id=eq.${encodeURIComponent(studentId)}&code=ilike.${encodeURIComponent(actualCode)}&select=id&limit=1`, { headers, cache: 'no-store' });
+      if (!existingResponse.ok) throw new Error(`Could not check membership (${existingResponse.status}): ${await existingResponse.text()}`);
+      if ((await existingResponse.json()).length) { setCodeError(text.alreadyJoined); return; }
+      const insert = await fetch(`${SUPABASE_URL}/rest/v1/student_classes`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify({ class_name: found.class_name, code: actualCode, school: found.school_name ?? null, course_id: null, student_id: studentId }) });
       if (!insert.ok) {
-        const body = await insert.text();
-        console.error('[Student Dashboard] Supabase INSERT failed:', insert.status, body);
-        let readable = body || text.unknownError;
-        try {
-          const parsed = JSON.parse(body);
-          readable = parsed.message || parsed.details || parsed.hint || body;
-        } catch {}
+        const body = await insert.text(); let readable = body || text.unknownError;
+        try { const parsed = JSON.parse(body); readable = parsed.message || parsed.details || parsed.hint || body; } catch {}
         throw new Error(`Failed to join class (${insert.status}): ${readable}`);
       }
-
-      console.log('[Student Dashboard] Joined successfully:', await insert.json().catch(() => null));
-      setClassCode('');
-      await fetchDashboardData();
-    } catch (error) {
-      console.error('[Student Dashboard] Join error:', error);
-      setCodeError(error instanceof Error ? error.message : text.networkError);
-    } finally {
-      setJoining(false);
-    }
+      setClassCode(''); await fetchDashboardData();
+    } catch (error) { console.error('[Student Dashboard] Join error:', error); setCodeError(error instanceof Error ? error.message : text.networkError); }
+    finally { setJoining(false); }
   };
 
   const getLatestSubmission = useCallback((assignmentId: string) => {
-    const studentId = getStudentId();
-    if (!studentId) return null;
-    return submissions
-      .filter(x => x.assignment_id === assignmentId && String(x.student_id ?? '').trim() === studentId)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] ?? null;
+    const studentId = getStudentId(); if (!studentId) return null;
+    return submissions.filter(x => x.assignment_id === assignmentId && String(x.student_id ?? '').trim() === studentId).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] ?? null;
   }, [submissions, getStudentId]);
 
   const gradeHistory: GradeHistoryItem[] = assignments.map(a => {
@@ -269,91 +145,39 @@ export default function StudentDashboard() {
     return { name: a.name, grade: Number(s.grade), type: 'assignment' as const };
   }).filter((x): x is GradeHistoryItem => x !== null);
 
-  const averageGrade = gradeHistory.length
-    ? Math.round((gradeHistory.reduce((sum, x) => sum + x.grade, 0) / gradeHistory.length) * 100) / 100
-    : null;
-
-  const sortedAssignments = [...assignments]
-    .filter(a => !getLatestSubmission(a.id))
-    .sort((a, b) => {
-      if (!a.due_date && !b.due_date) return 0;
-      if (!a.due_date) return 1;
-      if (!b.due_date) return -1;
-      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-    });
-
+  const averageGrade = gradeHistory.length ? Math.round((gradeHistory.reduce((sum, x) => sum + x.grade, 0) / gradeHistory.length) * 100) / 100 : null;
+  const sortedAssignments = [...assignments].filter(a => !getLatestSubmission(a.id)).sort((a, b) => {
+    if (!a.due_date && !b.due_date) return 0; if (!a.due_date) return 1; if (!b.due_date) return -1;
+    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+  });
   const dueStatus = (date: string | null) => {
     if (!date) return { label: text.noDueDate, className: 'text-muted-foreground' };
-    const d = new Date(date), n = new Date();
-    const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
-    const due = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
-    if (diff < 0) return { label: text.overdue, className: 'text-red-500' };
-    if (diff === 0) return { label: text.dueToday, className: 'text-orange-500' };
-    if (diff === 1) return { label: text.dueTomorrow, className: 'text-yellow-500' };
+    const d = new Date(date), n = new Date(); const today = new Date(n.getFullYear(), n.getMonth(), n.getDate()); const due = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
+    if (diff < 0) return { label: text.overdue, className: 'text-red-500' }; if (diff === 0) return { label: text.dueToday, className: 'text-orange-500' }; if (diff === 1) return { label: text.dueTomorrow, className: 'text-yellow-500' };
     return { label: `${text.dueIn} ${diff} ${text.days}`, className: 'text-primary' };
   };
-
-  const formatDate = (date: string | null) => !date
-    ? text.noDueDate
-    : new Date(date).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
-
-  const classAssignments = (c: StudentClass) => {
-    const classCourseIds = new Set(courses.filter(course => course.class_code === c.code).map(course => course.id));
-    return assignments.filter(a => classCourseIds.has(a.course_id) && !getLatestSubmission(a.id));
-  };
+  const formatDate = (date: string | null) => !date ? text.noDueDate : new Date(date).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  const classAssignments = (c: StudentClass) => assignments.filter(a => courses.some(course => course.id === a.course_id && course.class_code === c.code) && !getLatestSubmission(a.id));
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="container mx-auto px-6 py-8 space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">{text.dashboardTitle}</h1>
-          <p className="text-muted-foreground">{text.dashboardDescription}</p>
-        </div>
+        <div><h1 className="text-3xl font-bold tracking-tight text-foreground">{text.dashboardTitle}</h1><p className="text-muted-foreground">{text.dashboardDescription}</p></div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="bg-card">
-            <CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><PlusCircle className="h-5 w-5 text-primary" />{text.classCodeInput}</CardTitle></CardHeader>
-            <CardContent>
-              <form onSubmit={handleJoinClass} className="space-y-3">
-                <div className="flex gap-3">
-                  <Input value={classCode} onChange={e => { setClassCode(e.target.value); setCodeError(null); }} placeholder={text.enterCode} className="bg-background uppercase" />
-                  <Button type="submit" disabled={joining}>{joining ? <Loader2 className="size-4 animate-spin" /> : text.joinClass}</Button>
-                </div>
-                {codeError && <p className="text-xs font-medium text-red-500 break-words">{codeError}</p>}
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card cursor-pointer hover:bg-accent/20 transition" onClick={() => setShowGrades(true)}>
-            <CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" />{text.averageGrades}</CardTitle></CardHeader>
-            <CardContent>
-              {loading ? <Loader2 className="size-6 animate-spin text-muted-foreground" /> : averageGrade === null ? <><p className="text-4xl font-bold text-muted-foreground">—</p><p className="text-sm text-muted-foreground mt-1">{text.noGrades}</p></> : <><p className="text-4xl font-bold text-primary">{averageGrade}</p><p className="text-sm text-muted-foreground mt-1">{gradeHistory.length} {text.grades}</p></>}
-            </CardContent>
-          </Card>
+          <Card className="bg-card"><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><PlusCircle className="h-5 w-5 text-primary" />{text.classCodeInput}</CardTitle></CardHeader><CardContent><form onSubmit={handleJoinClass} className="space-y-3"><div className="flex gap-3"><Input value={classCode} onChange={e => { setClassCode(e.target.value); setCodeError(null); }} placeholder={text.enterCode} className="bg-background uppercase" /><Button type="submit" disabled={joining}>{joining ? <Loader2 className="size-4 animate-spin" /> : text.joinClass}</Button></div>{codeError && <p className="text-xs font-medium text-red-500">{codeError}</p>}</form></CardContent></Card>
+          <Card className="bg-card cursor-pointer hover:bg-accent/20 transition" onClick={() => setShowGrades(true)}><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" />{text.averageGrades}</CardTitle></CardHeader><CardContent>{loading ? <Loader2 className="size-6 animate-spin text-muted-foreground" /> : averageGrade === null ? <><p className="text-4xl font-bold text-muted-foreground">—</p><p className="text-sm text-muted-foreground mt-1">{text.noGrades}</p></> : <><p className="text-4xl font-bold text-primary">{averageGrade}</p><p className="text-sm text-muted-foreground mt-1">{gradeHistory.length} {text.grades}</p></>}</CardContent></Card>
         </div>
 
-        <Card className="bg-card">
-          <CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><BookOpen className="h-5 w-5 text-primary" />{text.classesYouAreIn}</CardTitle></CardHeader>
-          <CardContent>
-            {loading ? <div className="flex justify-center py-6"><Loader2 className="size-6 animate-spin" /></div> : myClasses.length === 0 ? <p className="text-sm text-muted-foreground">{text.noClasses}</p> : <div className="space-y-3">{myClasses.map(c => <Link key={c.id} href={`/dashboard/student/classes/${c.code}`}><div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition"><div className="min-w-0"><h4 className="font-medium truncate">{c.class_name}</h4><p className="text-xs text-muted-foreground">{text.school} {c.school || '—'}</p></div><div className="flex items-center gap-3 shrink-0"><div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><CalendarDays className="h-4 w-4 text-primary" /><span>{classAssignments(c).length} {text.assignmentCount}</span></div><span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">{text.active}</span></div></div></Link>)}</div>}
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <Card className="bg-card"><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><BookOpen className="h-5 w-5 text-primary" />{text.classesYouAreIn}</CardTitle></CardHeader><CardContent>{loading ? <div className="flex justify-center py-6"><Loader2 className="size-6 animate-spin" /></div> : myClasses.length === 0 ? <p className="text-sm text-muted-foreground">{text.noClasses}</p> : <div className="space-y-3">{myClasses.map(c => <Link key={c.id} href={`/dashboard/student/classes/${c.code}`}><div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition"><div className="min-w-0"><h4 className="font-medium truncate">{c.class_name}</h4><p className="text-xs text-muted-foreground">{text.school} {c.school || '—'}</p></div><div className="flex items-center gap-3 shrink-0"><div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><CalendarDays className="h-4 w-4 text-primary" /><span>{classAssignments(c).length} {text.assignmentCount}</span></div><span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">{text.active}</span></div></div></Link>)}</div>}</CardContent></Card>
 
-        <Card className="bg-card">
-          <CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" />{text.assignmentsDue}</CardTitle></CardHeader>
-          <CardContent>
-            {loading ? <div className="flex justify-center py-6"><Loader2 className="size-6 animate-spin" /></div> : sortedAssignments.length === 0 ? <p className="text-sm text-muted-foreground">{text.noAssignments}</p> : <div className="space-y-3">{sortedAssignments.map(a => { const status = dueStatus(a.due_date); const c = myClasses.find(x => courses.some(course => course.class_code === x.code && course.id === a.course_id)); return <div key={a.id} className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20"><div className="min-w-0"><h4 className="font-medium truncate">{a.name}</h4>{c && <p className="text-xs text-muted-foreground mt-1">{c.class_name}</p>}</div><div className="text-right shrink-0"><p className={`text-sm font-semibold ${status.className}`}>{status.label}</p><p className="text-xs text-muted-foreground mt-1">{formatDate(a.due_date)}</p></div></div>; })}</div>}
-          </CardContent>
-        </Card>
+          <Card className="bg-card"><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" />{text.assignmentsDue}</CardTitle></CardHeader><CardContent>{loading ? <div className="flex justify-center py-6"><Loader2 className="size-6 animate-spin" /></div> : sortedAssignments.length === 0 ? <p className="text-sm text-muted-foreground">{text.noAssignments}</p> : <div className="space-y-3">{sortedAssignments.map(a => { const status = dueStatus(a.due_date); const c = myClasses.find(x => courses.some(course => course.id === a.course_id && course.class_code === x.code)); return <div key={a.id} className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20"><div className="min-w-0"><h4 className="font-medium truncate">{a.name}</h4>{c && <p className="text-xs text-muted-foreground mt-1">{c.class_name}</p>}</div><div className="text-right shrink-0"><p className={`text-sm font-semibold ${status.className}`}>{status.label}</p><p className="text-xs text-muted-foreground mt-1">{formatDate(a.due_date)}</p></div></div>; })}</div>}</CardContent></Card>
+        </div>
       </main>
 
-      {showGrades && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowGrades(false)}><div className="w-full max-w-lg max-h-[80vh] overflow-hidden bg-card border border-border rounded-xl shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-border"><div><h2 className="text-xl font-bold">{text.gradeHistory}</h2>{averageGrade !== null && <p className="text-sm text-muted-foreground mt-1">{text.averageGrades}: <span className="font-semibold text-primary">{averageGrade}</span></p>}</div><Button variant="ghost" size="icon" onClick={() => setShowGrades(false)}><X className="h-5 w-5" /></Button></div>
-        <div className="p-5 overflow-y-auto max-h-[55vh]">{gradeHistory.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">{text.noGrades}</p> : <div className="space-y-2">{gradeHistory.map((g, i) => <div key={`${g.name}-${i}`} className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20"><div><p className="font-medium truncate">{g.name}</p><p className="text-xs text-muted-foreground">{g.type === 'assignment' ? text.assignment : text.test}</p></div><p className="text-lg font-bold text-primary ml-4">{g.grade}</p></div>)}</div>}</div>
-        <div className="flex justify-end p-5 border-t border-border"><Button variant="outline" onClick={() => setShowGrades(false)}>{text.close}</Button></div>
-      </div></div>}
+      {showGrades && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowGrades(false)}><div className="w-full max-w-lg max-h-[80vh] overflow-hidden bg-card border border-border rounded-xl shadow-xl" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between p-5 border-b border-border"><div><h2 className="text-xl font-bold">{text.gradeHistory}</h2>{averageGrade !== null && <p className="text-sm text-muted-foreground mt-1">{text.averageGrades}: <span className="font-semibold text-primary">{averageGrade}</span></p>}</div><Button variant="ghost" size="icon" onClick={() => setShowGrades(false)}><X className="h-5 w-5" /></Button></div><div className="p-5 overflow-y-auto max-h-[55vh]">{gradeHistory.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">{text.noGrades}</p> : <div className="space-y-2">{gradeHistory.map((g, i) => <div key={`${g.name}-${i}`} className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20"><div><p className="font-medium truncate">{g.name}</p><p className="text-xs text-muted-foreground">{g.type === 'assignment' ? text.assignment : text.test}</p></div><p className="text-lg font-bold text-primary ml-4">{g.grade}</p></div>)}</div>}</div><div className="flex justify-end p-5 border-t border-border"><Button variant="outline" onClick={() => setShowGrades(false)}>{text.close}</Button></div></div></div>}
     </div>
   );
 }
