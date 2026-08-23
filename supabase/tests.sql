@@ -1,45 +1,47 @@
--- ISIF / EduQuizLabs Tests schema
--- Run this in Supabase SQL Editor before using the Tests pages.
+-- Add this function after creating tests, test_questions and test_submissions.
 
-create table if not exists public.tests (
-  id uuid primary key default gen_random_uuid(),
-  class_code text not null,
-  title text not null,
-  description text,
-  published boolean not null default false,
-  created_at timestamptz not null default now()
-);
+create or replace function public.submit_test(
+  p_test_id uuid,
+  p_student_id uuid,
+  p_answers jsonb
+)
+returns table (id uuid, test_id uuid, student_id uuid, answers jsonb, score numeric)
+language plpgsql security definer set search_path = public
+as $$
+declare
+  total_points numeric := 0;
+  earned_points numeric := 0;
+  q record;
+  calculated_score numeric;
+  new_submission public.test_submissions;
+begin
+  if exists (select 1 from public.test_submissions where test_id = p_test_id and student_id = p_student_id) then
+    raise exception 'You have already submitted this test';
+  end if;
 
-create table if not exists public.test_questions (
-  id uuid primary key default gen_random_uuid(),
-  test_id uuid not null references public.tests(id) on delete cascade,
-  question_order integer not null default 1,
-  question text not null,
-  option_a text not null,
-  option_b text not null,
-  option_c text not null,
-  option_d text not null,
-  correct_answer char(1) not null check (correct_answer in ('A','B','C','D')),
-  points integer not null default 1 check (points >= 0),
-  created_at timestamptz not null default now()
-);
+  if not exists (select 1 from public.tests where id = p_test_id and published = true) then
+    raise exception 'Test is not published or does not exist';
+  end if;
 
-create table if not exists public.test_submissions (
-  id uuid primary key default gen_random_uuid(),
-  test_id uuid not null references public.tests(id) on delete cascade,
-  student_id uuid not null,
-  answers jsonb not null default '{}'::jsonb,
-  score numeric(6,2) not null default 0 check (score >= 0 and score <= 100),
-  created_at timestamptz not null default now()
-);
+  for q in select id, correct_answer, points from public.test_questions where test_id = p_test_id loop
+    total_points := total_points + greatest(coalesce(q.points, 0), 0);
+    if upper(coalesce(p_answers ->> q.id::text, '')) = q.correct_answer then
+      earned_points := earned_points + greatest(coalesce(q.points, 0), 0);
+    end if;
+  end loop;
 
-create unique index if not exists test_submissions_one_per_student
-  on public.test_submissions(test_id, student_id);
+  if total_points <= 0 then calculated_score := 0;
+  else calculated_score := least(100, round((earned_points / total_points) * 100, 2));
+  end if;
 
-create index if not exists tests_class_code_idx on public.tests(class_code);
-create index if not exists test_questions_test_id_idx on public.test_questions(test_id);
-create index if not exists test_submissions_test_id_idx on public.test_submissions(test_id);
-create index if not exists test_submissions_student_id_idx on public.test_submissions(student_id);
+  insert into public.test_submissions(test_id, student_id, answers, score)
+  values (p_test_id, p_student_id, coalesce(p_answers, '{}'::jsonb), calculated_score)
+  returning * into new_submission;
 
--- The app uses the anon key like the existing assignment pages.
--- If your Supabase project has RLS enabled, add policies appropriate to your auth setup.
+  return query select new_submission.id, new_submission.test_id, new_submission.student_id, new_submission.answers, new_submission.score;
+exception when unique_violation then
+  raise exception 'You have already submitted this test';
+end;
+$$;
+
+grant execute on function public.submit_test(uuid, uuid, jsonb) to anon, authenticated;
