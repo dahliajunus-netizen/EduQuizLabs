@@ -14,6 +14,8 @@ type TeacherClass = { id: string; code: string; school_name: string | null; clas
 type Course = { id: string; course_name: string; class_code: string };
 type Assignment = { id: string; course_id: string; name: string; description: string | null; created_at: string; due_date: string | null };
 type Submission = { id: string; assignment_id: string; student_id: string; nickname: string | null; class: string | null; link: string; grade: number | null; created_at: string };
+type Test = { id: string; course_id: string; title: string; created_at?: string | null };
+type TestSubmission = { id: string; test_id: string; student_id: string; score: number | null; submitted_at: string };
 type GradeHistoryItem = { name: string; grade: number; type: 'assignment' | 'test' };
 type CurrentUser = { id?: string; student_id?: string; user_id?: string; uid?: string; fullName?: string; full_name?: string; email?: string; role?: string };
 
@@ -25,6 +27,8 @@ export default function StudentDashboard() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [testSubmissions, setTestSubmissions] = useState<TestSubmission[]>([]);
+  const [tests, setTests] = useState<Test[]>([]);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -65,7 +69,7 @@ export default function StudentDashboard() {
     try {
       const studentId = getStudentId();
       if (!studentId) {
-        setMyClasses([]); setTeacherClasses([]); setCourses([]); setAssignments([]); setSubmissions([]);
+        setMyClasses([]); setTeacherClasses([]); setCourses([]); setAssignments([]); setSubmissions([]); setTests([]); setTestSubmissions([]);
         return;
       }
       const classesResponse = await fetch(`${SUPABASE_URL}/rest/v1/student_classes?student_id=eq.${encodeURIComponent(studentId)}&select=id,class_name,code,school,course_id,student_id`, { headers, cache: 'no-store' });
@@ -73,8 +77,8 @@ export default function StudentDashboard() {
       const classesData: StudentClass[] = await classesResponse.json();
       setMyClasses(classesData);
       const codes = [...new Set(classesData.map(x => x.code).filter(Boolean))];
-      if (!codes.length) { setTeacherClasses([]); setCourses([]); setAssignments([]); setSubmissions([]); return; }
-      const filter = codes.map(x => `"${String(x).replace(/"/g, '\\"')}"`).join(',');
+      if (!codes.length) { setTeacherClasses([]); setCourses([]); setAssignments([]); setSubmissions([]); setTests([]); setTestSubmissions([]); return; }
+      const filter = codes.map(x => `\"${String(x).replace(/\"/g, '\\\"')}\"`).join(',');
       const teacherResponse = await fetch(`${SUPABASE_URL}/rest/v1/teacher_classes?code=in.(${filter})&select=id,code,school_name,class_name,teacher_id`, { headers, cache: 'no-store' });
       if (teacherResponse.ok) setTeacherClasses(await teacherResponse.json());
       const coursesResponse = await fetch(`${SUPABASE_URL}/rest/v1/class_courses?class_code=in.(${filter})&select=id,course_name,class_code&order=id.asc`, { headers, cache: 'no-store' });
@@ -82,19 +86,45 @@ export default function StudentDashboard() {
       const coursesData: Course[] = await coursesResponse.json();
       setCourses(coursesData);
       const courseIds = [...new Set(coursesData.map(x => x.id).filter(Boolean))];
-      if (!courseIds.length) { setAssignments([]); setSubmissions([]); return; }
-      const courseFilter = courseIds.map(x => `"${x}"`).join(',');
+      if (!courseIds.length) { setAssignments([]); setSubmissions([]); setTests([]); setTestSubmissions([]); return; }
+      const courseFilter = courseIds.map(x => `\"${x}\"`).join(',');
+
       const assignmentsResponse = await fetch(`${SUPABASE_URL}/rest/v1/course_assignments?course_id=in.(${courseFilter})&select=id,course_id,name,description,created_at,due_date&order=due_date.asc.nullslast`, { headers, cache: 'no-store' });
       if (!assignmentsResponse.ok) throw new Error(await assignmentsResponse.text());
       const assignmentsData: Assignment[] = await assignmentsResponse.json();
       setAssignments(assignmentsData);
-      if (!assignmentsData.length) { setSubmissions([]); return; }
-      const assignmentFilter = assignmentsData.map(x => `"${x.id}"`).join(',');
-      const submissionsResponse = await fetch(`${SUPABASE_URL}/rest/v1/assignment_submissions?assignment_id=in.(${assignmentFilter})&select=id,assignment_id,student_id,nickname,class,link,grade,created_at&order=created_at.desc`, { headers, cache: 'no-store' });
-      if (!submissionsResponse.ok) throw new Error(await submissionsResponse.text());
-      const allSubmissions: Submission[] = await submissionsResponse.json();
-      setSubmissions(allSubmissions.filter(x => String(x.student_id ?? '').trim() === studentId));
-    } catch (error) { console.error('[Student Dashboard] Error loading dashboard:', error); setSubmissions([]); }
+
+      if (!assignmentsData.length) {
+        setSubmissions([]);
+      } else {
+        const assignmentFilter = assignmentsData.map(x => `\"${x.id}\"`).join(',');
+        const submissionsResponse = await fetch(`${SUPABASE_URL}/rest/v1/assignment_submissions?assignment_id=in.(${assignmentFilter})&select=id,assignment_id,student_id,nickname,class,link,grade,created_at&order=created_at.desc`, { headers, cache: 'no-store' });
+        if (!submissionsResponse.ok) throw new Error(await submissionsResponse.text());
+        const allSubmissions: Submission[] = await submissionsResponse.json();
+        setSubmissions(allSubmissions.filter(x => String(x.student_id ?? '').trim() === studentId));
+      }
+
+      // Load published tests for all of the student's classes and their scores.
+      const testsResponse = await fetch(`${SUPABASE_URL}/rest/v1/tests?course_id=in.(${courseFilter})&published=eq.true&select=id,course_id,title,created_at&order=created_at.asc`, { headers, cache: 'no-store' });
+      if (!testsResponse.ok) throw new Error(await testsResponse.text());
+      const testsData: Test[] = await testsResponse.json();
+      setTests(testsData);
+
+      if (!testsData.length) {
+        setTestSubmissions([]);
+      } else {
+        const testFilter = testsData.map(x => `\"${x.id}\"`).join(',');
+        const testSubmissionsResponse = await fetch(`${SUPABASE_URL}/rest/v1/test_submissions?test_id=in.(${testFilter})&student_id=eq.${encodeURIComponent(studentId)}&select=id,test_id,student_id,score,submitted_at&order=submitted_at.desc`, { headers, cache: 'no-store' });
+        if (!testSubmissionsResponse.ok) throw new Error(await testSubmissionsResponse.text());
+        const allTestSubmissions: TestSubmission[] = await testSubmissionsResponse.json();
+        // Keep the most recent submission for each test.
+        const latestByTest = new Map<string, TestSubmission>();
+        for (const submission of allTestSubmissions) {
+          if (!latestByTest.has(submission.test_id)) latestByTest.set(submission.test_id, submission);
+        }
+        setTestSubmissions(Array.from(latestByTest.values()));
+      }
+    } catch (error) { console.error('[Student Dashboard] Error loading dashboard:', error); setSubmissions([]); setTests([]); setTestSubmissions([]); }
     finally { setLoading(false); }
   }, [SUPABASE_URL, headers, getStudentId]);
 
@@ -139,11 +169,19 @@ export default function StudentDashboard() {
     return submissions.filter(x => x.assignment_id === assignmentId && String(x.student_id ?? '').trim() === studentId).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] ?? null;
   }, [submissions, getStudentId]);
 
-  const gradeHistory: GradeHistoryItem[] = assignments.map(a => {
-    const s = getLatestSubmission(a.id);
-    if (!s || s.grade === null || s.grade === undefined || Number.isNaN(Number(s.grade))) return null;
-    return { name: a.name, grade: Number(s.grade), type: 'assignment' as const };
-  }).filter((x): x is GradeHistoryItem => x !== null);
+  const gradeHistory: GradeHistoryItem[] = [
+    ...assignments.map(a => {
+      const s = getLatestSubmission(a.id);
+      if (!s || s.grade === null || s.grade === undefined || Number.isNaN(Number(s.grade))) return null;
+      return { name: a.name, grade: Number(s.grade), type: 'assignment' as const };
+    }).filter((x): x is GradeHistoryItem => x !== null),
+    ...testSubmissions.map(s => {
+      const test = tests.find(t => t.id === s.test_id);
+      const score = Number(s.score);
+      if (!test || s.score === null || s.score === undefined || Number.isNaN(score)) return null;
+      return { name: test.title, grade: score, type: 'test' as const };
+    }).filter((x): x is GradeHistoryItem => x !== null),
+  ];
 
   const averageGrade = gradeHistory.length ? Math.round((gradeHistory.reduce((sum, x) => sum + x.grade, 0) / gradeHistory.length) * 100) / 100 : null;
   const sortedAssignments = [...assignments].filter(a => !getLatestSubmission(a.id)).sort((a, b) => {
