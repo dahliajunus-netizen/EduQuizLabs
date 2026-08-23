@@ -9,8 +9,9 @@ import { Input } from '@/components/ui/input';
 import { BookOpen, PlusCircle, Loader2, CalendarDays, BarChart3, X } from 'lucide-react';
 import { useLanguage } from '@/components/language-provider';
 
-type StudentClass = { id: string; class_name: string; code: string; school: string | null; course_id: string | null };
+type StudentClass = { id: string; class_name: string; code: string; school: string | null; course_id: string | null; student_id?: string | null };
 type TeacherClass = { id: string; code: string; school_name: string | null; class_name: string; teacher_id?: string | null };
+type Course = { id: string; course_name: string; class_code: string };
 type Assignment = { id: string; course_id: string; name: string; description: string | null; created_at: string; due_date: string | null };
 type Submission = { id: string; assignment_id: string; student_id: string; nickname: string | null; class: string | null; link: string; grade: number | null; created_at: string };
 type GradeHistoryItem = { name: string; grade: number; type: 'assignment' | 'test' };
@@ -69,37 +70,65 @@ export default function StudentDashboard() {
         return;
       }
 
-      const classesResponse = await fetch(`${SUPABASE_URL}/rest/v1/student_classes?select=id,class_name,code,school,course_id`, { headers, cache: 'no-store' });
+      // IMPORTANT: only load this student's class memberships.
+      const classesResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/student_classes?student_id=eq.${encodeURIComponent(studentId)}&select=id,class_name,code,school,course_id,student_id`,
+        { headers, cache: 'no-store' }
+      );
       if (!classesResponse.ok) throw new Error(await classesResponse.text());
       const classesData: StudentClass[] = await classesResponse.json();
       setMyClasses(classesData);
 
       const codes = [...new Set(classesData.map(x => x.code).filter(Boolean))];
-      if (codes.length) {
-        const filter = codes.map(x => `"${String(x).replace(/"/g, '\\"')}"`).join(',');
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/teacher_classes?code=in.(${filter})&select=id,code,school_name,class_name,teacher_id`, { headers, cache: 'no-store' });
-        if (r.ok) setTeacherClasses(await r.json());
+      if (!codes.length) {
+        setTeacherClasses([]);
+        setAssignments([]);
+        setSubmissions([]);
+        return;
       }
 
-      const courseIds = [...new Set(classesData.map(x => x.course_id).filter((x): x is string => !!x))];
-      if (!courseIds.length) { setAssignments([]); setSubmissions([]); return; }
+      const filter = codes.map(x => `"${String(x).replace(/"/g, '\\"')}"`).join(',');
+      const teacherResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/teacher_classes?code=in.(${filter})&select=id,code,school_name,class_name,teacher_id`,
+        { headers, cache: 'no-store' }
+      );
+      const teacherData: TeacherClass[] = teacherResponse.ok ? await teacherResponse.json() : [];
+      setTeacherClasses(teacherData);
+
+      // course_id in student_classes must reference class_courses.id.
+      // Older rows in this project incorrectly stored teacher_classes.id,
+      // so resolve the real courses from the class code instead.
+      const coursesResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/class_courses?class_code=in.(${filter})&select=id,course_name,class_code&order=id.asc`,
+        { headers, cache: 'no-store' }
+      );
+      if (!coursesResponse.ok) throw new Error(await coursesResponse.text());
+      const coursesData: Course[] = await coursesResponse.json();
+
+      const courseIds = [...new Set(coursesData.map(x => x.id).filter(Boolean))];
+      if (!courseIds.length) {
+        setAssignments([]);
+        setSubmissions([]);
+        return;
+      }
 
       const courseFilter = courseIds.map(x => `"${x}"`).join(',');
-      const assignmentsResponse = await fetch(`${SUPABASE_URL}/rest/v1/course_assignments?course_id=in.(${courseFilter})&select=id,course_id,name,description,created_at,due_date&order=due_date.asc.nullslast`, { headers, cache: 'no-store' });
+      const assignmentsResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/course_assignments?course_id=in.(${courseFilter})&select=id,course_id,name,description,created_at,due_date&order=due_date.asc.nullslast`,
+        { headers, cache: 'no-store' }
+      );
       if (!assignmentsResponse.ok) throw new Error(await assignmentsResponse.text());
       const assignmentsData: Assignment[] = await assignmentsResponse.json();
       setAssignments(assignmentsData);
 
-      if (!assignmentsData.length) { setSubmissions([]); return; }
+      if (!assignmentsData.length) {
+        setSubmissions([]);
+        return;
+      }
 
       const assignmentFilter = assignmentsData.map(x => `"${x.id}"`).join(',');
 
-      /*
-       * Fetch the assignment rows first, then filter by student_id in JavaScript.
-       * This avoids the previous dashboard bug where the PostgREST student_id
-       * filter could return no rows for the anon client. Most importantly,
-       * getLatestSubmission() below ALWAYS checks the logged-in student's UUID.
-       */
+      // Fetch submission rows and then match the student's UUID locally.
       const submissionsResponse = await fetch(
         `${SUPABASE_URL}/rest/v1/assignment_submissions?assignment_id=in.(${assignmentFilter})&select=id,assignment_id,student_id,nickname,class,link,grade,created_at&order=created_at.desc`,
         { headers, cache: 'no-store' }
@@ -135,25 +164,67 @@ export default function StudentDashboard() {
     const code = classCode.trim().toUpperCase(); if (!code) return;
     setJoining(true);
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(code)}&select=id,code,class_name,school_name,teacher_id`, { headers, cache: 'no-store' });
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(code)}&select=id,code,class_name,school_name,teacher_id`,
+        { headers, cache: 'no-store' }
+      );
       if (!response.ok) throw new Error();
       const found = (await response.json())?.[0];
       if (!found) { setCodeError(text.codeInvalid); return; }
-      if (myClasses.some(x => x.code?.toUpperCase() === found.code?.toUpperCase())) { setCodeError(text.alreadyJoined); return; }
+
       const studentId = getStudentId();
       if (!studentId) { setCodeError(text.networkError); return; }
+
+      // Check this student's membership, not everybody's membership.
+      const existingResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/student_classes?student_id=eq.${encodeURIComponent(studentId)}&code=eq.${encodeURIComponent(found.code)}&select=id,course_id`,
+        { headers, cache: 'no-store' }
+      );
+      if (!existingResponse.ok) throw new Error(await existingResponse.text());
+      const existingRows: StudentClass[] = await existingResponse.json();
+      if (existingRows.length) { setCodeError(text.alreadyJoined); return; }
+
+      // A class can contain multiple courses. Add this student to every
+      // course so assignments are linked to the correct class_courses IDs.
+      const coursesResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/class_courses?class_code=eq.${encodeURIComponent(found.code)}&select=id`,
+        { headers, cache: 'no-store' }
+      );
+      if (!coursesResponse.ok) throw new Error(await coursesResponse.text());
+      const classCourses: { id: string }[] = await coursesResponse.json();
+
+      const rows = classCourses.length
+        ? classCourses.map(course => ({
+            class_name: found.class_name,
+            code: found.code,
+            school: found.school_name,
+            course_id: course.id,
+            student_id: studentId,
+          }))
+        : [{
+            class_name: found.class_name,
+            code: found.code,
+            school: found.school_name,
+            course_id: null,
+            student_id: studentId,
+          }];
+
       const insert = await fetch(`${SUPABASE_URL}/rest/v1/student_classes`, {
-        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-        body: JSON.stringify({ class_name: found.class_name, code: found.code, school: found.school_name, course_id: found.id, student_id: studentId })
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify(rows),
       });
       if (!insert.ok) {
         const data = await insert.text();
         console.error('[Student Dashboard] Join error:', data);
         setCodeError(`${text.failedToJoin} ${data || text.unknownError}`); return;
       }
-      setClassCode(''); await fetchDashboardData();
-    } catch (error) { console.error(error); setCodeError(text.networkError); }
-    finally { setJoining(false); }
+
+      setClassCode('');
+      await fetchDashboardData();
+    } catch (error) {
+      console.error(error); setCodeError(text.networkError);
+    } finally { setJoining(false); }
   };
 
   const getLatestSubmission = useCallback((assignmentId: string) => {
@@ -197,7 +268,17 @@ export default function StudentDashboard() {
 
   const formatDate = (date: string | null) => !date ? text.noDueDate : new Date(date).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  const classAssignments = (c: StudentClass) => assignments.filter(a => a.course_id === c.course_id && !getLatestSubmission(a.id));
+  const classAssignments = (c: StudentClass) => {
+    // Use assignments resolved from the class code's real courses.
+    const matchingCourseIds = teacherClasses
+      .filter(tc => tc.code === c.code)
+      .map(tc => tc.id);
+    void matchingCourseIds;
+    return assignments.filter(a => {
+      const joinedCourse = myClasses.some(mc => mc.code === c.code && mc.course_id === a.course_id);
+      return joinedCourse && !getLatestSubmission(a.id);
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background">
