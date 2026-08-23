@@ -15,14 +15,14 @@ type Course = { id: string; course_name: string; class_code: string };
 type Assignment = { id: string; course_id: string; name: string; description: string | null; created_at: string; due_date: string | null };
 type Submission = { id: string; assignment_id: string; student_id: string; nickname: string | null; class: string | null; link: string; grade: number | null; created_at: string };
 type GradeHistoryItem = { name: string; grade: number; type: 'assignment' | 'test' };
-
-type CurrentUser = { id?: string; user_id?: string; uid?: string; fullName?: string; full_name?: string; email?: string; role?: string };
+type CurrentUser = { id?: string; student_id?: string; user_id?: string; uid?: string; fullName?: string; full_name?: string; email?: string; role?: string };
 
 export default function StudentDashboard() {
   const { language } = useLanguage();
   const [classCode, setClassCode] = useState('');
   const [myClasses, setMyClasses] = useState<StudentClass[]>([]);
   const [teacherClasses, setTeacherClasses] = useState<TeacherClass[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [codeError, setCodeError] = useState<string | null>(null);
@@ -32,7 +32,10 @@ export default function StudentDashboard() {
 
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  const headers = useMemo(() => ({ apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }), [SUPABASE_KEY]);
+  const headers = useMemo(() => ({
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_KEY}`,
+  }), [SUPABASE_KEY]);
 
   const text = language === 'id' ? {
     dashboardTitle: 'Dasbor Siswa', dashboardDescription: 'Pantau tugas sekolah, bergabung ke kelas dengan kode, dan lihat tugas yang akan datang.',
@@ -55,9 +58,12 @@ export default function StudentDashboard() {
       const raw = localStorage.getItem('current_user');
       if (!raw) return null;
       const user: CurrentUser = JSON.parse(raw);
-      const id = user.id ?? user.user_id ?? user.uid;
+      // The signup/login account UUID is the student's student_id.
+      const id = user.student_id ?? user.id ?? user.user_id ?? user.uid;
       return id ? String(id).trim() : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }, []);
 
   const fetchDashboardData = useCallback(async () => {
@@ -65,12 +71,11 @@ export default function StudentDashboard() {
     try {
       const studentId = getStudentId();
       if (!studentId) {
-        console.error('[Student Dashboard] No current_user id.');
-        setMyClasses([]); setTeacherClasses([]); setAssignments([]); setSubmissions([]);
+        console.error('[Student Dashboard] No student UUID in current_user.');
+        setMyClasses([]); setTeacherClasses([]); setCourses([]); setAssignments([]); setSubmissions([]);
         return;
       }
 
-      // IMPORTANT: only load this student's class memberships.
       const classesResponse = await fetch(
         `${SUPABASE_URL}/rest/v1/student_classes?student_id=eq.${encodeURIComponent(studentId)}&select=id,class_name,code,school,course_id,student_id`,
         { headers, cache: 'no-store' }
@@ -81,35 +86,29 @@ export default function StudentDashboard() {
 
       const codes = [...new Set(classesData.map(x => x.code).filter(Boolean))];
       if (!codes.length) {
-        setTeacherClasses([]);
-        setAssignments([]);
-        setSubmissions([]);
+        setTeacherClasses([]); setCourses([]); setAssignments([]); setSubmissions([]);
         return;
       }
 
       const filter = codes.map(x => `"${String(x).replace(/"/g, '\\"')}"`).join(',');
+
       const teacherResponse = await fetch(
         `${SUPABASE_URL}/rest/v1/teacher_classes?code=in.(${filter})&select=id,code,school_name,class_name,teacher_id`,
         { headers, cache: 'no-store' }
       );
-      const teacherData: TeacherClass[] = teacherResponse.ok ? await teacherResponse.json() : [];
-      setTeacherClasses(teacherData);
+      if (teacherResponse.ok) setTeacherClasses(await teacherResponse.json());
 
-      // course_id in student_classes must reference class_courses.id.
-      // Older rows in this project incorrectly stored teacher_classes.id,
-      // so resolve the real courses from the class code instead.
       const coursesResponse = await fetch(
         `${SUPABASE_URL}/rest/v1/class_courses?class_code=in.(${filter})&select=id,course_name,class_code&order=id.asc`,
         { headers, cache: 'no-store' }
       );
       if (!coursesResponse.ok) throw new Error(await coursesResponse.text());
       const coursesData: Course[] = await coursesResponse.json();
+      setCourses(coursesData);
 
       const courseIds = [...new Set(coursesData.map(x => x.id).filter(Boolean))];
       if (!courseIds.length) {
-        setAssignments([]);
-        setSubmissions([]);
-        return;
+        setAssignments([]); setSubmissions([]); return;
       }
 
       const courseFilter = courseIds.map(x => `"${x}"`).join(',');
@@ -122,26 +121,23 @@ export default function StudentDashboard() {
       setAssignments(assignmentsData);
 
       if (!assignmentsData.length) {
-        setSubmissions([]);
-        return;
+        setSubmissions([]); return;
       }
 
       const assignmentFilter = assignmentsData.map(x => `"${x.id}"`).join(',');
-
-      // Fetch submission rows and then match the student's UUID locally.
       const submissionsResponse = await fetch(
         `${SUPABASE_URL}/rest/v1/assignment_submissions?assignment_id=in.(${assignmentFilter})&select=id,assignment_id,student_id,nickname,class,link,grade,created_at&order=created_at.desc`,
         { headers, cache: 'no-store' }
       );
       if (!submissionsResponse.ok) throw new Error(await submissionsResponse.text());
       const allSubmissions: Submission[] = await submissionsResponse.json();
-      const mine = allSubmissions.filter(x => String(x.student_id ?? '').trim() === studentId);
-      console.log('[Student Dashboard] Current student:', studentId, 'submissions:', mine);
-      setSubmissions(mine);
+      setSubmissions(allSubmissions.filter(x => String(x.student_id ?? '').trim() === studentId));
     } catch (error) {
       console.error('[Student Dashboard] Error loading dashboard:', error);
       setSubmissions([]);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, [SUPABASE_URL, headers, getStudentId]);
 
   useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
@@ -160,71 +156,103 @@ export default function StudentDashboard() {
   }, [fetchDashboardData]);
 
   const handleJoinClass = async (e: React.FormEvent) => {
-    e.preventDefault(); setCodeError(null);
-    const code = classCode.trim().toUpperCase(); if (!code) return;
+    e.preventDefault();
+    setCodeError(null);
+
+    const code = classCode.trim();
+    if (!code) return;
     setJoining(true);
+
     try {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(code)}&select=id,code,class_name,school_name,teacher_id`,
-        { headers, cache: 'no-store' }
-      );
-      if (!response.ok) throw new Error();
-      const found = (await response.json())?.[0];
-      if (!found) { setCodeError(text.codeInvalid); return; }
+      if (!SUPABASE_URL || !SUPABASE_KEY) {
+        throw new Error('Supabase environment variables are missing.');
+      }
 
       const studentId = getStudentId();
-      if (!studentId) { setCodeError(text.networkError); return; }
+      if (!studentId) {
+        throw new Error('Student UUID not found in current_user. Please sign in again.');
+      }
 
-      // Check this student's membership, not everybody's membership.
+      console.log('[Student Dashboard] Joining:', { code, studentId });
+
+      // Find the teacher's class. ilike prevents a lowercase/uppercase mismatch.
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/teacher_classes?code=ilike.${encodeURIComponent(code)}&select=id,code,class_name,school_name,teacher_id&limit=1`,
+        { headers, cache: 'no-store' }
+      );
+
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Could not look up class (${response.status}): ${body}`);
+      }
+
+      const found = (await response.json())?.[0];
+      if (!found) {
+        setCodeError(text.codeInvalid);
+        return;
+      }
+
+      const actualCode = String(found.code);
+
+      // Check membership using BOTH student UUID and class code.
       const existingResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/student_classes?student_id=eq.${encodeURIComponent(studentId)}&code=eq.${encodeURIComponent(found.code)}&select=id,course_id`,
+        `${SUPABASE_URL}/rest/v1/student_classes?student_id=eq.${encodeURIComponent(studentId)}&code=ilike.${encodeURIComponent(actualCode)}&select=id&limit=1`,
         { headers, cache: 'no-store' }
       );
-      if (!existingResponse.ok) throw new Error(await existingResponse.text());
-      const existingRows: StudentClass[] = await existingResponse.json();
-      if (existingRows.length) { setCodeError(text.alreadyJoined); return; }
+      if (!existingResponse.ok) {
+        const body = await existingResponse.text();
+        throw new Error(`Could not check membership (${existingResponse.status}): ${body}`);
+      }
 
-      // A class can contain multiple courses. Add this student to every
-      // course so assignments are linked to the correct class_courses IDs.
-      const coursesResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/class_courses?class_code=eq.${encodeURIComponent(found.code)}&select=id`,
-        { headers, cache: 'no-store' }
-      );
-      if (!coursesResponse.ok) throw new Error(await coursesResponse.text());
-      const classCourses: { id: string }[] = await coursesResponse.json();
+      const existingRows = await existingResponse.json();
+      if (existingRows.length) {
+        setCodeError(text.alreadyJoined);
+        return;
+      }
 
-      const rows = classCourses.length
-        ? classCourses.map(course => ({
-            class_name: found.class_name,
-            code: found.code,
-            school: found.school_name,
-            course_id: course.id,
-            student_id: studentId,
-          }))
-        : [{
-            class_name: found.class_name,
-            code: found.code,
-            school: found.school_name,
-            course_id: null,
-            student_id: studentId,
-          }];
+      // IMPORTANT FIX:
+      // Insert exactly ONE membership row. The old code inserted one row for
+      // every course, which can violate a unique student/class constraint.
+      // course_id is intentionally null; courses are resolved by class code
+      // when the dashboard loads.
+      const insertBody = {
+        class_name: found.class_name,
+        code: actualCode,
+        school: found.school_name ?? null,
+        course_id: null,
+        student_id: studentId,
+      };
 
       const insert = await fetch(`${SUPABASE_URL}/rest/v1/student_classes`, {
         method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-        body: JSON.stringify(rows),
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify(insertBody),
       });
+
       if (!insert.ok) {
-        const data = await insert.text();
-        console.error('[Student Dashboard] Join error:', data);
-        setCodeError(`${text.failedToJoin} ${data || text.unknownError}`); return;
+        const body = await insert.text();
+        console.error('[Student Dashboard] Supabase INSERT failed:', insert.status, body);
+        let readable = body || text.unknownError;
+        try {
+          const parsed = JSON.parse(body);
+          readable = parsed.message || parsed.details || parsed.hint || body;
+        } catch {}
+        throw new Error(`Failed to join class (${insert.status}): ${readable}`);
       }
 
+      console.log('[Student Dashboard] Joined successfully:', await insert.json().catch(() => null));
       setClassCode('');
       await fetchDashboardData();
     } catch (error) {
-      console.error(error); setCodeError(text.networkError);
-    } finally { setJoining(false); }
+      console.error('[Student Dashboard] Join error:', error);
+      setCodeError(error instanceof Error ? error.message : text.networkError);
+    } finally {
+      setJoining(false);
+    }
   };
 
   const getLatestSubmission = useCallback((assignmentId: string) => {
@@ -256,7 +284,7 @@ export default function StudentDashboard() {
 
   const dueStatus = (date: string | null) => {
     if (!date) return { label: text.noDueDate, className: 'text-muted-foreground' };
-    const d = new Date(date); const n = new Date();
+    const d = new Date(date), n = new Date();
     const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
     const due = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
@@ -266,43 +294,59 @@ export default function StudentDashboard() {
     return { label: `${text.dueIn} ${diff} ${text.days}`, className: 'text-primary' };
   };
 
-  const formatDate = (date: string | null) => !date ? text.noDueDate : new Date(date).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  const formatDate = (date: string | null) => !date
+    ? text.noDueDate
+    : new Date(date).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 
   const classAssignments = (c: StudentClass) => {
-    // Use assignments resolved from the class code's real courses.
-    const matchingCourseIds = teacherClasses
-      .filter(tc => tc.code === c.code)
-      .map(tc => tc.id);
-    void matchingCourseIds;
-    return assignments.filter(a => {
-      const joinedCourse = myClasses.some(mc => mc.code === c.code && mc.course_id === a.course_id);
-      return joinedCourse && !getLatestSubmission(a.id);
-    });
+    const classCourseIds = new Set(courses.filter(course => course.class_code === c.code).map(course => course.id));
+    return assignments.filter(a => classCourseIds.has(a.course_id) && !getLatestSubmission(a.id));
   };
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="container mx-auto px-6 py-8 space-y-8">
-        <div><h1 className="text-3xl font-bold tracking-tight text-foreground">{text.dashboardTitle}</h1><p className="text-muted-foreground">{text.dashboardDescription}</p></div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="bg-card"><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><PlusCircle className="h-5 w-5 text-primary" />{text.classCodeInput}</CardTitle></CardHeader><CardContent>
-            <form onSubmit={handleJoinClass} className="space-y-3"><div className="flex gap-3"><Input value={classCode} onChange={e => { setClassCode(e.target.value); setCodeError(null); }} placeholder={text.enterCode} className="bg-background uppercase" /><Button type="submit" disabled={joining}>{joining ? <Loader2 className="size-4 animate-spin" /> : text.joinClass}</Button></div>{codeError && <p className="text-xs font-medium text-red-500">{codeError}</p>}</form>
-          </CardContent></Card>
-
-          <Card className="bg-card cursor-pointer hover:bg-accent/20 transition" onClick={() => setShowGrades(true)}><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" />{text.averageGrades}</CardTitle></CardHeader><CardContent>
-            {loading ? <Loader2 className="size-6 animate-spin text-muted-foreground" /> : averageGrade === null ? <><p className="text-4xl font-bold text-muted-foreground">—</p><p className="text-sm text-muted-foreground mt-1">{text.noGrades}</p></> : <><p className="text-4xl font-bold text-primary">{averageGrade}</p><p className="text-sm text-muted-foreground mt-1">{gradeHistory.length} {text.grades}</p></>}
-          </CardContent></Card>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">{text.dashboardTitle}</h1>
+          <p className="text-muted-foreground">{text.dashboardDescription}</p>
         </div>
 
-        <Card className="bg-card"><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><BookOpen className="h-5 w-5 text-primary" />{text.classesYouAreIn}</CardTitle></CardHeader><CardContent>
-          {loading ? <div className="flex justify-center py-6"><Loader2 className="size-6 animate-spin" /></div> : myClasses.length === 0 ? <p className="text-sm text-muted-foreground">{text.noClasses}</p> : <div className="space-y-3">{myClasses.map(c => <Link key={c.id} href={`/dashboard/student/classes/${c.code}`}><div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition"><div className="min-w-0"><h4 className="font-medium truncate">{c.class_name}</h4><p className="text-xs text-muted-foreground">{text.school} {c.school || '—'}</p></div><div className="flex items-center gap-3 shrink-0"><div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><CalendarDays className="h-4 w-4 text-primary" /><span>{classAssignments(c).length} {text.assignmentCount}</span></div><span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">{text.active}</span></div></div></Link>)}</div>}
-        </CardContent></Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="bg-card">
+            <CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><PlusCircle className="h-5 w-5 text-primary" />{text.classCodeInput}</CardTitle></CardHeader>
+            <CardContent>
+              <form onSubmit={handleJoinClass} className="space-y-3">
+                <div className="flex gap-3">
+                  <Input value={classCode} onChange={e => { setClassCode(e.target.value); setCodeError(null); }} placeholder={text.enterCode} className="bg-background uppercase" />
+                  <Button type="submit" disabled={joining}>{joining ? <Loader2 className="size-4 animate-spin" /> : text.joinClass}</Button>
+                </div>
+                {codeError && <p className="text-xs font-medium text-red-500 break-words">{codeError}</p>}
+              </form>
+            </CardContent>
+          </Card>
 
-        <Card className="bg-card"><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" />{text.assignmentsDue}</CardTitle></CardHeader><CardContent>
-          {loading ? <div className="flex justify-center py-6"><Loader2 className="size-6 animate-spin" /></div> : sortedAssignments.length === 0 ? <p className="text-sm text-muted-foreground">{text.noAssignments}</p> : <div className="space-y-3">{sortedAssignments.map(a => { const status = dueStatus(a.due_date); const c = myClasses.find(x => x.course_id === a.course_id); return <div key={a.id} className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20"><div className="min-w-0"><h4 className="font-medium truncate">{a.name}</h4>{c && <p className="text-xs text-muted-foreground mt-1">{c.class_name}</p>}</div><div className="text-right shrink-0"><p className={`text-sm font-semibold ${status.className}`}>{status.label}</p><p className="text-xs text-muted-foreground mt-1">{formatDate(a.due_date)}</p></div></div>; })}</div>}
-        </CardContent></Card>
+          <Card className="bg-card cursor-pointer hover:bg-accent/20 transition" onClick={() => setShowGrades(true)}>
+            <CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" />{text.averageGrades}</CardTitle></CardHeader>
+            <CardContent>
+              {loading ? <Loader2 className="size-6 animate-spin text-muted-foreground" /> : averageGrade === null ? <><p className="text-4xl font-bold text-muted-foreground">—</p><p className="text-sm text-muted-foreground mt-1">{text.noGrades}</p></> : <><p className="text-4xl font-bold text-primary">{averageGrade}</p><p className="text-sm text-muted-foreground mt-1">{gradeHistory.length} {text.grades}</p></>}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="bg-card">
+          <CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><BookOpen className="h-5 w-5 text-primary" />{text.classesYouAreIn}</CardTitle></CardHeader>
+          <CardContent>
+            {loading ? <div className="flex justify-center py-6"><Loader2 className="size-6 animate-spin" /></div> : myClasses.length === 0 ? <p className="text-sm text-muted-foreground">{text.noClasses}</p> : <div className="space-y-3">{myClasses.map(c => <Link key={c.id} href={`/dashboard/student/classes/${c.code}`}><div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition"><div className="min-w-0"><h4 className="font-medium truncate">{c.class_name}</h4><p className="text-xs text-muted-foreground">{text.school} {c.school || '—'}</p></div><div className="flex items-center gap-3 shrink-0"><div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><CalendarDays className="h-4 w-4 text-primary" /><span>{classAssignments(c).length} {text.assignmentCount}</span></div><span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">{text.active}</span></div></div></Link>)}</div>}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card">
+          <CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" />{text.assignmentsDue}</CardTitle></CardHeader>
+          <CardContent>
+            {loading ? <div className="flex justify-center py-6"><Loader2 className="size-6 animate-spin" /></div> : sortedAssignments.length === 0 ? <p className="text-sm text-muted-foreground">{text.noAssignments}</p> : <div className="space-y-3">{sortedAssignments.map(a => { const status = dueStatus(a.due_date); const c = myClasses.find(x => courses.some(course => course.class_code === x.code && course.id === a.course_id)); return <div key={a.id} className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20"><div className="min-w-0"><h4 className="font-medium truncate">{a.name}</h4>{c && <p className="text-xs text-muted-foreground mt-1">{c.class_name}</p>}</div><div className="text-right shrink-0"><p className={`text-sm font-semibold ${status.className}`}>{status.label}</p><p className="text-xs text-muted-foreground mt-1">{formatDate(a.due_date)}</p></div></div>; })}</div>}
+          </CardContent>
+        </Card>
       </main>
 
       {showGrades && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowGrades(false)}><div className="w-full max-w-lg max-h-[80vh] overflow-hidden bg-card border border-border rounded-xl shadow-xl" onClick={e => e.stopPropagation()}>
