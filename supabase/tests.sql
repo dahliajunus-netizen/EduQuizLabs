@@ -6,13 +6,7 @@ create or replace function public.submit_test(
   p_student_id uuid,
   p_answers jsonb
 )
-returns table (
-  id uuid,
-  test_id uuid,
-  student_id uuid,
-  answers jsonb,
-  score numeric
-)
+returns setof public.test_submissions
 language plpgsql
 security definer
 set search_path = public
@@ -63,7 +57,7 @@ begin
     );
   end if;
 
-  insert into public.test_submissions (
+  insert into public.test_submissions as ts (
     test_id,
     student_id,
     answers,
@@ -75,15 +69,10 @@ begin
     coalesce(p_answers, '{}'::jsonb),
     calculated_score
   )
-  returning * into new_submission;
+  returning ts.* into new_submission;
 
-  return query
-  select
-    new_submission.id,
-    new_submission.test_id,
-    new_submission.student_id,
-    new_submission.answers,
-    new_submission.score;
+  return next new_submission;
+  return;
 
 exception
   when unique_violation then
