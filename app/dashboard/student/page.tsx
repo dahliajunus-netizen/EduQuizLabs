@@ -3,82 +3,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Navbar } from '@/components/Navbar';
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  BookOpen,
-  PlusCircle,
-  Loader2,
-  CalendarDays,
-  BarChart3,
-  X,
-} from 'lucide-react';
+import { BookOpen, PlusCircle, Loader2, CalendarDays, BarChart3, X } from 'lucide-react';
 import { useLanguage } from '@/components/language-provider';
 
-type StudentClass = {
-  id: string;
-  class_name: string;
-  code: string;
-  school: string | null;
-  course_id: string | null;
-};
+type StudentClass = { id: string; class_name: string; code: string; school: string | null; course_id: string | null };
+type TeacherClass = { id: string; code: string; school_name: string | null; class_name: string; teacher_id?: string | null };
+type Assignment = { id: string; course_id: string; name: string; description: string | null; created_at: string; due_date: string | null };
+type Submission = { id: string; assignment_id: string; student_id: string; nickname: string | null; class: string | null; link: string; grade: number | null; created_at: string };
+type GradeHistoryItem = { name: string; grade: number; type: 'assignment' | 'test' };
 
-type TeacherClass = {
-  id: string;
-  code: string;
-  school_name: string | null;
-  class_name: string;
-  teacher_id?: string | null;
-};
-
-type Assignment = {
-  id: string;
-  course_id: string;
-  name: string;
-  description: string | null;
-  created_at: string;
-  due_date: string | null;
-};
-
-type Submission = {
-  id: string;
-  assignment_id: string;
-  student_id: string;
-  nickname: string | null;
-  class: string | null;
-  link: string;
-  grade: number | null;
-  created_at: string;
-};
-
-type GradeHistoryItem = {
-  name: string;
-  grade: number;
-  type: 'assignment' | 'test';
-};
-
-type CurrentUser = {
-  id: string;
-  fullName?: string;
-  email?: string;
-  role?: string;
-};
+type CurrentUser = { id?: string; user_id?: string; uid?: string; fullName?: string; full_name?: string; email?: string; role?: string };
 
 export default function StudentDashboard() {
   const { language } = useLanguage();
-
   const [classCode, setClassCode] = useState('');
   const [myClasses, setMyClasses] = useState<StudentClass[]>([]);
   const [teacherClasses, setTeacherClasses] = useState<TeacherClass[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-
   const [codeError, setCodeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -86,1474 +31,204 @@ export default function StudentDashboard() {
 
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const headers = useMemo(() => ({ apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }), [SUPABASE_KEY]);
 
-  const headers = useMemo(
-    () => ({
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-    }),
-    [SUPABASE_KEY]
-  );
-
-  const t = {
-    en: {
-      dashboardTitle: 'Student Dashboard',
-      dashboardDescription:
-        'Track your coursework, join classes with a code, and view upcoming assignments.',
-
-      classCodeInput: 'Class Code Input',
-      enterCode: 'Enter code (e.g., A3F92)',
-      joinClass: 'Join Class',
-
-      classesYouAreIn: 'Classes You Are In',
-      noClasses:
-        "You haven't joined any classes yet. Enter a valid code above!",
-
-      school: 'School:',
-      active: 'Active',
-
-      assignmentsDue: 'Assignments Due',
-      assignmentCount: 'assignments',
-      assignment: 'Assignment',
-      assignments: 'Assignments',
-
-      dueToday: 'Due today',
-      dueTomorrow: 'Due tomorrow',
-      dueIn: 'Due in',
-      days: 'days',
-      overdue: 'Overdue',
-      noDueDate: 'No due date',
-
-      averageGrades: 'Average Grades',
-      noGrades: 'No grades yet',
-      gradeHistory: 'Grade History',
-      grades: 'grades',
-
-      test: 'Test',
-      close: 'Close',
-
-      noAssignments: 'No assignments found.',
-      loadingAssignments: 'Loading assignments...',
-
-      codeInvalid: 'Code is invalid',
-      alreadyJoined: 'You have already joined this class.',
-      networkError: 'Network error joining class.',
-      failedToJoin: 'Failed to join:',
-      unknownError: 'Unknown error',
-    },
-
-    id: {
-      dashboardTitle: 'Dasbor Siswa',
-      dashboardDescription:
-        'Pantau tugas sekolah, bergabung ke kelas dengan kode, dan lihat tugas yang akan datang.',
-
-      classCodeInput: 'Masukkan Kode Kelas',
-      enterCode: 'Masukkan kode (contoh: A3F92)',
-      joinClass: 'Gabung Kelas',
-
-      classesYouAreIn: 'Kelas yang Anda Ikuti',
-      noClasses:
-        'Anda belum bergabung dengan kelas mana pun. Masukkan kode yang valid di atas!',
-
-      school: 'Sekolah:',
-      active: 'Aktif',
-
-      assignmentsDue: 'Tugas',
-      assignmentCount: 'tugas',
-      assignment: 'Tugas',
-      assignments: 'Tugas',
-
-      dueToday: 'Jatuh tempo hari ini',
-      dueTomorrow: 'Jatuh tempo besok',
-      dueIn: 'Jatuh tempo dalam',
-      days: 'hari',
-      overdue: 'Terlambat',
-      noDueDate: 'Tidak ada batas waktu',
-
-      averageGrades: 'Nilai Rata-Rata',
-      noGrades: 'Belum ada nilai',
-      gradeHistory: 'Riwayat Nilai',
-      grades: 'nilai',
-
-      test: 'Ujian',
-      close: 'Tutup',
-
-      noAssignments: 'Tidak ada tugas.',
-      loadingAssignments: 'Memuat tugas...',
-
-      codeInvalid: 'Kode tidak valid',
-      alreadyJoined: 'Anda sudah bergabung dengan kelas ini.',
-      networkError: 'Terjadi kesalahan jaringan saat bergabung ke kelas.',
-      failedToJoin: 'Gagal bergabung:',
-      unknownError: 'Kesalahan tidak diketahui',
-    },
+  const text = language === 'id' ? {
+    dashboardTitle: 'Dasbor Siswa', dashboardDescription: 'Pantau tugas sekolah, bergabung ke kelas dengan kode, dan lihat tugas yang akan datang.',
+    classCodeInput: 'Masukkan Kode Kelas', enterCode: 'Masukkan kode (contoh: A3F92)', joinClass: 'Gabung Kelas',
+    classesYouAreIn: 'Kelas yang Anda Ikuti', noClasses: 'Anda belum bergabung dengan kelas mana pun. Masukkan kode yang valid di atas!',
+    school: 'Sekolah:', active: 'Aktif', assignmentsDue: 'Tugas', assignmentCount: 'tugas', assignment: 'Tugas',
+    dueToday: 'Jatuh tempo hari ini', dueTomorrow: 'Jatuh tempo besok', dueIn: 'Jatuh tempo dalam', days: 'hari', overdue: 'Terlambat', noDueDate: 'Tidak ada batas waktu',
+    averageGrades: 'Nilai Rata-Rata', noGrades: 'Belum ada nilai', gradeHistory: 'Riwayat Nilai', grades: 'nilai', test: 'Ujian', close: 'Tutup', noAssignments: 'Tidak ada tugas.',
+    codeInvalid: 'Kode tidak valid', alreadyJoined: 'Anda sudah bergabung dengan kelas ini.', networkError: 'Terjadi kesalahan jaringan saat bergabung ke kelas.', failedToJoin: 'Gagal bergabung:', unknownError: 'Kesalahan tidak diketahui'
+  } : {
+    dashboardTitle: 'Student Dashboard', dashboardDescription: 'Track your coursework, join classes with a code, and view upcoming assignments.',
+    classCodeInput: 'Class Code Input', enterCode: 'Enter code (e.g., A3F92)', joinClass: 'Join Class', classesYouAreIn: 'Classes You Are In',
+    noClasses: "You haven't joined any classes yet. Enter a valid code above!", school: 'School:', active: 'Active', assignmentsDue: 'Assignments Due', assignmentCount: 'assignments', assignment: 'Assignment',
+    dueToday: 'Due today', dueTomorrow: 'Due tomorrow', dueIn: 'Due in', days: 'days', overdue: 'Overdue', noDueDate: 'No due date', averageGrades: 'Average Grades', noGrades: 'No grades yet', gradeHistory: 'Grade History', grades: 'grades', test: 'Test', close: 'Close', noAssignments: 'No assignments found.',
+    codeInvalid: 'Code is invalid', alreadyJoined: 'You have already joined this class.', networkError: 'Network error joining class.', failedToJoin: 'Failed to join:', unknownError: 'Unknown error'
   };
 
-  const text = language === 'id' ? t.id : t.en;
-
-  /*
-   * ============================================================
-   * GET CURRENT STUDENT
-   * ============================================================
-   *
-   * Login saves:
-   *
-   * localStorage.current_user = {
-   *   id: user.id,
-   *   ...
-   * }
-   *
-   * assignment_submissions.student_id is the SAME UUID.
-   */
-  const getCurrentStudentId = () => {
+  const getStudentId = useCallback(() => {
     try {
-      const storedUser = localStorage.getItem('current_user');
+      const raw = localStorage.getItem('current_user');
+      if (!raw) return null;
+      const user: CurrentUser = JSON.parse(raw);
+      const id = user.id ?? user.user_id ?? user.uid;
+      return id ? String(id).trim() : null;
+    } catch { return null; }
+  }, []);
 
-      if (!storedUser) {
-        console.error(
-          '[Student Dashboard] current_user does not exist in localStorage.'
-        );
-
-        return null;
-      }
-
-      const currentUser: CurrentUser =
-        JSON.parse(storedUser);
-
-      const studentId = currentUser?.id;
-
-      if (
-        !studentId ||
-        String(studentId).trim() === ''
-      ) {
-        console.error(
-          '[Student Dashboard] current_user exists but has no id:',
-          currentUser
-        );
-
-        return null;
-      }
-
-      console.log(
-        '[Student Dashboard] Current student ID:',
-        studentId
-      );
-
-      return String(studentId);
-    } catch (error) {
-      console.error(
-        '[Student Dashboard] Failed to read current_user:',
-        error
-      );
-
-      return null;
-    }
-  };
-
-  /*
-   * ============================================================
-   * FETCH DASHBOARD DATA
-   * ============================================================
-   */
   const fetchDashboardData = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-
-      /*
-       * --------------------------------------------------------
-       * STEP 0
-       * Get the logged-in student's UUID.
-       * --------------------------------------------------------
-       */
-      const studentId = getCurrentStudentId();
-
+      const studentId = getStudentId();
       if (!studentId) {
-        console.error(
-          '[Student Dashboard] Cannot load dashboard because student ID is missing.'
-        );
-
-        setMyClasses([]);
-        setTeacherClasses([]);
-        setAssignments([]);
-        setSubmissions([]);
-
+        console.error('[Student Dashboard] No current_user id.');
+        setMyClasses([]); setTeacherClasses([]); setAssignments([]); setSubmissions([]);
         return;
       }
 
-      /*
-       * --------------------------------------------------------
-       * STEP 1
-       * Get classes the student is enrolled in.
-       * --------------------------------------------------------
-       */
-      const classesResponse = await fetch(
-        `${SUPABASE_URL}/rest/v1/student_classes?select=id,class_name,code,school,course_id`,
-        {
-          headers,
-          cache: 'no-store',
-        }
-      );
-
-      if (!classesResponse.ok) {
-        const error =
-          await classesResponse.text();
-
-        console.error(
-          '[Student Dashboard] Student classes error:',
-          error
-        );
-
-        throw new Error(
-          'Failed to fetch student classes'
-        );
-      }
-
-      const classesData: StudentClass[] =
-        await classesResponse.json();
-
-      console.log(
-        '[Student Dashboard] Student classes:',
-        classesData
-      );
-
+      const classesResponse = await fetch(`${SUPABASE_URL}/rest/v1/student_classes?select=id,class_name,code,school,course_id`, { headers, cache: 'no-store' });
+      if (!classesResponse.ok) throw new Error(await classesResponse.text());
+      const classesData: StudentClass[] = await classesResponse.json();
       setMyClasses(classesData);
 
-      if (classesData.length === 0) {
-        setTeacherClasses([]);
-        setAssignments([]);
-        setSubmissions([]);
-
-        return;
+      const codes = [...new Set(classesData.map(x => x.code).filter(Boolean))];
+      if (codes.length) {
+        const filter = codes.map(x => `"${String(x).replace(/"/g, '\\"')}"`).join(',');
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/teacher_classes?code=in.(${filter})&select=id,code,school_name,class_name,teacher_id`, { headers, cache: 'no-store' });
+        if (r.ok) setTeacherClasses(await r.json());
       }
+
+      const courseIds = [...new Set(classesData.map(x => x.course_id).filter((x): x is string => !!x))];
+      if (!courseIds.length) { setAssignments([]); setSubmissions([]); return; }
+
+      const courseFilter = courseIds.map(x => `"${x}"`).join(',');
+      const assignmentsResponse = await fetch(`${SUPABASE_URL}/rest/v1/course_assignments?course_id=in.(${courseFilter})&select=id,course_id,name,description,created_at,due_date&order=due_date.asc.nullslast`, { headers, cache: 'no-store' });
+      if (!assignmentsResponse.ok) throw new Error(await assignmentsResponse.text());
+      const assignmentsData: Assignment[] = await assignmentsResponse.json();
+      setAssignments(assignmentsData);
+
+      if (!assignmentsData.length) { setSubmissions([]); return; }
+
+      const assignmentFilter = assignmentsData.map(x => `"${x.id}"`).join(',');
 
       /*
-       * --------------------------------------------------------
-       * STEP 2
-       * Get teacher class information.
-       * --------------------------------------------------------
+       * Fetch the assignment rows first, then filter by student_id in JavaScript.
+       * This avoids the previous dashboard bug where the PostgREST student_id
+       * filter could return no rows for the anon client. Most importantly,
+       * getLatestSubmission() below ALWAYS checks the logged-in student's UUID.
        */
-      const codes = classesData
-        .map((item) => item.code)
-        .filter(Boolean);
-
-      if (codes.length > 0) {
-        const codeFilter = codes
-          .map(
-            (code) =>
-              `"${String(code).replace(
-                /"/g,
-                '\\"'
-              )}"`
-          )
-          .join(',');
-
-        const teacherResponse =
-          await fetch(
-            `${SUPABASE_URL}/rest/v1/teacher_classes?code=in.(${codeFilter})&select=id,code,school_name,class_name,teacher_id`,
-            {
-              headers,
-              cache: 'no-store',
-            }
-          );
-
-        if (teacherResponse.ok) {
-          const teacherData: TeacherClass[] =
-            await teacherResponse.json();
-
-          setTeacherClasses(
-            teacherData
-          );
-        }
-      }
-
-      /*
-       * --------------------------------------------------------
-       * STEP 3
-       * Get course IDs.
-       *
-       * student_classes.course_id
-       *        ↓
-       * course_assignments.course_id
-       * --------------------------------------------------------
-       */
-      const courseIds = Array.from(
-        new Set(
-          classesData
-            .map(
-              (item) =>
-                item.course_id
-            )
-            .filter(
-              (id): id is string =>
-                typeof id ===
-                  'string' &&
-                id.length > 0
-            )
-        )
+      const submissionsResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/assignment_submissions?assignment_id=in.(${assignmentFilter})&select=id,assignment_id,student_id,nickname,class,link,grade,created_at&order=created_at.desc`,
+        { headers, cache: 'no-store' }
       );
-
-      console.log(
-        '[Student Dashboard] Course IDs:',
-        courseIds
-      );
-
-      if (courseIds.length === 0) {
-        console.warn(
-          '[Student Dashboard] No course IDs found.'
-        );
-
-        setAssignments([]);
-        setSubmissions([]);
-
-        return;
-      }
-
-      /*
-       * --------------------------------------------------------
-       * STEP 4
-       * Fetch assignments.
-       * --------------------------------------------------------
-       */
-      const courseFilter =
-        courseIds
-          .map(
-            (id) =>
-              `"${id}"`
-          )
-          .join(',');
-
-      const assignmentsResponse =
-        await fetch(
-          `${SUPABASE_URL}/rest/v1/course_assignments?course_id=in.(${courseFilter})&select=id,course_id,name,description,created_at,due_date&order=due_date.asc.nullslast`,
-          {
-            headers,
-            cache: 'no-store',
-          }
-        );
-
-      if (!assignmentsResponse.ok) {
-        const error =
-          await assignmentsResponse.text();
-
-        console.error(
-          '[Student Dashboard] Course assignments error:',
-          error
-        );
-
-        setAssignments([]);
-        setSubmissions([]);
-
-        return;
-      }
-
-      const assignmentsData: Assignment[] =
-        await assignmentsResponse.json();
-
-      console.log(
-        '[Student Dashboard] Assignments:',
-        assignmentsData
-      );
-
-      setAssignments(
-        assignmentsData
-      );
-
-      /*
-       * --------------------------------------------------------
-       * STEP 5
-       * Fetch ONLY THIS STUDENT'S submissions.
-       *
-       * THIS IS THE IMPORTANT FIX.
-       *
-       * Before:
-       *
-       * assignment_id=in.(...)
-       *
-       * That returned submissions from EVERY student.
-       *
-       * Now:
-       *
-       * student_id=eq.<logged-in student's UUID>
-       *
-       * So the dashboard knows exactly which assignments
-       * THIS student has submitted and which grades belong
-       * to THIS student.
-       * --------------------------------------------------------
-       */
-      if (
-        assignmentsData.length === 0
-      ) {
-        setSubmissions([]);
-
-        return;
-      }
-
-      const assignmentIds =
-        assignmentsData.map(
-          (assignment) =>
-            assignment.id
-        );
-
-      const assignmentFilter =
-        assignmentIds
-          .map(
-            (id) =>
-              `"${id}"`
-          )
-          .join(',');
-
-      const submissionsUrl =
-        `${SUPABASE_URL}/rest/v1/assignment_submissions` +
-        `?student_id=eq.${encodeURIComponent(studentId)}` +
-        `&assignment_id=in.(${assignmentFilter})` +
-        `&select=id,assignment_id,student_id,nickname,class,link,grade,created_at` +
-        `&order=created_at.desc`;
-
-      console.log(
-        '[Student Dashboard] Fetching submissions for student:',
-        studentId
-      );
-
-      console.log(
-        '[Student Dashboard] Submission URL:',
-        submissionsUrl
-      );
-
-      const submissionsResponse =
-        await fetch(
-          submissionsUrl,
-          {
-            headers,
-            cache: 'no-store',
-          }
-        );
-
-      if (!submissionsResponse.ok) {
-        const error =
-          await submissionsResponse.text();
-
-        console.error(
-          '[Student Dashboard] Assignment submissions error:',
-          error
-        );
-
-        setSubmissions([]);
-
-        return;
-      }
-
-      const submissionsData: Submission[] =
-        await submissionsResponse.json();
-
-      console.log(
-        '[Student Dashboard] THIS STUDENT submissions:',
-        submissionsData
-      );
-
-      setSubmissions(
-        submissionsData
-      );
+      if (!submissionsResponse.ok) throw new Error(await submissionsResponse.text());
+      const allSubmissions: Submission[] = await submissionsResponse.json();
+      const mine = allSubmissions.filter(x => String(x.student_id ?? '').trim() === studentId);
+      console.log('[Student Dashboard] Current student:', studentId, 'submissions:', mine);
+      setSubmissions(mine);
     } catch (error) {
-      console.error(
-        '[Student Dashboard] Error loading dashboard:',
-        error
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [SUPABASE_URL, headers]);
+      console.error('[Student Dashboard] Error loading dashboard:', error);
+      setSubmissions([]);
+    } finally { setLoading(false); }
+  }, [SUPABASE_URL, headers, getStudentId]);
 
-  /*
-   * ============================================================
-   * INITIAL LOAD
-   * ============================================================
-   */
+  useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
+
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
-
-  /*
-   * ============================================================
-   * AUTOMATIC REFRESH
-   * ============================================================
-   */
-  useEffect(() => {
-    const refresh = () => {
-      fetchDashboardData();
-    };
-
-    window.addEventListener(
-      'focus',
-      refresh
-    );
-
-    const handleVisibilityChange =
-      () => {
-        if (
-          document.visibilityState ===
-          'visible'
-        ) {
-          fetchDashboardData();
-        }
-      };
-
-    document.addEventListener(
-      'visibilitychange',
-      handleVisibilityChange
-    );
-
-    const interval =
-      setInterval(() => {
-        fetchDashboardData();
-      }, 10000);
-
+    const refresh = () => fetchDashboardData();
+    const visibility = () => { if (document.visibilityState === 'visible') fetchDashboardData(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', visibility);
+    const interval = setInterval(refresh, 10000);
     return () => {
-      window.removeEventListener(
-        'focus',
-        refresh
-      );
-
-      document.removeEventListener(
-        'visibilitychange',
-        handleVisibilityChange
-      );
-
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', visibility);
       clearInterval(interval);
     };
   }, [fetchDashboardData]);
 
-  /*
-   * ============================================================
-   * JOIN CLASS
-   * ============================================================
-   */
-  const handleJoinClass = async (
-    e: React.FormEvent
-  ) => {
-    e.preventDefault();
-
-    setCodeError(null);
-
-    const trimmedCode =
-      classCode
-        .trim()
-        .toUpperCase();
-
-    if (!trimmedCode) {
-      return;
-    }
-
+  const handleJoinClass = async (e: React.FormEvent) => {
+    e.preventDefault(); setCodeError(null);
+    const code = classCode.trim().toUpperCase(); if (!code) return;
     setJoining(true);
-
     try {
-      /*
-       * Find teacher's class.
-       */
-      const response =
-        await fetch(
-          `${SUPABASE_URL}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(
-            trimmedCode
-          )}&select=id,code,class_name,school_name,teacher_id`,
-          {
-            headers,
-            cache: 'no-store',
-          }
-        );
-
-      if (!response.ok) {
-        throw new Error(
-          'Failed to check class code'
-        );
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(code)}&select=id,code,class_name,school_name,teacher_id`, { headers, cache: 'no-store' });
+      if (!response.ok) throw new Error();
+      const found = (await response.json())?.[0];
+      if (!found) { setCodeError(text.codeInvalid); return; }
+      if (myClasses.some(x => x.code?.toUpperCase() === found.code?.toUpperCase())) { setCodeError(text.alreadyJoined); return; }
+      const studentId = getStudentId();
+      if (!studentId) { setCodeError(text.networkError); return; }
+      const insert = await fetch(`${SUPABASE_URL}/rest/v1/student_classes`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ class_name: found.class_name, code: found.code, school: found.school_name, course_id: found.id, student_id: studentId })
+      });
+      if (!insert.ok) {
+        const data = await insert.text();
+        console.error('[Student Dashboard] Join error:', data);
+        setCodeError(`${text.failedToJoin} ${data || text.unknownError}`); return;
       }
-
-      const matchedClasses =
-        await response.json();
-
-      const foundClass =
-        matchedClasses[0];
-
-      if (!foundClass) {
-        setCodeError(
-          text.codeInvalid
-        );
-
-        return;
-      }
-
-      /*
-       * Prevent duplicate enrollment.
-       */
-      const alreadyJoined =
-        myClasses.some(
-          (item) =>
-            item.code?.toUpperCase() ===
-            foundClass.code?.toUpperCase()
-        );
-
-      if (alreadyJoined) {
-        setCodeError(
-          text.alreadyJoined
-        );
-
-        return;
-      }
-
-      /*
-       * Save teacher_classes.id as course_id.
-       */
-      const insertResponse =
-        await fetch(
-          `${SUPABASE_URL}/rest/v1/student_classes`,
-          {
-            method: 'POST',
-            headers: {
-              ...headers,
-              'Content-Type':
-                'application/json',
-              Prefer:
-                'return=representation',
-            },
-            body: JSON.stringify({
-              class_name:
-                foundClass.class_name,
-              code:
-                foundClass.code,
-              school:
-                foundClass.school_name,
-              course_id:
-                foundClass.id,
-            }),
-          }
-        );
-
-      if (!insertResponse.ok) {
-        const errorData =
-          await insertResponse.json();
-
-        console.error(
-          '[Student Dashboard] Enrollment error:',
-          errorData
-        );
-
-        setCodeError(
-          `${text.failedToJoin} ${
-            errorData.message ||
-            text.unknownError
-          }`
-        );
-
-        return;
-      }
-
-      setClassCode('');
-
-      await fetchDashboardData();
-    } catch (error) {
-      console.error(
-        '[Student Dashboard] Error joining class:',
-        error
-      );
-
-      setCodeError(
-        text.networkError
-      );
-    } finally {
-      setJoining(false);
-    }
+      setClassCode(''); await fetchDashboardData();
+    } catch (error) { console.error(error); setCodeError(text.networkError); }
+    finally { setJoining(false); }
   };
 
-  /*
-   * ============================================================
-   * CLASS ASSIGNMENTS
-   * ============================================================
-   */
-  const getClassAssignments = (
-    studentClass: StudentClass
-  ) => {
-    if (
-      !studentClass.course_id
-    ) {
-      return [];
-    }
+  const getLatestSubmission = useCallback((assignmentId: string) => {
+    const studentId = getStudentId();
+    if (!studentId) return null;
+    return submissions
+      .filter(x => x.assignment_id === assignmentId && String(x.student_id ?? '').trim() === studentId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] ?? null;
+  }, [submissions, getStudentId]);
 
-    return assignments.filter(
-      (assignment) =>
-        assignment.course_id ===
-        studentClass.course_id
-    );
+  const gradeHistory: GradeHistoryItem[] = assignments.map(a => {
+    const s = getLatestSubmission(a.id);
+    if (!s || s.grade === null || s.grade === undefined || Number.isNaN(Number(s.grade))) return null;
+    return { name: a.name, grade: Number(s.grade), type: 'assignment' as const };
+  }).filter((x): x is GradeHistoryItem => x !== null);
+
+  const averageGrade = gradeHistory.length
+    ? Math.round((gradeHistory.reduce((sum, x) => sum + x.grade, 0) / gradeHistory.length) * 100) / 100
+    : null;
+
+  const sortedAssignments = [...assignments]
+    .filter(a => !getLatestSubmission(a.id))
+    .sort((a, b) => {
+      if (!a.due_date && !b.due_date) return 0;
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+    });
+
+  const dueStatus = (date: string | null) => {
+    if (!date) return { label: text.noDueDate, className: 'text-muted-foreground' };
+    const d = new Date(date); const n = new Date();
+    const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+    const due = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
+    if (diff < 0) return { label: text.overdue, className: 'text-red-500' };
+    if (diff === 0) return { label: text.dueToday, className: 'text-orange-500' };
+    if (diff === 1) return { label: text.dueTomorrow, className: 'text-yellow-500' };
+    return { label: `${text.dueIn} ${diff} ${text.days}`, className: 'text-primary' };
   };
 
-  /*
-   * ============================================================
-   * GET LATEST SUBMISSION
-   * ============================================================
-   *
-   * submissions is already filtered by student_id at the
-   * database request, so every submission here belongs to
-   * the logged-in student.
-   */
-  const getLatestSubmission = (
-    assignmentId: string
-  ) => {
-    const matching =
-      submissions
-        .filter(
-          (submission) =>
-            submission.assignment_id ===
-            assignmentId
-        )
-        .sort(
-          (a, b) =>
-            new Date(
-              b.created_at
-            ).getTime() -
-            new Date(
-              a.created_at
-            ).getTime()
-        );
+  const formatDate = (date: string | null) => !date ? text.noDueDate : new Date(date).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 
-    return (
-      matching[0] || null
-    );
-  };
-
-  /*
-   * ============================================================
-   * GRADED SUBMISSIONS
-   * ============================================================
-   */
-  const gradedSubmissions =
-    submissions.filter(
-      (submission) =>
-        submission.grade !== null &&
-        submission.grade !==
-          undefined &&
-        !Number.isNaN(
-          Number(submission.grade)
-        )
-    );
-
-  /*
-   * ============================================================
-   * GRADE HISTORY
-   * ============================================================
-   */
-  const gradeHistory: GradeHistoryItem[] =
-    gradedSubmissions
-      .map((submission) => {
-        const assignment =
-          assignments.find(
-            (item) =>
-              item.id ===
-              submission.assignment_id
-          );
-
-        if (!assignment) {
-          return null;
-        }
-
-        return {
-          name: assignment.name,
-          grade: Number(
-            submission.grade
-          ),
-          type: 'assignment' as const,
-        };
-      })
-      .filter(
-        (
-          item
-        ): item is GradeHistoryItem =>
-          item !== null
-      );
-
-  /*
-   * ============================================================
-   * AVERAGE GRADE
-   * ============================================================
-   *
-   * ONLY grades belonging to the logged-in student are used.
-   */
-  const averageGrade =
-    gradeHistory.length > 0
-      ? Math.round(
-          (gradeHistory.reduce(
-            (sum, item) =>
-              sum + item.grade,
-            0
-          ) /
-            gradeHistory.length) *
-            100
-        ) / 100
-      : null;
-
-  /*
-   * ============================================================
-   * DUE STATUS
-   * ============================================================
-   */
-  const getDueStatus = (
-    dueDate: string | null
-  ) => {
-    if (!dueDate) {
-      return {
-        label: text.noDueDate,
-        className:
-          'text-muted-foreground',
-      };
-    }
-
-    const due =
-      new Date(dueDate);
-
-    const now = new Date();
-
-    const today =
-      new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
-      );
-
-    const dueDay =
-      new Date(
-        due.getFullYear(),
-        due.getMonth(),
-        due.getDate()
-      );
-
-    const difference =
-      Math.round(
-        (dueDay.getTime() -
-          today.getTime()) /
-          (1000 *
-            60 *
-            60 *
-            24)
-      );
-
-    if (difference < 0) {
-      return {
-        label: text.overdue,
-        className:
-          'text-red-500',
-      };
-    }
-
-    if (difference === 0) {
-      return {
-        label: text.dueToday,
-        className:
-          'text-orange-500',
-      };
-    }
-
-    if (difference === 1) {
-      return {
-        label: text.dueTomorrow,
-        className:
-          'text-yellow-500',
-      };
-    }
-
-    return {
-      label: `${text.dueIn} ${difference} ${text.days}`,
-      className:
-        'text-primary',
-    };
-  };
-
-  /*
-   * ============================================================
-   * FORMAT DATE
-   * ============================================================
-   */
-  const formatDueDate = (
-    date: string | null
-  ) => {
-    if (!date) {
-      return text.noDueDate;
-    }
-
-    return new Date(
-      date
-    ).toLocaleDateString(
-      language === 'id'
-        ? 'id-ID'
-        : 'en-US',
-      {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      }
-    );
-  };
-
-  /*
-   * ============================================================
-   * ASSIGNMENTS DUE
-   * ============================================================
-   *
-   * CRITICAL:
-   *
-   * An assignment disappears ONLY when THIS STUDENT has
-   * a submission for it.
-   *
-   * If another student submits it, it stays here.
-   */
-  const sortedAssignments =
-    [...assignments]
-      .filter((assignment) => {
-        const submission =
-          getLatestSubmission(
-            assignment.id
-          );
-
-        /*
-         * Has this student submitted?
-         */
-        return submission === null;
-      })
-      .sort(
-        (a, b) => {
-          if (
-            !a.due_date &&
-            !b.due_date
-          ) {
-            return 0;
-          }
-
-          if (!a.due_date) {
-            return 1;
-          }
-
-          if (!b.due_date) {
-            return -1;
-          }
-
-          return (
-            new Date(
-              a.due_date
-            ).getTime() -
-            new Date(
-              b.due_date
-            ).getTime()
-          );
-        }
-      );
+  const classAssignments = (c: StudentClass) => assignments.filter(a => a.course_id === c.course_id && !getLatestSubmission(a.id));
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-
       <main className="container mx-auto px-6 py-8 space-y-8">
-
-        {/* ================================================== */}
-        {/* HEADER */}
-        {/* ================================================== */}
-
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            {text.dashboardTitle}
-          </h1>
-
-          <p className="text-muted-foreground">
-            {text.dashboardDescription}
-          </p>
-        </div>
-
-        {/* ================================================== */}
-        {/* TOP CARDS */}
-        {/* ================================================== */}
+        <div><h1 className="text-3xl font-bold tracking-tight text-foreground">{text.dashboardTitle}</h1><p className="text-muted-foreground">{text.dashboardDescription}</p></div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="bg-card"><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><PlusCircle className="h-5 w-5 text-primary" />{text.classCodeInput}</CardTitle></CardHeader><CardContent>
+            <form onSubmit={handleJoinClass} className="space-y-3"><div className="flex gap-3"><Input value={classCode} onChange={e => { setClassCode(e.target.value); setCodeError(null); }} placeholder={text.enterCode} className="bg-background uppercase" /><Button type="submit" disabled={joining}>{joining ? <Loader2 className="size-4 animate-spin" /> : text.joinClass}</Button></div>{codeError && <p className="text-xs font-medium text-red-500">{codeError}</p>}</form>
+          </CardContent></Card>
 
-          {/* JOIN CLASS */}
-
-          <Card className="bg-card">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <PlusCircle className="h-5 w-5 text-primary" />
-
-                {text.classCodeInput}
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent>
-              <form
-                onSubmit={
-                  handleJoinClass
-                }
-                className="space-y-3"
-              >
-                <div className="flex gap-3">
-
-                  <Input
-                    type="text"
-                    placeholder={
-                      text.enterCode
-                    }
-                    value={
-                      classCode
-                    }
-                    onChange={(e) => {
-                      setClassCode(
-                        e.target.value
-                      );
-
-                      if (
-                        codeError
-                      ) {
-                        setCodeError(
-                          null
-                        );
-                      }
-                    }}
-                    className={`bg-background uppercase ${
-                      codeError
-                        ? '!border-red-500 !ring-red-500 text-red-500'
-                        : ''
-                    }`}
-                  />
-
-                  <Button
-                    type="submit"
-                    disabled={
-                      joining
-                    }
-                  >
-                    {joining ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      text.joinClass
-                    )}
-                  </Button>
-
-                </div>
-
-                {codeError && (
-                  <span className="text-xs text-red-500 font-medium block">
-                    {
-                      codeError
-                    }
-                  </span>
-                )}
-              </form>
-            </CardContent>
-          </Card>
-
-          {/* AVERAGE GRADES */}
-
-          <Card
-            className="bg-card cursor-pointer hover:bg-accent/20 transition"
-            onClick={() =>
-              setShowGrades(true)
-            }
-          >
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-primary" />
-
-                {
-                  text.averageGrades
-                }
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent>
-
-              {loading ? (
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
-              ) : averageGrade ===
-                null ? (
-                <div>
-                  <p className="text-4xl font-bold text-muted-foreground">
-                    —
-                  </p>
-
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {
-                      text.noGrades
-                    }
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-4xl font-bold text-primary">
-                    {
-                      averageGrade
-                    }
-                  </p>
-
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {
-                      gradeHistory.length
-                    }{' '}
-                    {
-                      text.grades
-                    }
-                  </p>
-                </div>
-              )}
-
-            </CardContent>
-          </Card>
-
+          <Card className="bg-card cursor-pointer hover:bg-accent/20 transition" onClick={() => setShowGrades(true)}><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" />{text.averageGrades}</CardTitle></CardHeader><CardContent>
+            {loading ? <Loader2 className="size-6 animate-spin text-muted-foreground" /> : averageGrade === null ? <><p className="text-4xl font-bold text-muted-foreground">—</p><p className="text-sm text-muted-foreground mt-1">{text.noGrades}</p></> : <><p className="text-4xl font-bold text-primary">{averageGrade}</p><p className="text-sm text-muted-foreground mt-1">{gradeHistory.length} {text.grades}</p></>}
+          </CardContent></Card>
         </div>
 
-        {/* ================================================== */}
-        {/* CLASSES */}
-        {/* ================================================== */}
+        <Card className="bg-card"><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><BookOpen className="h-5 w-5 text-primary" />{text.classesYouAreIn}</CardTitle></CardHeader><CardContent>
+          {loading ? <div className="flex justify-center py-6"><Loader2 className="size-6 animate-spin" /></div> : myClasses.length === 0 ? <p className="text-sm text-muted-foreground">{text.noClasses}</p> : <div className="space-y-3">{myClasses.map(c => <Link key={c.id} href={`/dashboard/student/classes/${c.code}`}><div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition"><div className="min-w-0"><h4 className="font-medium truncate">{c.class_name}</h4><p className="text-xs text-muted-foreground">{text.school} {c.school || '—'}</p></div><div className="flex items-center gap-3 shrink-0"><div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><CalendarDays className="h-4 w-4 text-primary" /><span>{classAssignments(c).length} {text.assignmentCount}</span></div><span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">{text.active}</span></div></div></Link>)}</div>}
+        </CardContent></Card>
 
-        <Card className="bg-card">
-
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-primary" />
-
-              {
-                text.classesYouAreIn
-              }
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-
-            <div className="space-y-3">
-
-              {loading ? (
-                <div className="flex items-center justify-center py-6">
-                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : myClasses.length ===
-                0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {
-                    text.noClasses
-                  }
-                </p>
-              ) : (
-                myClasses.map(
-                  (item) => {
-                    const classAssignments =
-                      getClassAssignments(
-                        item
-                      );
-
-                    return (
-                      <Link
-                        key={
-                          item.id
-                        }
-                        href={`/dashboard/student/classes/${item.code}`}
-                      >
-                        <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20 hover:bg-accent/40 transition cursor-pointer">
-
-                          <div className="min-w-0">
-
-                            <h4 className="font-medium text-foreground truncate">
-                              {
-                                item.class_name
-                              }
-                            </h4>
-
-                            <p className="text-xs text-muted-foreground">
-                              {
-                                text.school
-                              }{' '}
-                              {
-                                item.school ||
-                                '—'
-                              }
-                            </p>
-
-                          </div>
-
-                          <div className="flex items-center gap-3 shrink-0">
-
-                            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                              <CalendarDays className="h-4 w-4 text-primary" />
-
-                              <span>
-                                {
-                                  classAssignments.length
-                                }{' '}
-                                {
-                                  text.assignmentCount
-                                }
-                              </span>
-                            </div>
-
-                            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">
-                              {
-                                text.active
-                              }
-                            </span>
-
-                          </div>
-
-                        </div>
-                      </Link>
-                    );
-                  }
-                )
-              )}
-
-            </div>
-
-          </CardContent>
-        </Card>
-
-        {/* ================================================== */}
-        {/* ASSIGNMENTS DUE */}
-        {/* ================================================== */}
-
-        <Card className="bg-card">
-
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold flex items-center gap-2">
-              <CalendarDays className="h-5 w-5 text-primary" />
-
-              {
-                text.assignmentsDue
-              }
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-
-            {loading ? (
-              <div className="flex justify-center py-6">
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : sortedAssignments.length ===
-              0 ? (
-              <p className="text-sm text-muted-foreground">
-                {
-                  text.noAssignments
-                }
-              </p>
-            ) : (
-              <div className="space-y-3">
-
-                {sortedAssignments.map(
-                  (assignment) => {
-
-                    const dueStatus =
-                      getDueStatus(
-                        assignment.due_date
-                      );
-
-                    const studentClass =
-                      myClasses.find(
-                        (item) =>
-                          item.course_id ===
-                          assignment.course_id
-                      );
-
-                    return (
-                      <div
-                        key={
-                          assignment.id
-                        }
-                        className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20"
-                      >
-
-                        <div className="min-w-0">
-
-                          <h4 className="font-medium text-foreground truncate">
-                            {
-                              assignment.name
-                            }
-                          </h4>
-
-                          {studentClass && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {
-                                studentClass.class_name
-                              }
-                            </p>
-                          )}
-
-                        </div>
-
-                        <div className="text-right shrink-0">
-
-                          <p
-                            className={`text-sm font-semibold ${dueStatus.className}`}
-                          >
-                            {
-                              dueStatus.label
-                            }
-                          </p>
-
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {
-                              formatDueDate(
-                                assignment.due_date
-                              )
-                            }
-                          </p>
-
-                        </div>
-
-                      </div>
-                    );
-                  }
-                )}
-
-              </div>
-            )}
-
-          </CardContent>
-        </Card>
-
+        <Card className="bg-card"><CardHeader><CardTitle className="text-lg font-semibold flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" />{text.assignmentsDue}</CardTitle></CardHeader><CardContent>
+          {loading ? <div className="flex justify-center py-6"><Loader2 className="size-6 animate-spin" /></div> : sortedAssignments.length === 0 ? <p className="text-sm text-muted-foreground">{text.noAssignments}</p> : <div className="space-y-3">{sortedAssignments.map(a => { const status = dueStatus(a.due_date); const c = myClasses.find(x => x.course_id === a.course_id); return <div key={a.id} className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-accent/20"><div className="min-w-0"><h4 className="font-medium truncate">{a.name}</h4>{c && <p className="text-xs text-muted-foreground mt-1">{c.class_name}</p>}</div><div className="text-right shrink-0"><p className={`text-sm font-semibold ${status.className}`}>{status.label}</p><p className="text-xs text-muted-foreground mt-1">{formatDate(a.due_date)}</p></div></div>; })}</div>}
+        </CardContent></Card>
       </main>
 
-      {/* ==================================================== */}
-      {/* GRADE HISTORY MODAL */}
-      {/* ==================================================== */}
-
-      {showGrades && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() =>
-            setShowGrades(false)
-          }
-        >
-
-          <div
-            className="w-full max-w-lg max-h-[80vh] overflow-hidden bg-card border border-border rounded-xl shadow-xl"
-            onClick={(e) =>
-              e.stopPropagation()
-            }
-          >
-
-            {/* HEADER */}
-
-            <div className="flex items-center justify-between p-5 border-b border-border">
-
-              <div>
-
-                <h2 className="text-xl font-bold text-foreground">
-                  {
-                    text.gradeHistory
-                  }
-                </h2>
-
-                {averageGrade !==
-                  null && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {
-                      text.averageGrades
-                    }:{' '}
-
-                    <span className="font-semibold text-primary">
-                      {
-                        averageGrade
-                      }
-                    </span>
-                  </p>
-                )}
-
-              </div>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() =>
-                  setShowGrades(
-                    false
-                  )
-                }
-              >
-                <X className="h-5 w-5" />
-              </Button>
-
-            </div>
-
-            {/* HISTORY */}
-
-            <div className="p-5 overflow-y-auto max-h-[55vh]">
-
-              {gradeHistory.length ===
-              0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  {
-                    text.noGrades
-                  }
-                </p>
-              ) : (
-                <div className="space-y-2">
-
-                  {gradeHistory.map(
-                    (
-                      item,
-                      index
-                    ) => (
-                      <div
-                        key={`${item.name}-${index}`}
-                        className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20"
-                      >
-
-                        <div className="min-w-0">
-
-                          <p className="font-medium text-foreground truncate">
-                            {
-                              item.name
-                            }
-                          </p>
-
-                          <p className="text-xs text-muted-foreground">
-                            {
-                              item.type ===
-                              'assignment'
-                                ? text.assignment
-                                : text.test
-                            }
-                          </p>
-
-                        </div>
-
-                        <p className="text-lg font-bold text-primary ml-4">
-                          {
-                            item.grade
-                          }
-                        </p>
-
-                      </div>
-                    )
-                  )}
-
-                </div>
-              )}
-
-            </div>
-
-            {/* FOOTER */}
-
-            <div className="flex justify-end p-5 border-t border-border">
-
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setShowGrades(
-                    false
-                  )
-                }
-              >
-                {
-                  text.close
-                }
-              </Button>
-
-            </div>
-
-          </div>
-
-        </div>
-      )}
-
+      {showGrades && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowGrades(false)}><div className="w-full max-w-lg max-h-[80vh] overflow-hidden bg-card border border-border rounded-xl shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-border"><div><h2 className="text-xl font-bold">{text.gradeHistory}</h2>{averageGrade !== null && <p className="text-sm text-muted-foreground mt-1">{text.averageGrades}: <span className="font-semibold text-primary">{averageGrade}</span></p>}</div><Button variant="ghost" size="icon" onClick={() => setShowGrades(false)}><X className="h-5 w-5" /></Button></div>
+        <div className="p-5 overflow-y-auto max-h-[55vh]">{gradeHistory.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">{text.noGrades}</p> : <div className="space-y-2">{gradeHistory.map((g, i) => <div key={`${g.name}-${i}`} className="flex items-center justify-between p-4 rounded-lg border border-border bg-accent/20"><div><p className="font-medium truncate">{g.name}</p><p className="text-xs text-muted-foreground">{g.type === 'assignment' ? text.assignment : text.test}</p></div><p className="text-lg font-bold text-primary ml-4">{g.grade}</p></div>)}</div>}</div>
+        <div className="flex justify-end p-5 border-t border-border"><Button variant="outline" onClick={() => setShowGrades(false)}>{text.close}</Button></div>
+      </div></div>}
     </div>
   );
 }
