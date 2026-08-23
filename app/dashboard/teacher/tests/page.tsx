@@ -6,7 +6,7 @@ import { Navbar } from '@/components/Navbar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Plus, Trash2, Loader2, Save, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader2, Eye, EyeOff } from 'lucide-react';
 
 type Test = { id: string; class_code: string; title: string; description: string | null; published: boolean; created_at: string };
 type Question = {
@@ -22,9 +22,13 @@ type Question = {
   points?: number;
 };
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const headers = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const headers = {
+  apikey: key || '',
+  Authorization: `Bearer ${key || ''}`,
+  'Content-Type': 'application/json',
+};
 
 export default function TeacherTestsPage() {
   const [tests, setTests] = useState<Test[]>([]);
@@ -41,7 +45,12 @@ export default function TeacherTestsPage() {
   async function load() {
     setLoading(true);
     try {
-      const r = await fetch(`${url}/rest/v1/tests?select=*&order=created_at.desc`, { headers, cache: 'no-store' });
+      if (!url || !key) throw new Error('Supabase environment variables are missing.');
+
+      const r = await fetch(`${url}/rest/v1/tests?select=*&order=created_at.desc`, {
+        headers,
+        cache: 'no-store',
+      });
       if (!r.ok) throw new Error(await r.text());
       const data: Test[] = await r.json();
       setTests(data);
@@ -52,21 +61,22 @@ export default function TeacherTestsPage() {
           `${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(t.id)}&select=*&order=question_order.asc`,
           { headers, cache: 'no-store' }
         );
-        map[t.id] = qr.ok ? await qr.json() : [];
+        if (!qr.ok) throw new Error(await qr.text());
+        map[t.id] = await qr.json();
       }));
       setQuestions(map);
     } catch (e) {
       console.error(e);
-      setError('Failed to load tests. Make sure the Tests SQL schema has been run.');
+      setError(e instanceof Error ? e.message : 'Failed to load tests.');
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, []);
 
   async function createTest() {
-    if (!classCode.trim() || !title.trim()) return;
+    if (!url || !key || !classCode.trim() || !title.trim()) return;
     setBusy(true);
     setError('');
     try {
@@ -87,25 +97,26 @@ export default function TeacherTestsPage() {
       await load();
     } catch (e) {
       console.error(e);
-      setError('Failed to create test.');
+      setError(`Failed to create test: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally {
       setBusy(false);
     }
   }
 
   async function deleteTest(id: string) {
-    if (!confirm('Delete this test and all its questions/submissions?')) return;
+    if (!url || !confirm('Delete this test and all its questions/submissions?')) return;
     try {
       const r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers });
       if (!r.ok) throw new Error(await r.text());
       await load();
     } catch (e) {
       console.error(e);
-      setError('Failed to delete test.');
+      setError(`Failed to delete test: ${e instanceof Error ? e.message : 'Unknown error'}`);
     }
   }
 
   async function togglePublished(t: Test) {
+    if (!url) return;
     try {
       const r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(t.id)}`, {
         method: 'PATCH',
@@ -116,7 +127,7 @@ export default function TeacherTestsPage() {
       setTests(prev => prev.map(x => x.id === t.id ? { ...x, published: !x.published } : x));
     } catch (e) {
       console.error(e);
-      setError('Failed to change publication status.');
+      setError(`Failed to change publication status: ${e instanceof Error ? e.message : 'Unknown error'}`);
     }
   }
 
@@ -136,6 +147,8 @@ export default function TeacherTestsPage() {
   }
 
   async function recalculatePoints(testId: string) {
+    if (!url) throw new Error('Supabase URL is missing.');
+
     const qr = await fetch(
       `${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(testId)}&select=id`,
       { headers, cache: 'no-store' }
@@ -145,49 +158,73 @@ export default function TeacherTestsPage() {
     const rows: { id: string }[] = await qr.json();
     const points = rows.length ? 100 / rows.length : 0;
 
-    await Promise.all(rows.map(row =>
-      fetch(`${url}/rest/v1/test_questions?id=eq.${encodeURIComponent(row.id)}`, {
+    for (const row of rows) {
+      const r = await fetch(`${url}/rest/v1/test_questions?id=eq.${encodeURIComponent(row.id)}`, {
         method: 'PATCH',
         headers: { ...headers, Prefer: 'return=minimal' },
         body: JSON.stringify({ points }),
-      }).then(async r => {
-        if (!r.ok) throw new Error(await r.text());
-      })
-    ));
+      });
+      if (!r.ok) throw new Error(await r.text());
+    }
   }
 
   async function saveQuestion() {
     if (!q) return;
 
+    const draft = q;
     const missing: string[] = [];
-    if (!q.question.trim()) missing.push('question');
-    if (!q.option_a.trim()) missing.push('A');
-    if (!q.option_b.trim()) missing.push('B');
-    if (!q.option_c.trim()) missing.push('C');
-    if (!q.option_d.trim()) missing.push('D');
+    if (!draft.question.trim()) missing.push('question');
+    if (!draft.option_a.trim()) missing.push('A');
+    if (!draft.option_b.trim()) missing.push('B');
+    if (!draft.option_c.trim()) missing.push('C');
+    if (!draft.option_d.trim()) missing.push('D');
 
     if (missing.length) {
       setError(`Please fill in: ${missing.join(', ')}`);
       return;
     }
 
+    if (!url || !key) {
+      setError('Supabase is not configured on this deployment.');
+      return;
+    }
+
     setBusy(true);
     setError('');
 
-    try {
-      const currentCount = questions[q.test_id]?.length || 0;
-      const nextOrder = currentCount + 1;
+    const testId = draft.test_id;
+    const previousQuestions = questions[testId] || [];
+    const nextOrder = previousQuestions.length + 1;
+    const optimisticQuestion: Question = {
+      ...draft,
+      question_order: nextOrder,
+      question: draft.question.trim(),
+      option_a: draft.option_a.trim(),
+      option_b: draft.option_b.trim(),
+      option_c: draft.option_c.trim(),
+      option_d: draft.option_d.trim(),
+      points: 100 / nextOrder,
+    };
 
+    // Update the screen immediately so the button can never appear to do nothing.
+    setQuestions(prev => ({
+      ...prev,
+      [testId]: [...(prev[testId] || []), optimisticQuestion],
+    }));
+    setQ(null);
+    setOpen(null);
+
+    try {
       const payload = {
-        test_id: q.test_id,
+        test_id: testId,
         question_order: nextOrder,
-        question: q.question.trim(),
-        option_a: q.option_a.trim(),
-        option_b: q.option_b.trim(),
-        option_c: q.option_c.trim(),
-        option_d: q.option_d.trim(),
-        correct_answer: q.correct_answer,
-        points: 100 / (currentCount + 1),
+        question: optimisticQuestion.question,
+        option_a: optimisticQuestion.option_a,
+        option_b: optimisticQuestion.option_b,
+        option_c: optimisticQuestion.option_c,
+        option_d: optimisticQuestion.option_d,
+        correct_answer: optimisticQuestion.correct_answer,
+        points: optimisticQuestion.points,
       };
 
       const r = await fetch(`${url}/rest/v1/test_questions`, {
@@ -196,22 +233,39 @@ export default function TeacherTestsPage() {
         body: JSON.stringify(payload),
       });
 
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) {
+        throw new Error(await r.text());
+      }
 
-      await recalculatePoints(q.test_id);
-      setQ(null);
-      setOpen(null);
+      // Use the real database row (including its UUID), then normalize all points.
+      const inserted: Question[] = await r.json();
+      const realQuestion = inserted[0];
+      if (realQuestion) {
+        setQuestions(prev => ({
+          ...prev,
+          [testId]: (prev[testId] || []).map(item =>
+            item === optimisticQuestion ? realQuestion : item
+          ),
+        }));
+      }
+
+      await recalculatePoints(testId);
       await load();
     } catch (e) {
       console.error(e);
-      setError(`Failed to add question: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      // Roll back the optimistic row if the database rejected it.
+      setQuestions(prev => ({
+        ...prev,
+        [testId]: (prev[testId] || []).filter(item => item !== optimisticQuestion),
+      }));
+      setError(`Question could not be saved to the database: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally {
       setBusy(false);
     }
   }
 
   async function deleteQuestion(id: string, testId: string) {
-    if (!confirm('Delete this question?')) return;
+    if (!url || !confirm('Delete this question?')) return;
     try {
       const r = await fetch(`${url}/rest/v1/test_questions?id=eq.${encodeURIComponent(id)}`, {
         method: 'DELETE',
@@ -240,7 +294,7 @@ export default function TeacherTestsPage() {
         </div>
 
         {error && (
-          <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive whitespace-pre-wrap">
             {error}
           </div>
         )}
@@ -251,7 +305,7 @@ export default function TeacherTestsPage() {
             <Input value={classCode} onChange={e => setClassCode(e.target.value)} placeholder="Class code" className="uppercase" />
             <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Test title" />
             <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Description (optional)" />
-            <Button onClick={createTest} disabled={busy || !classCode.trim() || !title.trim()}>
+            <Button type="button" onClick={() => void createTest()} disabled={busy || !classCode.trim() || !title.trim()}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="mr-2 size-4" />}
               Create Test
             </Button>
@@ -267,10 +321,10 @@ export default function TeacherTestsPage() {
                   <p className="text-sm text-muted-foreground">Class: {t.class_code} · {questions[t.id]?.length || 0} questions</p>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => togglePublished(t)}>
+                  <Button type="button" variant="outline" onClick={() => void togglePublished(t)}>
                     {t.published ? <><EyeOff className="mr-2 size-4" />Unpublish</> : <><Eye className="mr-2 size-4" />Publish</>}
                   </Button>
-                  <Button variant="destructive" onClick={() => deleteTest(t.id)}><Trash2 className="size-4" /></Button>
+                  <Button type="button" variant="destructive" onClick={() => void deleteTest(t.id)}><Trash2 className="size-4" /></Button>
                 </div>
               </div>
             </CardHeader>
@@ -282,14 +336,14 @@ export default function TeacherTestsPage() {
                 <p className="font-medium">Questions</p>
 
                 {(questions[t.id] || []).map((x, i) => (
-                  <div key={x.id} className="mt-3 flex items-start justify-between gap-3 border-t pt-3">
+                  <div key={x.id || `${t.id}-${i}`} className="mt-3 flex items-start justify-between gap-3 border-t pt-3">
                     <div>
                       <p className="font-medium">{i + 1}. {x.question}</p>
                       <p className="text-xs text-muted-foreground">
                         A: {x.option_a} · B: {x.option_b} · C: {x.option_c} · D: {x.option_d} · Correct: {x.correct_answer} · {Number(x.points || 0).toFixed(2)} pts
                       </p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => x.id && deleteQuestion(x.id, t.id)}>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => x.id && void deleteQuestion(x.id, t.id)}>
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
@@ -325,15 +379,15 @@ export default function TeacherTestsPage() {
                     </p>
 
                     <div className="flex gap-2">
-                      <Button onClick={saveQuestion} disabled={busy}>
+                      <Button type="button" onClick={() => void saveQuestion()} disabled={busy}>
                         {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Plus className="mr-2 size-4" />}
                         Add Question
                       </Button>
-                      <Button variant="outline" onClick={() => { setQ(null); setOpen(null); }} disabled={busy}>Cancel</Button>
+                      <Button type="button" variant="outline" onClick={() => { setQ(null); setOpen(null); }} disabled={busy}>Cancel</Button>
                     </div>
                   </div>
                 ) : (
-                  <Button variant="outline" className="mt-3" onClick={() => newQuestion(t.id)}>
+                  <Button type="button" variant="outline" className="mt-3" onClick={() => newQuestion(t.id)}>
                     <Plus className="mr-2 size-4" />Add Question
                   </Button>
                 )}
