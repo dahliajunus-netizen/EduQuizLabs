@@ -1,6 +1,14 @@
 -- ISIF / EduQuizLabs Tests RPC
 -- Run this entire file in Supabase SQL Editor.
 
+-- Tests belong to a course as well as a class.
+-- Existing tests remain valid because course_id is nullable.
+alter table public.tests
+  add column if not exists course_id uuid;
+
+create index if not exists tests_course_id_idx
+  on public.tests(course_id);
+
 create or replace function public.submit_test(
   p_test_id uuid,
   p_student_id uuid,
