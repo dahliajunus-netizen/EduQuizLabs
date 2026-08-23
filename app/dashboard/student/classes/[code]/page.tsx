@@ -1,5 +1,6 @@
 'use client';
 
+import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -67,6 +68,7 @@ type Assignment = {
 type Submission = {
   id?: string;
   assignment_id: string;
+  student_id?: string | null;
   nickname: string;
   class: string;
   link: string;
@@ -86,7 +88,7 @@ export default function ClassDetailsPage() {
 
   const code = Array.isArray(params.code)
     ? params.code[0]
-    : (params.code as string);
+    : String(params.code || '');
 
   const supabaseUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -118,13 +120,16 @@ export default function ClassDetailsPage() {
   const [isTeacher, setIsTeacher] =
     useState(false);
 
+  const [studentId, setStudentId] =
+    useState('');
+
   const [studentFullName, setStudentFullName] =
     useState('');
 
   const [copiedCode, setCopiedCode] =
     useState(false);
 
-  // COURSE
+  // Course
   const [isCourseModalOpen, setIsCourseModalOpen] =
     useState(false);
 
@@ -137,7 +142,7 @@ export default function ClassDetailsPage() {
   const [openCourses, setOpenCourses] =
     useState<Record<string, boolean>>({});
 
-  // ADD MATERIAL / ASSIGNMENT
+  // Add material / assignment
   const [isAddModalOpen, setIsAddModalOpen] =
     useState(false);
 
@@ -165,14 +170,14 @@ export default function ClassDetailsPage() {
   const [creatingItem, setCreatingItem] =
     useState(false);
 
-  // LINK CHECK
+  // Link checking
   const [checkingLink, setCheckingLink] =
     useState(false);
 
   const [linkCheckError, setLinkCheckError] =
     useState<string | null>(null);
 
-  // STUDENT SUBMISSION
+  // Student submission
   const [isSubmissionModalOpen, setIsSubmissionModalOpen] =
     useState(false);
 
@@ -191,7 +196,7 @@ export default function ClassDetailsPage() {
   const [undoingSubmission, setUndoingSubmission] =
     useState(false);
 
-  // TEACHER
+  // Teacher grading
   const [openAssignments, setOpenAssignments] =
     useState<Record<string, boolean>>({});
 
@@ -200,10 +205,6 @@ export default function ClassDetailsPage() {
 
   const [savingGrades, setSavingGrades] =
     useState<Record<string, boolean>>({});
-
-  // ============================================================
-  // HELPERS
-  // ============================================================
 
   const authHeaders = {
     apikey: supabaseAnonKey || '',
@@ -219,15 +220,16 @@ export default function ClassDetailsPage() {
   const getJson = async <T,>(url: string): Promise<T> => {
     const response = await fetch(url, {
       headers: authHeaders,
+      cache: 'no-store',
     });
 
+    const text = await response.text();
+
     if (!response.ok) {
-      throw new Error(
-        await response.text() || 'Request failed.'
-      );
+      throw new Error(text || 'Request failed.');
     }
 
-    return response.json();
+    return text ? JSON.parse(text) : ([] as T);
   };
 
   const deleteFrom = async (url: string) => {
@@ -238,7 +240,7 @@ export default function ClassDetailsPage() {
 
     if (!response.ok) {
       throw new Error(
-        await response.text() || 'Delete failed.'
+        (await response.text()) || 'Delete failed.'
       );
     }
   };
@@ -246,7 +248,6 @@ export default function ClassDetailsPage() {
   const isValidHttpUrl = (value: string) => {
     try {
       const url = new URL(value.trim());
-
       return (
         url.protocol === 'http:' ||
         url.protocol === 'https:'
@@ -257,38 +258,118 @@ export default function ClassDetailsPage() {
   };
 
   // ============================================================
+  // USER
+  // ============================================================
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      let role = '';
+      let name = '';
+      let id = '';
+
+      const readUser = (parsed: any) => {
+        if (!parsed) return;
+
+        role =
+          role ||
+          parsed?.role ||
+          parsed?.user?.role ||
+          parsed?.user?.user_metadata?.role ||
+          '';
+
+        name =
+          name ||
+          parsed?.fullName ||
+          parsed?.full_name ||
+          parsed?.name ||
+          parsed?.user?.fullName ||
+          parsed?.user?.full_name ||
+          parsed?.user?.name ||
+          parsed?.user?.user_metadata?.fullName ||
+          parsed?.user?.user_metadata?.full_name ||
+          '';
+
+        id =
+          id ||
+          parsed?.id ||
+          parsed?.user_id ||
+          parsed?.uid ||
+          parsed?.user?.id ||
+          '';
+      };
+
+      const directRole =
+        localStorage.getItem('user_role');
+
+      if (directRole) {
+        role = directRole;
+      }
+
+      const currentUser =
+        localStorage.getItem('current_user');
+
+      if (currentUser) {
+        try {
+          readUser(JSON.parse(currentUser));
+        } catch {}
+      }
+
+      // Look through possible auth storage too.
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+
+        if (!key) continue;
+
+        if (
+          key.includes('supabase') ||
+          key.includes('auth')
+        ) {
+          const raw = localStorage.getItem(key);
+
+          if (!raw) continue;
+
+          try {
+            readUser(JSON.parse(raw));
+          } catch {}
+        }
+      }
+
+      setIsTeacher(
+        String(role).toLowerCase() === 'teacher'
+      );
+
+      setStudentFullName(
+        String(name || '').trim()
+      );
+
+      setStudentId(
+        String(id || '').trim()
+      );
+    } catch (err) {
+      console.error('Could not read user:', err);
+    }
+  }, []);
+
+  // ============================================================
   // DATE HELPERS
   // ============================================================
 
-  // Returns today's date in DD/MM/YYYY format.
   const getTodayDateInput = () => {
     const now = new Date();
 
-    const day = String(
-      now.getDate()
-    ).padStart(2, '0');
-
-    const month = String(
+    return `${String(now.getDate()).padStart(2, '0')}/${String(
       now.getMonth() + 1
-    ).padStart(2, '0');
-
-    const year = now.getFullYear();
-
-    return `${day}/${month}/${year}`;
+    ).padStart(2, '0')}/${now.getFullYear()}`;
   };
 
-  // Converts a DD/MM/YYYY date into a Date object.
-  // Returns null if the date is invalid.
-  const parseDDMMYYYY = (
-    value: string
-  ) => {
+  const parseDDMMYYYY = (value: string) => {
     const match = value.match(
       /^(\d{2})\/(\d{2})\/(\d{4})$/
     );
 
-    if (!match) {
-      return null;
-    }
+    if (!match) return null;
 
     const day = Number(match[1]);
     const month = Number(match[2]);
@@ -300,10 +381,6 @@ export default function ClassDetailsPage() {
       day
     );
 
-    // Prevent invalid dates such as:
-    // 31/02/2026
-    // 32/01/2026
-    // 00/12/2026
     if (
       date.getFullYear() !== year ||
       date.getMonth() !== month - 1 ||
@@ -315,285 +392,71 @@ export default function ClassDetailsPage() {
     return date;
   };
 
-  // Converts DD/MM/YYYY to the YYYY-MM-DD format
-  // expected by a PostgreSQL/Supabase date column.
-  const formatDateForDatabase = (
-    value: string
-  ) => {
+  const formatDateForDatabase = (value: string) => {
     const date = parseDDMMYYYY(value);
 
-    if (!date) {
-      return null;
-    }
+    if (!date) return null;
 
-    const year =
-      date.getFullYear();
-
-    const month = String(
+    return `${date.getFullYear()}-${String(
       date.getMonth() + 1
-    ).padStart(2, '0');
-
-    const day = String(
+    ).padStart(2, '0')}-${String(
       date.getDate()
-    ).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
+    ).padStart(2, '0')}`;
   };
 
-  // Makes sure the due date is today or later.
-  const isDueDateValid = (
-    value: string
-  ) => {
+  const isDueDateValid = (value: string) => {
     const date = parseDDMMYYYY(value);
 
-    if (!date) {
-      return false;
-    }
+    if (!date) return false;
 
     const today = new Date();
 
-    today.setHours(
-      0,
-      0,
-      0,
-      0
-    );
-
-    date.setHours(
-      0,
-      0,
-      0,
-      0
-    );
+    today.setHours(0, 0, 0, 0);
+    date.setHours(0, 0, 0, 0);
 
     return date >= today;
   };
 
-  // Formats a database date (YYYY-MM-DD)
-  // into DD/MM/YYYY for display.
   const formatDateForDisplay = (
     value?: string | null
   ) => {
-    if (!value) {
-      return 'No due date';
-    }
+    if (!value) return 'No due date';
 
-    const parts =
-      value.split('-');
+    const parts = value.split('-');
 
     if (parts.length === 3) {
-      const [
-        year,
-        month,
-        day,
-      ] = parts;
-
-      return `${day}/${month}/${year}`;
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
 
     return value;
   };
 
-  // Automatically formats typed digits as DD/MM/YYYY.
-  const handleDueDateChange = (
-    value: string
-  ) => {
-    let digits =
-      value.replace(/\D/g, '');
+  const handleDueDateChange = (value: string) => {
+    let digits = value.replace(/\D/g, '');
 
     if (digits.length > 8) {
-      digits =
-        digits.slice(0, 8);
+      digits = digits.slice(0, 8);
     }
 
     let formatted = digits;
 
     if (digits.length >= 5) {
       formatted =
-        digits.slice(0, 2) +
-        '/' +
-        digits.slice(2, 4) +
-        '/' +
+        `${digits.slice(0, 2)}/` +
+        `${digits.slice(2, 4)}/` +
         digits.slice(4);
-    } else if (
-      digits.length >= 3
-    ) {
+    } else if (digits.length >= 3) {
       formatted =
-        digits.slice(0, 2) +
-        '/' +
+        `${digits.slice(0, 2)}/` +
         digits.slice(2);
     }
 
-    setAssignmentDueDate(
-      formatted
-    );
-
+    setAssignmentDueDate(formatted);
     setLinkCheckError(null);
   };
 
   // ============================================================
-  // COPY JOIN CODE
-  // ============================================================
-
-  const handleCopyCode = async () => {
-    if (!isTeacher || !classData?.code) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(
-        classData.code
-      );
-
-      setCopiedCode(true);
-
-      setTimeout(
-        () => setCopiedCode(false),
-        2000
-      );
-    } catch (err) {
-      console.error(
-        'Failed to copy join code:',
-        err
-      );
-    }
-  };
-
-  // ============================================================
-  // DETECT ROLE + STUDENT NAME
-  // ============================================================
-
-  useEffect(() => {
-    if (
-      typeof window === 'undefined'
-    ) {
-      return;
-    }
-
-    try {
-      let detectedRole = '';
-      let detectedFullName = '';
-
-      const extractUser = (
-        parsed: any
-      ) => {
-        if (!parsed) {
-          return;
-        }
-
-        const role =
-          parsed?.role ||
-          parsed?.user?.role ||
-          parsed?.user?.user_metadata?.role ||
-          parsed?.user_metadata?.role;
-
-        if (role) {
-          detectedRole =
-            String(role).toLowerCase();
-        }
-
-        if (!detectedFullName) {
-          detectedFullName =
-            parsed?.fullName ||
-            parsed?.full_name ||
-            parsed?.name ||
-            parsed?.user?.fullName ||
-            parsed?.user?.full_name ||
-            parsed?.user?.name ||
-            parsed?.user?.user_metadata?.fullName ||
-            parsed?.user?.user_metadata?.full_name ||
-            parsed?.user?.user_metadata?.name ||
-            parsed?.user_metadata?.fullName ||
-            parsed?.user_metadata?.full_name ||
-            parsed?.user_metadata?.name ||
-            '';
-        }
-      };
-
-      const directRole =
-        localStorage.getItem(
-          'user_role'
-        );
-
-      if (directRole) {
-        detectedRole =
-          directRole.toLowerCase();
-      }
-
-      const currentUserRaw =
-        localStorage.getItem(
-          'current_user'
-        );
-
-      if (currentUserRaw) {
-        try {
-          extractUser(
-            JSON.parse(
-              currentUserRaw
-            )
-          );
-        } catch {
-          // Ignore invalid JSON.
-        }
-      }
-
-      for (
-        let i = 0;
-        i < localStorage.length;
-        i++
-      ) {
-        const key =
-          localStorage.key(i);
-
-        if (!key) {
-          continue;
-        }
-
-        if (
-          key.includes('supabase') ||
-          key.includes('auth') ||
-          key === 'current_user'
-        ) {
-          const raw =
-            localStorage.getItem(
-              key
-            );
-
-          if (!raw) {
-            continue;
-          }
-
-          try {
-            extractUser(
-              JSON.parse(raw)
-            );
-          } catch {
-            // Ignore invalid JSON.
-          }
-        }
-      }
-
-      setIsTeacher(
-        detectedRole === 'teacher'
-      );
-
-      setStudentFullName(
-        String(
-          detectedFullName || ''
-        ).trim()
-      );
-    } catch (err) {
-      console.error(
-        'Could not determine user:',
-        err
-      );
-
-      setIsTeacher(false);
-    }
-  }, []);
-
-  // ============================================================
-  // FETCH CLASS
+  // LOAD CLASS
   // ============================================================
 
   useEffect(() => {
@@ -606,7 +469,7 @@ export default function ClassDetailsPage() {
       return;
     }
 
-    async function fetchClassData() {
+    async function loadClass() {
       setLoading(true);
       setError(null);
 
@@ -618,25 +481,14 @@ export default function ClassDetailsPage() {
             )}&select=*`
           );
 
-        if (
-          classList.length === 0
-        ) {
-          setError(
-            'Class not found.'
-          );
-
-          setClassData(null);
-          setCourses([]);
-          setMaterials({});
-          setAssignments({});
-          setSubmissions({});
-
+        if (!classList.length) {
+          setError('Class not found.');
           return;
         }
 
-        setClassData(
-          classList[0]
-        );
+        const currentClass = classList[0];
+
+        setClassData(currentClass);
 
         const courseList =
           await getJson<Course[]>(
@@ -647,107 +499,93 @@ export default function ClassDetailsPage() {
 
         setCourses(courseList);
 
-        const materialMap:
-          Record<
-            string,
-            Material[]
-          > = {};
+        const materialMap: Record<
+          string,
+          Material[]
+        > = {};
 
-        const assignmentMap:
-          Record<
-            string,
-            Assignment[]
-          > = {};
+        const assignmentMap: Record<
+          string,
+          Assignment[]
+        > = {};
 
         await Promise.all(
-          courseList.map(
-            async (course) => {
-              if (!course.id) {
-                return;
-              }
+          courseList.map(async (course) => {
+            if (!course.id) return;
 
-              try {
-                materialMap[
-                  course.id
-                ] =
-                  await getJson<Material[]>(
-                    `${supabaseUrl}/rest/v1/course_materials?course_id=eq.${encodeURIComponent(
-                      course.id
-                    )}&select=*&order=id.asc`
-                  );
-              } catch {
-                materialMap[
-                  course.id
-                ] = [];
-              }
-
-              try {
-                assignmentMap[
-                  course.id
-                ] =
-                  await getJson<Assignment[]>(
-                    `${supabaseUrl}/rest/v1/course_assignments?course_id=eq.${encodeURIComponent(
-                      course.id
-                    )}&select=*&order=created_at.asc`
-                  );
-              } catch {
-                assignmentMap[
-                  course.id
-                ] = [];
-              }
+            try {
+              materialMap[course.id] =
+                await getJson<Material[]>(
+                  `${supabaseUrl}/rest/v1/course_materials?course_id=eq.${encodeURIComponent(
+                    course.id
+                  )}&select=*&order=id.asc`
+                );
+            } catch {
+              materialMap[course.id] = [];
             }
-          )
+
+            try {
+              assignmentMap[course.id] =
+                await getJson<Assignment[]>(
+                  `${supabaseUrl}/rest/v1/course_assignments?course_id=eq.${encodeURIComponent(
+                    course.id
+                  )}&select=*&order=created_at.asc`
+                );
+            } catch {
+              assignmentMap[course.id] = [];
+            }
+          })
         );
 
-        setMaterials(
-          materialMap
-        );
-
-        setAssignments(
-          assignmentMap
-        );
+        setMaterials(materialMap);
+        setAssignments(assignmentMap);
 
         const allAssignments =
-          Object.values(
-            assignmentMap
-          ).flat();
+          Object.values(assignmentMap).flat();
 
-        const submissionMap:
-          Record<
-            string,
-            Submission[]
-          > = {};
+        const submissionMap: Record<
+          string,
+          Submission[]
+        > = {};
 
         await Promise.all(
-          allAssignments.map(
-            async (
-              assignment
-            ) => {
-              if (!assignment.id) {
-                return;
-              }
+          allAssignments.map(async (assignment) => {
+            if (!assignment.id) return;
 
-              try {
-                submissionMap[
-                  assignment.id
-                ] =
+            try {
+              if (isTeacher) {
+                // Teacher sees everyone.
+                submissionMap[assignment.id] =
                   await getJson<Submission[]>(
                     `${supabaseUrl}/rest/v1/assignment_submissions?assignment_id=eq.${encodeURIComponent(
                       assignment.id
                     )}&select=*&order=created_at.asc`
                   );
-              } catch {
-                submissionMap[
-                  assignment.id
-                ] = [];
+              } else if (studentId) {
+                // Student ONLY sees their own submission.
+                submissionMap[assignment.id] =
+                  await getJson<Submission[]>(
+                    `${supabaseUrl}/rest/v1/assignment_submissions?assignment_id=eq.${encodeURIComponent(
+                      assignment.id
+                    )}&student_id=eq.${encodeURIComponent(
+                      studentId
+                    )}&select=*&order=created_at.asc`
+                  );
+              } else {
+                submissionMap[assignment.id] = [];
               }
+            } catch (err) {
+              console.error(
+                'Submission fetch error:',
+                err
+              );
+
+              submissionMap[assignment.id] = [];
             }
-          )
+          })
         );
 
-        setSubmissions(
-          submissionMap
-        );
+        setSubmissions(submissionMap);
       } catch (err) {
         console.error(
           'Error loading class:',
@@ -762,15 +600,43 @@ export default function ClassDetailsPage() {
       }
     }
 
-    fetchClassData();
+    loadClass();
   }, [
     code,
     supabaseUrl,
     supabaseAnonKey,
+    isTeacher,
+    studentId,
   ]);
 
   // ============================================================
-  // CREATE COURSE
+  // COPY CODE
+  // ============================================================
+
+  const handleCopyCode = async () => {
+    if (!classData?.code) return;
+
+    try {
+      await navigator.clipboard.writeText(
+        classData.code
+      );
+
+      setCopiedCode(true);
+
+      setTimeout(
+        () => setCopiedCode(false),
+        2000
+      );
+    } catch (err) {
+      console.error(
+        'Failed to copy:',
+        err
+      );
+    }
+  };
+
+  // ============================================================
+  // COURSE
   // ============================================================
 
   const handleCreateCourse = async (
@@ -781,8 +647,7 @@ export default function ClassDetailsPage() {
     if (
       !isTeacher ||
       !courseName.trim() ||
-      !supabaseUrl ||
-      !supabaseAnonKey
+      !supabaseUrl
     ) {
       return;
     }
@@ -790,97 +655,68 @@ export default function ClassDetailsPage() {
     setCreatingCourse(true);
 
     try {
-      const response =
-        await fetch(
-          `${supabaseUrl}/rest/v1/class_courses`,
-          {
-            method: 'POST',
-            headers: jsonHeaders,
-            body: JSON.stringify({
-              course_name:
-                courseName.trim(),
-              class_code:
-                code,
-            }),
-          }
-        );
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/class_courses`,
+        {
+          method: 'POST',
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            course_name:
+              courseName.trim(),
+            class_code: code,
+          }),
+        }
+      );
 
       const text =
         await response.text();
 
       if (!response.ok) {
         throw new Error(
-          text ||
-            'Failed to create course.'
+          text || 'Failed to create course.'
         );
       }
 
       const created =
-        (
-          JSON.parse(
-            text
-          ) as Course[]
-        )[0];
+        (JSON.parse(text) as Course[])[0];
 
       if (!created) {
         throw new Error(
-          'No course was returned.'
+          'No course returned.'
         );
       }
 
-      setCourses(
-        (previous) => [
-          ...previous,
-          created,
-        ]
-      );
+      setCourses((prev) => [
+        ...prev,
+        created,
+      ]);
 
       if (created.id) {
-        setMaterials(
-          (previous) => ({
-            ...previous,
-            [created.id!]: [],
-          })
-        );
+        setMaterials((prev) => ({
+          ...prev,
+          [created.id!]: [],
+        }));
 
-        setAssignments(
-          (previous) => ({
-            ...previous,
-            [created.id!]: [],
-          })
-        );
+        setAssignments((prev) => ({
+          ...prev,
+          [created.id!]: [],
+        }));
       }
 
       setCourseName('');
       setIsCourseModalOpen(false);
     } catch (err) {
-      console.error(
-        'Error creating course:',
-        err
-      );
-
-      alert(
-        'Failed to create course.'
-      );
+      console.error(err);
+      alert('Failed to create course.');
     } finally {
       setCreatingCourse(false);
     }
   };
 
-  // ============================================================
-  // DELETE COURSE
-  // ============================================================
-
   const handleDeleteCourse = async (
     courseId: string
   ) => {
-    if (
-      !isTeacher ||
-      !supabaseUrl ||
-      !supabaseAnonKey
-    ) {
-      return;
-    }
+    if (!isTeacher) return;
 
     if (
       !window.confirm(
@@ -897,69 +733,39 @@ export default function ClassDetailsPage() {
         )}`
       );
 
-      setCourses(
-        (previous) =>
-          previous.filter(
-            (course) =>
-              course.id !==
-              courseId
-          )
+      setCourses((prev) =>
+        prev.filter(
+          (course) =>
+            course.id !== courseId
+        )
       );
 
-      setMaterials(
-        (previous) => {
-          const updated = {
-            ...previous,
-          };
+      setMaterials((prev) => {
+        const next = { ...prev };
+        delete next[courseId];
+        return next;
+      });
 
-          delete updated[
-            courseId
-          ];
-
-          return updated;
-        }
-      );
-
-      setAssignments(
-        (previous) => {
-          const updated = {
-            ...previous,
-          };
-
-          delete updated[
-            courseId
-          ];
-
-          return updated;
-        }
-      );
+      setAssignments((prev) => {
+        const next = { ...prev };
+        delete next[courseId];
+        return next;
+      });
     } catch (err) {
-      console.error(
-        'Error deleting course:',
-        err
-      );
-
-      alert(
-        'Failed to delete course.'
-      );
+      console.error(err);
+      alert('Failed to delete course.');
     }
   };
 
   // ============================================================
-  // DELETE MATERIAL
+  // MATERIAL
   // ============================================================
 
   const handleDeleteMaterial = async (
     materialId: string,
     courseId: string
   ) => {
-    if (
-      !isTeacher ||
-      !supabaseUrl ||
-      !supabaseAnonKey
-    ) {
-      return;
-    }
+    if (!isTeacher) return;
 
     if (
       !window.confirm(
@@ -976,117 +782,67 @@ export default function ClassDetailsPage() {
         )}`
       );
 
-      setMaterials(
-        (previous) => ({
-          ...previous,
-          [courseId]: (
-            previous[
-              courseId
-            ] || []
-          ).filter(
-            (material) =>
-              material.id !==
-              materialId
-          ),
-        })
-      );
+      setMaterials((prev) => ({
+        ...prev,
+        [courseId]: (
+          prev[courseId] || []
+        ).filter(
+          (item) =>
+            item.id !== materialId
+        ),
+      }));
     } catch (err) {
-      console.error(
-        'Error deleting material:',
-        err
-      );
-
-      alert(
-        'Failed to delete material.'
-      );
+      console.error(err);
+      alert('Failed to delete material.');
     }
   };
 
   // ============================================================
-  // DELETE ASSIGNMENT
+  // LINK SAFETY
   // ============================================================
 
-  const handleDeleteAssignment = async (
-    assignmentId: string,
-    courseId: string
-  ) => {
-    if (
-      !isTeacher ||
-      !supabaseUrl ||
-      !supabaseAnonKey
-    ) {
-      return;
-    }
-
-    if (
-      !window.confirm(
-        'Are you sure you want to delete this assignment? All submissions for it may also be removed depending on your Supabase foreign-key settings.'
-      )
-    ) {
-      return;
-    }
-
+  const checkMaterialLink = async (
+    link: string
+  ): Promise<LinkCheckResult> => {
     try {
-      await deleteFrom(
-        `${supabaseUrl}/rest/v1/course_assignments?id=eq.${encodeURIComponent(
-          assignmentId
-        )}`
-      );
-
-      setAssignments(
-        (previous) => ({
-          ...previous,
-          [courseId]: (
-            previous[
-              courseId
-            ] || []
-          ).filter(
-            (assignment) =>
-              assignment.id !==
-              assignmentId
-          ),
-        })
-      );
-
-      setSubmissions(
-        (previous) => {
-          const updated = {
-            ...previous,
-          };
-
-          delete updated[
-            assignmentId
-          ];
-
-          return updated;
+      const response = await fetch(
+        '/api/moderate-link',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            url: link,
+          }),
         }
       );
-    } catch (err) {
-      console.error(
-        'Error deleting assignment:',
-        err
-      );
 
-      alert(
-        'Failed to delete assignment.'
+      const data =
+        await response.json().catch(
+          () => null
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          data?.reason ||
+            data?.error ||
+            'Unable to check this link.'
+        );
+      }
+
+      return {
+        safe: data?.safe === true,
+        reason: data?.reason,
+      };
+    } catch (err) {
+      throw new Error(
+        err instanceof Error
+          ? err.message
+          : 'Unable to check this link.'
       );
     }
-  };
-
-  // ============================================================
-  // TOGGLE COURSE
-  // ============================================================
-
-  const toggleCourse = (
-    courseId: string
-  ) => {
-    setOpenCourses(
-      (previous) => ({
-        ...previous,
-        [courseId]:
-          !previous[courseId],
-      })
-    );
   };
 
   // ============================================================
@@ -1096,28 +852,18 @@ export default function ClassDetailsPage() {
   const openAddModal = (
     course: Course
   ) => {
-    if (
-      !isTeacher ||
-      !course.id
-    ) {
-      return;
-    }
+    if (!course.id) return;
 
     setSelectedCourse(course);
     setAddType('material');
-
     setMaterialName('');
     setMaterialLink('');
     setAssignmentName('');
     setAssignmentDescription('');
-
-    // Start assignment due date at today.
     setAssignmentDueDate(
       getTodayDateInput()
     );
-
     setLinkCheckError(null);
-    setCheckingLink(false);
     setIsAddModalOpen(true);
   };
 
@@ -1133,76 +879,13 @@ export default function ClassDetailsPage() {
 
     setIsAddModalOpen(false);
     setSelectedCourse(null);
-
     setMaterialName('');
     setMaterialLink('');
     setAssignmentName('');
     setAssignmentDescription('');
     setAssignmentDueDate('');
-
     setLinkCheckError(null);
     setCheckingLink(false);
-  };
-
-  // ============================================================
-  // LINK SAFETY CHECK
-  // ============================================================
-
-  const checkMaterialLink = async (
-    link: string
-  ): Promise<LinkCheckResult> => {
-    try {
-      const response =
-        await fetch(
-          '/api/moderate-link',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-            body: JSON.stringify({
-              url: link,
-            }),
-          }
-        );
-
-      let data: any = null;
-
-      try {
-        data =
-          await response.json();
-      } catch {
-        data = null;
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          data?.reason ||
-            data?.error ||
-            'Unable to check this link.'
-        );
-      }
-
-      return {
-        safe:
-          data?.safe === true,
-        reason:
-          data?.reason ||
-          undefined,
-      };
-    } catch (err) {
-      console.error(
-        'Link safety check failed:',
-        err
-      );
-
-      throw new Error(
-        err instanceof Error
-          ? err.message
-          : 'We could not check this link right now. Please try again.'
-      );
-    }
   };
 
   // ============================================================
@@ -1217,8 +900,7 @@ export default function ClassDetailsPage() {
     if (
       !isTeacher ||
       !selectedCourse?.id ||
-      !supabaseUrl ||
-      !supabaseAnonKey
+      !supabaseUrl
     ) {
       return;
     }
@@ -1226,71 +908,17 @@ export default function ClassDetailsPage() {
     const courseId =
       selectedCourse.id;
 
-    if (
-      addType === 'material' &&
-      (
-        !materialName.trim() ||
-        !materialLink.trim()
-      )
-    ) {
-      return;
-    }
-
-    if (
-      addType === 'assignment' &&
-      (
-        !assignmentName.trim() ||
-        !assignmentDescription.trim() ||
-        !assignmentDueDate.trim()
-      )
-    ) {
-      return;
-    }
-
-    // ----------------------------------------------------------
-    // VALIDATE ASSIGNMENT DUE DATE
-    // ----------------------------------------------------------
-
-    if (
-      addType === 'assignment'
-    ) {
-      if (
-        !parseDDMMYYYY(
-          assignmentDueDate
-        )
-      ) {
-        setLinkCheckError(
-          'Please enter a valid due date in DD/MM/YYYY format.'
-        );
-
-        return;
-      }
-
-      if (
-        !isDueDateValid(
-          assignmentDueDate
-        )
-      ) {
-        setLinkCheckError(
-          'The due date cannot be earlier than today.'
-        );
-
-        return;
-      }
-    }
-
     setCreatingItem(true);
     setLinkCheckError(null);
 
     try {
-      // ========================================================
-      // MATERIAL
-      // ========================================================
-
-      if (
-        addType === 'material'
-      ) {
-        setCheckingLink(true);
+      if (addType === 'material') {
+        if (
+          !materialName.trim() ||
+          !materialLink.trim()
+        ) {
+          return;
+        }
 
         if (
           !isValidHttpUrl(
@@ -1302,26 +930,26 @@ export default function ClassDetailsPage() {
           );
         }
 
+        setCheckingLink(true);
+
         const cleanLink =
           new URL(
             materialLink.trim()
           ).toString();
 
-        const checkResult =
+        const result =
           await checkMaterialLink(
             cleanLink
           );
 
-        if (
-          !checkResult.safe
-        ) {
+        setCheckingLink(false);
+
+        if (!result.safe) {
           throw new Error(
-            checkResult.reason ||
-              'This link does not appear appropriate for an educational platform.'
+            result.reason ||
+              'This link is not allowed.'
           );
         }
-
-        setCheckingLink(false);
 
         const response =
           await fetch(
@@ -1330,12 +958,10 @@ export default function ClassDetailsPage() {
               method: 'POST',
               headers: jsonHeaders,
               body: JSON.stringify({
-                course_id:
-                  courseId,
+                course_id: courseId,
                 name:
                   materialName.trim(),
-                link:
-                  cleanLink,
+                link: cleanLink,
               }),
             }
           );
@@ -1351,56 +977,55 @@ export default function ClassDetailsPage() {
         }
 
         const created =
-          (
-            JSON.parse(
-              text
-            ) as Material[]
-          )[0];
+          (JSON.parse(text) as Material[])[0];
 
         if (!created) {
           throw new Error(
-            'No material was returned.'
+            'No material returned.'
           );
         }
 
-        setMaterials(
-          (previous) => ({
-            ...previous,
-            [courseId]: [
-              ...(
-                previous[
-                  courseId
-                ] || []
-              ),
-              created,
-            ],
-          })
-        );
+        setMaterials((prev) => ({
+          ...prev,
+          [courseId]: [
+            ...(prev[courseId] || []),
+            created,
+          ],
+        }));
 
-        setOpenCourses(
-          (previous) => ({
-            ...previous,
-            [courseId]:
-              true,
-          })
-        );
+        setOpenCourses((prev) => ({
+          ...prev,
+          [courseId]: true,
+        }));
 
-        setCreatingItem(false);
         closeAddModal(true);
-
         return;
       }
 
-      // ========================================================
-      // ASSIGNMENT
-      // ========================================================
+      if (
+        !assignmentName.trim() ||
+        !assignmentDescription.trim() ||
+        !assignmentDueDate.trim()
+      ) {
+        return;
+      }
 
-      const databaseDueDate =
+      if (
+        !isDueDateValid(
+          assignmentDueDate
+        )
+      ) {
+        throw new Error(
+          'The due date must be today or a future date.'
+        );
+      }
+
+      const dueDate =
         formatDateForDatabase(
           assignmentDueDate
         );
 
-      if (!databaseDueDate) {
+      if (!dueDate) {
         throw new Error(
           'Invalid due date.'
         );
@@ -1413,17 +1038,12 @@ export default function ClassDetailsPage() {
             method: 'POST',
             headers: jsonHeaders,
             body: JSON.stringify({
-              course_id:
-                courseId,
-
+              course_id: courseId,
               name:
                 assignmentName.trim(),
-
               description:
                 assignmentDescription.trim(),
-
-              due_date:
-                databaseDueDate,
+              due_date: dueDate,
             }),
           }
         );
@@ -1439,58 +1059,37 @@ export default function ClassDetailsPage() {
       }
 
       const created =
-        (
-          JSON.parse(
-            text
-          ) as Assignment[]
-        )[0];
+        (JSON.parse(text) as Assignment[])[0];
 
       if (!created) {
         throw new Error(
-          'No assignment was returned.'
+          'No assignment returned.'
         );
       }
 
-      setAssignments(
-        (previous) => ({
-          ...previous,
-          [courseId]: [
-            ...(
-              previous[
-                courseId
-              ] || []
-            ),
-            created,
-          ],
-        })
-      );
+      setAssignments((prev) => ({
+        ...prev,
+        [courseId]: [
+          ...(prev[courseId] || []),
+          created,
+        ],
+      }));
 
       if (created.id) {
-        setSubmissions(
-          (previous) => ({
-            ...previous,
-            [created.id!]: [],
-          })
-        );
+        setSubmissions((prev) => ({
+          ...prev,
+          [created.id!]: [],
+        }));
       }
 
-      setOpenCourses(
-        (previous) => ({
-          ...previous,
-          [courseId]:
-            true,
-        })
-      );
+      setOpenCourses((prev) => ({
+        ...prev,
+        [courseId]: true,
+      }));
 
-      setCreatingItem(false);
       closeAddModal(true);
     } catch (err) {
-      console.error(
-        'Error creating item:',
-        err
-      );
-
-      setCheckingLink(false);
+      console.error(err);
 
       setLinkCheckError(
         err instanceof Error
@@ -1499,40 +1098,78 @@ export default function ClassDetailsPage() {
       );
     } finally {
       setCreatingItem(false);
+      setCheckingLink(false);
     }
   };
 
   // ============================================================
-  // GET CURRENT STUDENT SUBMISSION
+  // DELETE ASSIGNMENT
+  // ============================================================
+
+  const handleDeleteAssignment = async (
+    assignmentId: string,
+    courseId: string
+  ) => {
+    if (!isTeacher) return;
+
+    if (
+      !window.confirm(
+        'Are you sure you want to delete this assignment?'
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await deleteFrom(
+        `${supabaseUrl}/rest/v1/course_assignments?id=eq.${encodeURIComponent(
+          assignmentId
+        )}`
+      );
+
+      setAssignments((prev) => ({
+        ...prev,
+        [courseId]: (
+          prev[courseId] || []
+        ).filter(
+          (assignment) =>
+            assignment.id !==
+            assignmentId
+        ),
+      }));
+
+      setSubmissions((prev) => {
+        const next = { ...prev };
+        delete next[assignmentId];
+        return next;
+      });
+    } catch (err) {
+      console.error(err);
+      alert(
+        'Failed to delete assignment.'
+      );
+    }
+  };
+
+  // ============================================================
+  // STUDENT SUBMISSION
   // ============================================================
 
   const getStudentSubmission = (
     assignmentId: string
   ) => {
-    if (
-      !studentFullName.trim()
-    ) {
+    if (!studentId) {
       return undefined;
     }
 
     return (
-      submissions[
-        assignmentId
-      ] || []
+      submissions[assignmentId] || []
     ).find(
       (submission) =>
-        submission.nickname
-          .trim()
-          .toLowerCase() ===
-        studentFullName
-          .trim()
-          .toLowerCase()
+        submission.student_id ===
+        studentId
     );
   };
-
-  // ============================================================
-  // OPEN STUDENT SUBMISSION
-  // ============================================================
 
   const openSubmissionModal = (
     assignment: Assignment
@@ -1544,13 +1181,10 @@ export default function ClassDetailsPage() {
       return;
     }
 
-    if (
-      !studentFullName.trim()
-    ) {
+    if (!studentId) {
       alert(
-        'Your account full name could not be found. Please sign in again.'
+        'Your account ID could not be found. Please sign in again.'
       );
-
       return;
     }
 
@@ -1569,7 +1203,6 @@ export default function ClassDetailsPage() {
     setSubmissionClass('');
     setSubmissionLink('');
     setLinkCheckError(null);
-    setCheckingLink(false);
     setIsSubmissionModalOpen(true);
   };
 
@@ -1585,7 +1218,6 @@ export default function ClassDetailsPage() {
 
     setIsSubmissionModalOpen(false);
     setSelectedAssignment(null);
-
     setSubmissionClass('');
     setSubmissionLink('');
     setLinkCheckError(null);
@@ -1604,11 +1236,11 @@ export default function ClassDetailsPage() {
     if (
       isTeacher ||
       !selectedAssignment?.id ||
+      !studentId ||
       !studentFullName.trim() ||
       !submissionClass.trim() ||
       !submissionLink.trim() ||
-      !supabaseUrl ||
-      !supabaseAnonKey
+      !supabaseUrl
     ) {
       return;
     }
@@ -1616,7 +1248,6 @@ export default function ClassDetailsPage() {
     const assignmentId =
       selectedAssignment.id;
 
-    // First check local state.
     if (
       getStudentSubmission(
         assignmentId
@@ -1627,7 +1258,6 @@ export default function ClassDetailsPage() {
       );
 
       closeSubmissionModal();
-
       return;
     }
 
@@ -1651,46 +1281,22 @@ export default function ClassDetailsPage() {
           submissionLink.trim()
         ).toString();
 
-      // --------------------------------------------------------
-      // SECOND DUPLICATE CHECK
-      // --------------------------------------------------------
-
+      // IMPORTANT:
+      // Identify the student using their UUID.
       const existing =
         await getJson<Submission[]>(
           `${supabaseUrl}/rest/v1/assignment_submissions?assignment_id=eq.${encodeURIComponent(
             assignmentId
-          )}&nickname=eq.${encodeURIComponent(
-            studentFullName.trim()
+          )}&student_id=eq.${encodeURIComponent(
+            studentId
           )}&select=*`
         );
 
-      if (
-        existing.length > 0
-      ) {
-        setSubmissions(
-          (previous) => ({
-            ...previous,
-            [assignmentId]: [
-              ...(
-                previous[
-                  assignmentId
-                ] || []
-              ),
-              ...existing.filter(
-                (remote) =>
-                  !(
-                    previous[
-                      assignmentId
-                    ] || []
-                  ).some(
-                    (local) =>
-                      local.id ===
-                      remote.id
-                  )
-              ),
-            ],
-          })
-        );
+      if (existing.length > 0) {
+        setSubmissions((prev) => ({
+          ...prev,
+          [assignmentId]: existing,
+        }));
 
         throw new Error(
           'You have already submitted this assignment.'
@@ -1704,12 +1310,10 @@ export default function ClassDetailsPage() {
 
       setCheckingLink(false);
 
-      if (
-        !checkResult.safe
-      ) {
+      if (!checkResult.safe) {
         throw new Error(
           checkResult.reason ||
-            'This link does not appear appropriate for an educational platform.'
+            'This link is not allowed.'
         );
       }
 
@@ -1723,21 +1327,21 @@ export default function ClassDetailsPage() {
               assignment_id:
                 assignmentId,
 
-              // Always account name.
+              // THIS is the important fix.
+              student_id:
+                studentId,
+
               nickname:
                 studentFullName.trim(),
 
-              // Manually entered class.
               class:
                 submissionClass
                   .trim()
                   .toUpperCase(),
 
-              link:
-                cleanLink,
+              link: cleanLink,
 
-              grade:
-                null,
+              grade: null,
             }),
           }
         );
@@ -1753,50 +1357,29 @@ export default function ClassDetailsPage() {
       }
 
       const created =
-        (
-          JSON.parse(
-            text
-          ) as Submission[]
-        )[0];
+        (JSON.parse(text) as Submission[])[0];
 
       if (!created) {
         throw new Error(
-          'No submission was returned.'
+          'No submission returned.'
         );
       }
 
-      setSubmissions(
-        (previous) => ({
-          ...previous,
-          [assignmentId]: [
-            ...(
-              previous[
-                assignmentId
-              ] || []
-            ),
-            created,
-          ],
-        })
-      );
+      setSubmissions((prev) => ({
+        ...prev,
+        [assignmentId]: [
+          ...(prev[assignmentId] || []),
+          created,
+        ],
+      }));
 
-      setSubmittingAssignment(
-        false
-      );
-
-      closeSubmissionModal(
-        true
-      );
+      closeSubmissionModal(true);
 
       alert(
         'Assignment submitted successfully!'
       );
     } catch (err) {
-      console.error(
-        'Error submitting assignment:',
-        err
-      );
-
-      setCheckingLink(false);
+      console.error(err);
 
       setLinkCheckError(
         err instanceof Error
@@ -1804,9 +1387,8 @@ export default function ClassDetailsPage() {
           : 'Failed to submit assignment.'
       );
     } finally {
-      setSubmittingAssignment(
-        false
-      );
+      setCheckingLink(false);
+      setSubmittingAssignment(false);
     }
   };
 
@@ -1820,9 +1402,7 @@ export default function ClassDetailsPage() {
     if (
       isTeacher ||
       !assignment.id ||
-      !studentFullName.trim() ||
-      !supabaseUrl ||
-      !supabaseAnonKey
+      !studentId
     ) {
       return;
     }
@@ -1832,88 +1412,70 @@ export default function ClassDetailsPage() {
         assignment.id
       );
 
-    if (!existing?.id) {
-      return;
-    }
+    if (!existing?.id) return;
 
-    const confirmed =
-      window.confirm(
+    if (
+      !window.confirm(
         'Undo your submission? Your teacher will no longer see it, and you will be able to submit again.'
-      );
-
-    if (!confirmed) {
+      )
+    ) {
       return;
     }
 
-    setUndoingSubmission(
-      true
-    );
+    setUndoingSubmission(true);
 
     try {
       await deleteFrom(
         `${supabaseUrl}/rest/v1/assignment_submissions?id=eq.${encodeURIComponent(
           existing.id
+        )}&student_id=eq.${encodeURIComponent(
+          studentId
         )}`
       );
 
-      setSubmissions(
-        (previous) => ({
-          ...previous,
-          [assignment.id!]: (
-            previous[
-              assignment.id!
-            ] || []
-          ).filter(
-            (submission) =>
-              submission.id !==
-              existing.id
-          ),
-        })
-      );
+      setSubmissions((prev) => ({
+        ...prev,
+        [assignment.id!]: (
+          prev[assignment.id!] || []
+        ).filter(
+          (submission) =>
+            submission.id !==
+            existing.id
+        ),
+      }));
 
       alert(
         'Submission undone. You can submit the assignment again.'
       );
     } catch (err) {
-      console.error(
-        'Error undoing submission:',
-        err
-      );
-
+      console.error(err);
       alert(
         'Failed to undo submission.'
       );
     } finally {
-      setUndoingSubmission(
-        false
-      );
+      setUndoingSubmission(false);
     }
   };
 
   // ============================================================
-  // TOGGLE ASSIGNMENT
+  // TEACHER SUBMISSIONS
   // ============================================================
 
   const toggleAssignment = async (
     assignmentId: string
   ) => {
-    setOpenAssignments(
-      (previous) => ({
-        ...previous,
-        [assignmentId]:
-          !previous[
-            assignmentId
-          ],
-      })
-    );
+    const opening =
+      !openAssignments[assignmentId];
+
+    setOpenAssignments((prev) => ({
+      ...prev,
+      [assignmentId]: opening,
+    }));
 
     if (
+      opening &&
       isTeacher &&
-      !submissions[
-        assignmentId
-      ] &&
-      supabaseUrl &&
-      supabaseAnonKey
+      supabaseUrl
     ) {
       try {
         const data =
@@ -1923,16 +1485,13 @@ export default function ClassDetailsPage() {
             )}&select=*&order=created_at.asc`
           );
 
-        setSubmissions(
-          (previous) => ({
-            ...previous,
-            [assignmentId]:
-              data,
-          })
-        );
+        setSubmissions((prev) => ({
+          ...prev,
+          [assignmentId]: data,
+        }));
       } catch (err) {
         console.error(
-          'Error loading submissions:',
+          'Failed to load submissions:',
           err
         );
       }
@@ -1949,46 +1508,41 @@ export default function ClassDetailsPage() {
     if (
       !isTeacher ||
       !submission.id ||
-      !supabaseUrl ||
-      !supabaseAnonKey
+      !supabaseUrl
     ) {
       return;
     }
 
-    const rawGrade =
-      gradeInputs[
-        submission.id
-      ] ??
+    const raw =
+      gradeInputs[submission.id] ??
       String(
-        submission.grade ??
-          ''
+        submission.grade ?? ''
       );
 
-    const grade =
-      Number(rawGrade);
+    if (raw === '') {
+      alert(
+        'Please enter a grade.'
+      );
+      return;
+    }
+
+    const grade = Number(raw);
 
     if (
-      rawGrade === '' ||
-      !Number.isInteger(
-        grade
-      ) ||
+      !Number.isInteger(grade) ||
       grade < 0 ||
       grade > 100
     ) {
       alert(
         'Grade must be a whole number between 0 and 100.'
       );
-
       return;
     }
 
-    setSavingGrades(
-      (previous) => ({
-        ...previous,
-        [submission.id!]:
-          true,
-      })
-    );
+    setSavingGrades((prev) => ({
+      ...prev,
+      [submission.id!]: true,
+    }));
 
     try {
       const response =
@@ -2015,46 +1569,46 @@ export default function ClassDetailsPage() {
         );
       }
 
-      const updated =
-        JSON.parse(
-          text
-        ) as Submission[];
+      let updatedGrade = grade;
 
-      const updatedGrade =
-        updated[0]?.grade ??
-        grade;
+      try {
+        const updated =
+          JSON.parse(text) as Submission[];
 
-      setSubmissions(
-        (previous) => ({
-          ...previous,
-          [submission.assignment_id]:
-            (
-              previous[
-                submission.assignment_id
-              ] || []
-            ).map(
-              (item) =>
-                item.id ===
-                submission.id
-                  ? {
-                      ...item,
-                      grade:
-                        updatedGrade,
-                    }
-                  : item
-            ),
-        })
-      );
+        if (
+          updated[0]?.grade !==
+          undefined
+        ) {
+          updatedGrade =
+            Number(
+              updated[0].grade
+            );
+        }
+      } catch {}
 
-      setGradeInputs(
-        (previous) => ({
-          ...previous,
-          [submission.id!]:
-            String(
-              updatedGrade
-            ),
-        })
-      );
+      setSubmissions((prev) => ({
+        ...prev,
+        [submission.assignment_id]:
+          (
+            prev[
+              submission.assignment_id
+            ] || []
+          ).map((item) =>
+            item.id === submission.id
+              ? {
+                  ...item,
+                  grade:
+                    updatedGrade,
+                }
+              : item
+          ),
+      }));
+
+      setGradeInputs((prev) => ({
+        ...prev,
+        [submission.id!]:
+          String(updatedGrade),
+      }));
     } catch (err) {
       console.error(
         'Error saving grade:',
@@ -2065,13 +1619,10 @@ export default function ClassDetailsPage() {
         'Failed to save grade.'
       );
     } finally {
-      setSavingGrades(
-        (previous) => ({
-          ...previous,
-          [submission.id!]:
-            false,
-        })
-      );
+      setSavingGrades((prev) => ({
+        ...prev,
+        [submission.id!]: false,
+      }));
     }
   };
 
@@ -2095,10 +1646,7 @@ export default function ClassDetailsPage() {
   // ERROR
   // ============================================================
 
-  if (
-    error ||
-    !classData
-  ) {
+  if (error || !classData) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
@@ -2120,13 +1668,12 @@ export default function ClassDetailsPage() {
             </Button>
           </Link>
 
-          <Card className="bg-card">
+          <Card>
             <CardContent className="py-12 text-center">
               <FileText className="mx-auto mb-4 size-10 text-muted-foreground" />
 
-              <h1 className="text-xl font-semibold text-foreground">
-                {error ||
-                  'Class not found'}
+              <h1 className="text-xl font-semibold">
+                {error || 'Class not found'}
               </h1>
 
               <p className="mt-2 text-sm text-muted-foreground">
@@ -2143,30 +1690,20 @@ export default function ClassDetailsPage() {
     );
   }
 
-  const dashboardUrl =
-    isTeacher
-      ? '/dashboard/teacher'
-      : '/dashboard/student';
-
-  // ============================================================
-  // MAIN PAGE
-  // ============================================================
+  const dashboardUrl = isTeacher
+    ? '/dashboard/teacher'
+    : '/dashboard/student';
 
   return (
-    <div className="relative min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       <Navbar />
 
       <main className="container mx-auto space-y-8 px-6 py-8">
 
         {/* HEADER */}
-
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Link
-              href={
-                dashboardUrl
-              }
-            >
+            <Link href={dashboardUrl}>
               <Button
                 variant="ghost"
                 className="-ml-3 mb-3 gap-2"
@@ -2176,50 +1713,27 @@ export default function ClassDetailsPage() {
               </Button>
             </Link>
 
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              {
-                classData.class_name
-              }
+            <h1 className="text-3xl font-bold">
+              {classData.class_name}
             </h1>
 
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <div className="mt-1 flex flex-wrap gap-3 text-sm text-muted-foreground">
               <span>
-                School:{' '}
-                {
-                  classData.school_name
-                }
+                School: {classData.school_name}
               </span>
 
-              <span className="hidden sm:inline">
-                •
-              </span>
-
-              <span className="flex items-center gap-1.5">
+              <span>
                 Code:{' '}
-
                 <span className="font-mono font-semibold text-primary">
-                  {
-                    classData.code
-                  }
+                  {classData.code}
                 </span>
 
                 {isTeacher && (
                   <button
                     type="button"
-                    onClick={
-                      handleCopyCode
-                    }
-                    title={
-                      copiedCode
-                        ? 'Copied!'
-                        : 'Copy join code'
-                    }
-                    aria-label={
-                      copiedCode
-                        ? 'Copied join code'
-                        : 'Copy join code'
-                    }
-                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
+                    onClick={handleCopyCode}
+                    className="ml-2 inline-flex items-center"
+                    title="Copy class code"
                   >
                     {copiedCode ? (
                       <span className="text-xs font-bold text-primary">
@@ -2237,9 +1751,7 @@ export default function ClassDetailsPage() {
           {isTeacher && (
             <Button
               onClick={() =>
-                setIsCourseModalOpen(
-                  true
-                )
+                setIsCourseModalOpen(true)
               }
               className="gap-2"
             >
@@ -2250,10 +1762,9 @@ export default function ClassDetailsPage() {
         </div>
 
         {/* COURSES */}
-
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-foreground">
+            <h2 className="text-xl font-semibold">
               Courses
             </h2>
 
@@ -2266,766 +1777,636 @@ export default function ClassDetailsPage() {
           </div>
 
           {courses.length === 0 ? (
-            <Card className="bg-card">
+            <Card>
               <CardContent className="py-10 text-center">
                 <BookOpen className="mx-auto mb-4 size-10 text-muted-foreground" />
 
-                <h3 className="font-semibold text-foreground">
+                <h3 className="font-semibold">
                   No courses yet
                 </h3>
 
                 <p className="mt-1 text-sm text-muted-foreground">
                   {isTeacher
-                    ? 'Create your first course to start adding learning materials.'
+                    ? 'Create your first course.'
                     : 'Your teacher has not created any courses yet.'}
                 </p>
-
-                {isTeacher && (
-                  <Button
-                    onClick={() =>
-                      setIsCourseModalOpen(
-                        true
-                      )
-                    }
-                    className="mt-5 gap-2"
-                  >
-                    <PlusCircle size={16} />
-                    Create Course
-                  </Button>
-                )}
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-3">
-              {courses.map(
-                (
-                  course,
-                  index
-                ) => {
-                  const courseId =
-                    course.id ||
-                    `course-${index}`;
+              {courses.map((course) => {
+                if (!course.id) return null;
 
-                  const isOpen =
-                    !!openCourses[
-                      courseId
-                    ];
+                const courseId =
+                  course.id;
 
-                  const courseMaterials =
-                    course.id
-                      ? materials[
-                          course.id
-                        ] || []
-                      : [];
+                const isOpen =
+                  !!openCourses[courseId];
 
-                  const courseAssignments =
-                    course.id
-                      ? assignments[
-                          course.id
-                        ] || []
-                      : [];
+                const courseMaterials =
+                  materials[courseId] || [];
 
-                  return (
-                    <Card
-                      key={courseId}
-                      className="overflow-hidden bg-card transition hover:border-primary/40"
-                    >
-                      {/* COURSE HEADER */}
+                const courseAssignments =
+                  assignments[courseId] || [];
 
-                      <CardHeader className="flex flex-row items-center justify-between gap-3 py-4">
-                        <div className="flex min-w-0 items-center gap-2">
+                return (
+                  <Card
+                    key={courseId}
+                    className="overflow-hidden"
+                  >
+                    {/* COURSE HEADER */}
+                    <CardHeader className="flex flex-row items-center justify-between gap-3 py-4">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setOpenCourses(
+                              (prev) => ({
+                                ...prev,
+                                [courseId]:
+                                  !prev[
+                                    courseId
+                                  ],
+                              })
+                            )
+                          }
+                          className="size-8 p-0 text-primary"
+                        >
+                          {isOpen ? (
+                            <ChevronUp size={18} />
+                          ) : (
+                            <ChevronDown size={18} />
+                          )}
+                        </Button>
+
+                        <CardTitle className="flex min-w-0 items-center gap-2 text-base">
+                          <BookOpen className="size-4 text-primary" />
+
+                          <span className="truncate">
+                            {course.course_name}
+                          </span>
+                        </CardTitle>
+                      </div>
+
+                      {isTeacher && (
+                        <div className="flex gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() =>
+                              openAddModal(
+                                course
+                              )
+                            }
+                            className="gap-2"
+                          >
+                            <PlusCircle size={15} />
+                            Add
+                          </Button>
+
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             onClick={() =>
-                              toggleCourse(
+                              handleDeleteCourse(
                                 courseId
                               )
                             }
-                            className="size-8 shrink-0 p-0 text-primary hover:bg-primary/10"
-                            aria-label={
-                              isOpen
-                                ? 'Collapse course'
-                                : 'Expand course'
-                            }
+                            className="size-8 p-0 text-muted-foreground hover:text-destructive"
                           >
-                            {isOpen ? (
-                              <ChevronUp size={18} />
-                            ) : (
-                              <ChevronDown size={18} />
-                            )}
+                            <Trash2 size={15} />
                           </Button>
-
-                          <CardTitle className="flex min-w-0 items-center gap-2 text-base font-medium">
-                            <BookOpen className="size-4 shrink-0 text-primary" />
-
-                            <span className="truncate">
-                              {
-                                course.course_name
-                              }
-                            </span>
-                          </CardTitle>
                         </div>
+                      )}
+                    </CardHeader>
 
-                        <div className="flex shrink-0 items-center gap-1">
-                          {isTeacher &&
-                            course.id && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() =>
-                                  openAddModal(
-                                    course
-                                  )
-                                }
-                                className="gap-2"
-                              >
-                                <PlusCircle
-                                  size={
-                                    15
-                                  }
-                                />
-                                Add
-                              </Button>
-                            )}
+                    {/* COURSE CONTENT */}
+                    {isOpen && (
+                      <CardContent className="space-y-8 border-t border-border pt-5">
 
-                          {isTeacher &&
-                            course.id && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  handleDeleteCourse(
-                                    course.id!
-                                  )
-                                }
-                                className="size-8 shrink-0 p-0 text-muted-foreground hover:text-destructive"
-                                aria-label="Delete course"
-                              >
-                                <Trash2 size={15} />
-                              </Button>
-                            )}
-                        </div>
-                      </CardHeader>
+                        {/* MATERIALS */}
+                        <div className="space-y-3">
+                          <h3 className="font-semibold">
+                            Materials
+                          </h3>
 
-                      {/* COURSE CONTENT */}
+                          {courseMaterials.length === 0 ? (
+                            <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+                              No materials yet.
+                            </p>
+                          ) : (
+                            <div className="space-y-2">
+                              {courseMaterials.map(
+                                (material) => (
+                                  <div
+                                    key={
+                                      material.id
+                                    }
+                                    className="flex items-center gap-3 rounded-lg border bg-background p-3"
+                                  >
+                                    <a
+                                      href={
+                                        material.link
+                                      }
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex min-w-0 flex-1 items-center gap-3"
+                                    >
+                                      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                                        <LinkIcon className="size-4 text-primary" />
+                                      </div>
 
-                      {isOpen && (
-                        <CardContent className="space-y-8 border-t border-border pt-5">
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate font-medium">
+                                          {
+                                            material.name
+                                          }
+                                        </p>
 
-                          {/* MATERIALS */}
+                                        <p className="truncate text-xs text-muted-foreground">
+                                          {
+                                            material.link
+                                          }
+                                        </p>
+                                      </div>
 
-                          <div className="space-y-3">
-                            <div>
-                              <h3 className="font-semibold text-foreground">
-                                Materials
-                              </h3>
+                                      <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
+                                    </a>
 
-                              <p className="text-xs text-muted-foreground">
-                                Learning resources
-                                for this course.
-                              </p>
+                                    {isTeacher &&
+                                      material.id && (
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() =>
+                                            handleDeleteMaterial(
+                                              material.id!,
+                                              courseId
+                                            )
+                                          }
+                                          className="size-8 p-0 text-muted-foreground hover:text-destructive"
+                                        >
+                                          <Trash2 size={15} />
+                                        </Button>
+                                      )}
+                                  </div>
+                                )
+                              )}
                             </div>
+                          )}
+                        </div>
 
-                            {courseMaterials.length ===
-                            0 ? (
-                              <div className="rounded-lg border border-dashed border-border p-5">
-                                <p className="text-sm text-muted-foreground">
-                                  {isTeacher
-                                    ? 'No materials have been added yet. Click "Add" at the top of the course.'
-                                    : 'No materials have been added to this course yet.'}
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="space-y-2">
-                                {courseMaterials.map(
-                                  (
-                                    material,
-                                    materialIndex
-                                  ) => (
+                        {/* ASSIGNMENTS */}
+                        <div className="space-y-3">
+                          <div>
+                            <h3 className="font-semibold">
+                              Assignments
+                            </h3>
+
+                            <p className="text-xs text-muted-foreground">
+                              {isTeacher
+                                ? 'Click an assignment to view submissions and grades.'
+                                : 'Click an assignment to submit your work.'}
+                            </p>
+                          </div>
+
+                          {courseAssignments.length === 0 ? (
+                            <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+                              No assignments yet.
+                            </p>
+                          ) : (
+                            <div className="space-y-3">
+                              {courseAssignments.map(
+                                (assignment) => {
+                                  if (!assignment.id) {
+                                    return null;
+                                  }
+
+                                  const assignmentId =
+                                    assignment.id;
+
+                                  const open =
+                                    !!openAssignments[
+                                      assignmentId
+                                    ];
+
+                                  const assignmentSubmissions =
+                                    submissions[
+                                      assignmentId
+                                    ] || [];
+
+                                  const studentSubmission =
+                                    !isTeacher
+                                      ? getStudentSubmission(
+                                          assignmentId
+                                        )
+                                      : undefined;
+
+                                  return (
                                     <div
                                       key={
-                                        material.id ||
-                                        `${courseId}-material-${materialIndex}`
+                                        assignmentId
                                       }
-                                      className="group flex items-center gap-3 rounded-lg border border-border bg-background p-3 transition hover:border-primary/50 hover:bg-primary/5"
+                                      className="overflow-hidden rounded-lg border bg-background"
                                     >
-                                      <a
-                                        href={
-                                          material.link
+                                      {/* ASSIGNMENT */}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (
+                                            isTeacher
+                                          ) {
+                                            toggleAssignment(
+                                              assignmentId
+                                            );
+                                          } else if (
+                                            studentSubmission
+                                          ) {
+                                            handleUndoSubmission(
+                                              assignment
+                                            );
+                                          } else {
+                                            openSubmissionModal(
+                                              assignment
+                                            );
+                                          }
+                                        }}
+                                        disabled={
+                                          undoingSubmission
                                         }
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex min-w-0 flex-1 items-center gap-3"
+                                        className="flex w-full items-start gap-3 p-4 text-left hover:bg-primary/5 disabled:cursor-wait"
                                       >
                                         <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                                          <LinkIcon className="size-4 text-primary" />
+                                          <ClipboardList className="size-5 text-primary" />
                                         </div>
 
                                         <div className="min-w-0 flex-1">
-                                          <p className="truncate font-medium text-foreground">
+                                          <div className="flex items-center justify-between gap-3">
+                                            <p className="font-semibold">
+                                              {
+                                                assignment.name
+                                              }
+                                            </p>
+
+                                            {isTeacher &&
+                                              (open ? (
+                                                <ChevronUp className="size-4" />
+                                              ) : (
+                                                <ChevronDown className="size-4" />
+                                              ))}
+                                          </div>
+
+                                          <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
                                             {
-                                              material.name
+                                              assignment.description
                                             }
                                           </p>
 
-                                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                            {
-                                              material.link
-                                            }
-                                          </p>
+                                          {assignment.due_date && (
+                                            <p className="mt-2 text-xs font-medium text-muted-foreground">
+                                              Due:{' '}
+                                              <span className="text-foreground">
+                                                {formatDateForDisplay(
+                                                  assignment.due_date
+                                                )}
+                                              </span>
+                                            </p>
+                                          )}
+
+                                          {isTeacher && (
+                                            <p className="mt-2 text-xs text-primary">
+                                              {
+                                                assignmentSubmissions.length
+                                              }{' '}
+                                              {assignmentSubmissions.length ===
+                                              1
+                                                ? 'submission'
+                                                : 'submissions'}
+                                            </p>
+                                          )}
+
+                                          {!isTeacher &&
+                                            studentSubmission && (
+                                              <p className="mt-2 flex items-center gap-1 text-xs font-medium text-primary">
+                                                <RotateCcw className="size-3.5" />
+                                                Submitted — click to undo
+                                              </p>
+                                            )}
+
+                                          {!isTeacher &&
+                                            !studentSubmission && (
+                                              <p className="mt-2 text-xs font-medium text-primary">
+                                                Click to submit →
+                                              </p>
+                                            )}
                                         </div>
+                                      </button>
 
-                                        <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
-                                      </a>
-
+                                      {/* TEACHER TABLE */}
                                       {isTeacher &&
-                                        material.id && (
+                                        open && (
+                                          <div className="border-t p-4">
+                                            {assignmentSubmissions.length ===
+                                            0 ? (
+                                              <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
+                                                No students have submitted this assignment yet.
+                                              </p>
+                                            ) : (
+                                              <div className="overflow-x-auto rounded-lg border">
+                                                <table className="w-full min-w-[700px] text-sm">
+                                                  <thead>
+                                                    <tr className="border-b bg-muted/40">
+                                                      <th className="px-4 py-3 text-left">
+                                                        Name
+                                                      </th>
+
+                                                      <th className="px-4 py-3 text-left">
+                                                        Class
+                                                      </th>
+
+                                                      <th className="px-4 py-3 text-left">
+                                                        Submission
+                                                      </th>
+
+                                                      <th className="px-4 py-3 text-right">
+                                                        Grade
+                                                      </th>
+                                                    </tr>
+                                                  </thead>
+
+                                                  <tbody>
+                                                    {assignmentSubmissions
+                                                      .slice()
+                                                      .sort(
+                                                        (
+                                                          a,
+                                                          b
+                                                        ) =>
+                                                          a.class.localeCompare(
+                                                            b.class,
+                                                            undefined,
+                                                            {
+                                                              numeric:
+                                                                true,
+                                                            }
+                                                          ) ||
+                                                          a.nickname.localeCompare(
+                                                            b.nickname
+                                                          )
+                                                      )
+                                                      .map(
+                                                        (
+                                                          submission
+                                                        ) => {
+                                                          if (
+                                                            !submission.id
+                                                          ) {
+                                                            return null;
+                                                          }
+
+                                                          const currentGrade =
+                                                            gradeInputs[
+                                                              submission.id
+                                                            ] ??
+                                                            String(
+                                                              submission.grade ??
+                                                                ''
+                                                            );
+
+                                                          return (
+                                                            <tr
+                                                              key={
+                                                                submission.id
+                                                              }
+                                                              className="border-b last:border-0"
+                                                            >
+                                                              <td className="px-4 py-3 font-medium">
+                                                                {
+                                                                  submission.nickname
+                                                                }
+                                                              </td>
+
+                                                              <td className="px-4 py-3 uppercase text-muted-foreground">
+                                                                {
+                                                                  submission.class
+                                                                }
+                                                              </td>
+
+                                                              <td className="px-4 py-3">
+                                                                <a
+                                                                  href={
+                                                                    submission.link
+                                                                  }
+                                                                  target="_blank"
+                                                                  rel="noopener noreferrer"
+                                                                  className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                                                                >
+                                                                  Open Link
+                                                                  <ExternalLink className="size-3.5" />
+                                                                </a>
+                                                              </td>
+
+                                                              <td className="px-4 py-3">
+                                                                <div className="flex items-center justify-end gap-2">
+                                                                  <Input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    max="100"
+                                                                    step="1"
+                                                                    value={
+                                                                      currentGrade
+                                                                    }
+                                                                    onChange={(
+                                                                      e
+                                                                    ) => {
+                                                                      let value =
+                                                                        e
+                                                                          .target
+                                                                          .value;
+
+                                                                      if (
+                                                                        value ===
+                                                                        ''
+                                                                      ) {
+                                                                        setGradeInputs(
+                                                                          (
+                                                                            prev
+                                                                          ) => ({
+                                                                            ...prev,
+                                                                            [submission.id!]:
+                                                                              '',
+                                                                          })
+                                                                        );
+
+                                                                        return;
+                                                                      }
+
+                                                                      let number =
+                                                                        Number(
+                                                                          value
+                                                                        );
+
+                                                                      if (
+                                                                        !Number.isFinite(
+                                                                          number
+                                                                        )
+                                                                      ) {
+                                                                        return;
+                                                                      }
+
+                                                                      number =
+                                                                        Math.max(
+                                                                          0,
+                                                                          Math.min(
+                                                                            100,
+                                                                            Math.trunc(
+                                                                              number
+                                                                            )
+                                                                          )
+                                                                        );
+
+                                                                      setGradeInputs(
+                                                                        (
+                                                                          prev
+                                                                        ) => ({
+                                                                          ...prev,
+                                                                          [submission.id!]:
+                                                                            String(
+                                                                              number
+                                                                            ),
+                                                                        })
+                                                                      );
+                                                                    }}
+                                                                    onKeyDown={(
+                                                                      e
+                                                                    ) => {
+                                                                      if (
+                                                                        [
+                                                                          'e',
+                                                                          'E',
+                                                                          '+',
+                                                                          '-',
+                                                                          '.',
+                                                                        ].includes(
+                                                                          e.key
+                                                                        )
+                                                                      ) {
+                                                                        e.preventDefault();
+                                                                      }
+                                                                    }}
+                                                                    className="h-9 w-20 text-right"
+                                                                  />
+
+                                                                  <span className="text-muted-foreground">
+                                                                    /100
+                                                                  </span>
+
+                                                                  <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    onClick={() =>
+                                                                      handleSaveGrade(
+                                                                        submission
+                                                                      )
+                                                                    }
+                                                                    disabled={
+                                                                      savingGrades[
+                                                                        submission.id
+                                                                      ]
+                                                                    }
+                                                                    className="gap-1.5"
+                                                                  >
+                                                                    {savingGrades[
+                                                                      submission.id
+                                                                    ] ? (
+                                                                      <Loader2 className="size-3.5 animate-spin" />
+                                                                    ) : (
+                                                                      <Save className="size-3.5" />
+                                                                    )}
+
+                                                                    Save
+                                                                  </Button>
+                                                                </div>
+                                                              </td>
+                                                            </tr>
+                                                          );
+                                                        }
+                                                      )}
+                                                  </tbody>
+                                                </table>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+
+                                      {/* DELETE */}
+                                      {isTeacher && (
+                                        <div className="flex justify-end border-t px-4 py-2">
                                           <Button
                                             type="button"
                                             variant="ghost"
                                             size="sm"
                                             onClick={() =>
-                                              handleDeleteMaterial(
-                                                material.id!,
-                                                course.id!
+                                              handleDeleteAssignment(
+                                                assignmentId,
+                                                courseId
                                               )
                                             }
-                                            className="size-8 shrink-0 p-0 text-muted-foreground hover:text-destructive"
-                                            aria-label="Delete material"
+                                            className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
                                           >
-                                            <Trash2 size={15} />
+                                            <Trash2 className="size-3.5" />
+                                            Delete Assignment
                                           </Button>
-                                        )}
+                                        </div>
+                                      )}
                                     </div>
-                                  )
-                                )}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* ASSIGNMENTS */}
-
-                          <div className="space-y-3">
-                            <div>
-                              <h3 className="font-semibold text-foreground">
-                                Assignments
-                              </h3>
-
-                              <p className="text-xs text-muted-foreground">
-                                {isTeacher
-                                  ? 'Click an assignment to view submissions and grades.'
-                                  : 'Click an assignment to submit your work.'}
-                              </p>
+                                  );
+                                }
+                              )}
                             </div>
-
-                            {courseAssignments.length ===
-                            0 ? (
-                              <div className="rounded-lg border border-dashed border-border p-5">
-                                <p className="text-sm text-muted-foreground">
-                                  {isTeacher
-                                    ? 'No assignments have been created yet. Click "Add" and choose Assignment.'
-                                    : 'No assignments have been created for this course yet.'}
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="space-y-3">
-                                {courseAssignments.map(
-                                  (
-                                    assignment
-                                  ) => {
-                                    const assignmentId =
-                                      assignment.id!;
-
-                                    const isAssignmentOpen =
-                                      !!openAssignments[
-                                        assignmentId
-                                      ];
-
-                                    const assignmentSubmissions =
-                                      submissions[
-                                        assignmentId
-                                      ] || [];
-
-                                    const studentSubmission =
-                                      !isTeacher
-                                        ? getStudentSubmission(
-                                            assignmentId
-                                          )
-                                        : undefined;
-
-                                    return (
-                                      <div
-                                        key={
-                                          assignmentId
-                                        }
-                                        className="overflow-hidden rounded-lg border border-border bg-background"
-                                      >
-
-                                        {/* ASSIGNMENT BUTTON */}
-
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            if (
-                                              isTeacher
-                                            ) {
-                                              toggleAssignment(
-                                                assignmentId
-                                              );
-                                            } else if (
-                                              studentSubmission
-                                            ) {
-                                              handleUndoSubmission(
-                                                assignment
-                                              );
-                                            } else {
-                                              openSubmissionModal(
-                                                assignment
-                                              );
-                                            }
-                                          }}
-                                          disabled={
-                                            undoingSubmission
-                                          }
-                                          className="flex w-full items-start gap-3 p-4 text-left transition hover:bg-primary/5 disabled:cursor-wait"
-                                        >
-                                          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                                            <ClipboardList className="size-5 text-primary" />
-                                          </div>
-
-                                          <div className="min-w-0 flex-1">
-                                            <div className="flex items-center justify-between gap-3">
-                                              <p className="font-semibold text-foreground">
-                                                {
-                                                  assignment.name
-                                                }
-                                              </p>
-
-                                              {isTeacher &&
-                                                (
-                                                  isAssignmentOpen ? (
-                                                    <ChevronUp className="size-4 shrink-0 text-muted-foreground" />
-                                                  ) : (
-                                                    <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-                                                  )
-                                                )}
-                                            </div>
-
-                                            <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
-                                              {
-                                                assignment.description
-                                              }
-                                            </p>
-
-                                            {/* DUE DATE */}
-
-                                            {assignment.due_date && (
-                                              <p className="mt-2 text-xs font-medium text-muted-foreground">
-                                                Due:{' '}
-                                                <span className="text-foreground">
-                                                  {formatDateForDisplay(
-                                                    assignment.due_date
-                                                  )}
-                                                </span>
-                                              </p>
-                                            )}
-
-                                            {isTeacher && (
-                                              <p className="mt-2 text-xs text-primary">
-                                                {
-                                                  assignmentSubmissions.length
-                                                }{' '}
-                                                {assignmentSubmissions.length ===
-                                                1
-                                                  ? 'submission'
-                                                  : 'submissions'}
-                                              </p>
-                                            )}
-
-                                            {!isTeacher &&
-                                              studentSubmission && (
-                                                <div className="mt-2 flex items-center gap-2 text-xs font-medium text-primary">
-                                                  <span className="flex items-center gap-1">
-                                                    <RotateCcw className="size-3.5" />
-                                                    Submitted
-                                                  </span>
-
-                                                  <span className="text-muted-foreground">
-                                                    •
-                                                  </span>
-
-                                                  <span>
-                                                    Click to undo submission
-                                                  </span>
-                                                </div>
-                                              )}
-
-                                            {!isTeacher &&
-                                              !studentSubmission && (
-                                                <p className="mt-2 text-xs font-medium text-primary">
-                                                  Click to submit →
-                                                </p>
-                                              )}
-                                          </div>
-                                        </button>
-
-                                        {/* TEACHER SUBMISSIONS */}
-
-                                        {isTeacher &&
-                                          isAssignmentOpen && (
-                                            <div className="border-t border-border p-4">
-                                              {assignmentSubmissions.length ===
-                                              0 ? (
-                                                <div className="rounded-lg border border-dashed border-border p-5 text-center">
-                                                  <ClipboardList className="mx-auto mb-2 size-7 text-muted-foreground" />
-
-                                                  <p className="text-sm text-muted-foreground">
-                                                    No students have submitted this assignment yet.
-                                                  </p>
-                                                </div>
-                                              ) : (
-                                                <div className="overflow-x-auto rounded-lg border border-border">
-                                                  <table className="w-full min-w-[700px] text-sm">
-                                                    <thead>
-                                                      <tr className="border-b border-border bg-muted/40">
-                                                        <th className="px-4 py-3 text-left font-semibold text-foreground">
-                                                          Name
-                                                        </th>
-
-                                                        <th className="px-4 py-3 text-left font-semibold text-foreground">
-                                                          Class
-                                                        </th>
-
-                                                        <th className="px-4 py-3 text-left font-semibold text-foreground">
-                                                          Submission
-                                                        </th>
-
-                                                        <th className="px-4 py-3 text-right font-semibold text-foreground">
-                                                          Grade
-                                                        </th>
-                                                      </tr>
-                                                    </thead>
-
-                                                    <tbody>
-                                                      {[
-                                                        ...assignmentSubmissions,
-                                                      ]
-                                                        .sort(
-                                                          (
-                                                            a,
-                                                            b
-                                                          ) =>
-                                                            a.class.localeCompare(
-                                                              b.class,
-                                                              undefined,
-                                                              {
-                                                                numeric:
-                                                                  true,
-                                                                sensitivity:
-                                                                  'base',
-                                                              }
-                                                            ) ||
-                                                            a.nickname.localeCompare(
-                                                              b.nickname,
-                                                              undefined,
-                                                              {
-                                                                sensitivity:
-                                                                  'base',
-                                                              }
-                                                            )
-                                                        )
-                                                        .map(
-                                                          (
-                                                            submission
-                                                          ) => {
-                                                            const currentGrade =
-                                                              gradeInputs[
-                                                                submission.id!
-                                                              ] ??
-                                                              String(
-                                                                submission.grade ??
-                                                                  ''
-                                                              );
-
-                                                            return (
-                                                              <tr
-                                                                key={
-                                                                  submission.id
-                                                                }
-                                                                className="border-b border-border last:border-0"
-                                                              >
-                                                                <td className="px-4 py-3 font-medium text-foreground">
-                                                                  {
-                                                                    submission.nickname
-                                                                  }
-                                                                </td>
-
-                                                                <td className="px-4 py-3 font-medium uppercase text-muted-foreground">
-                                                                  {
-                                                                    submission.class
-                                                                  }
-                                                                </td>
-
-                                                                <td className="px-4 py-3">
-                                                                  <a
-                                                                    href={
-                                                                      submission.link
-                                                                    }
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="inline-flex items-center gap-1.5 text-primary hover:underline"
-                                                                  >
-                                                                    Open Link
-                                                                    <ExternalLink className="size-3.5" />
-                                                                  </a>
-                                                                </td>
-
-                                                                <td className="px-4 py-3">
-                                                                  <div className="flex items-center justify-end gap-2">
-                                                                    <Input
-                                                                      type="number"
-                                                                      min="0"
-                                                                      max="100"
-                                                                      step="1"
-                                                                      value={
-                                                                        currentGrade
-                                                                      }
-                                                                      onChange={(
-                                                                        e
-                                                                      ) => {
-                                                                        let value =
-                                                                          e
-                                                                            .target
-                                                                            .value;
-
-                                                                        if (
-                                                                          value ===
-                                                                          ''
-                                                                        ) {
-                                                                          setGradeInputs(
-                                                                            (
-                                                                              previous
-                                                                            ) => ({
-                                                                              ...previous,
-                                                                              [submission.id!]:
-                                                                                '',
-                                                                            })
-                                                                          );
-
-                                                                          return;
-                                                                        }
-
-                                                                        let numeric =
-                                                                          Number(
-                                                                            value
-                                                                          );
-
-                                                                        if (
-                                                                          !Number.isFinite(
-                                                                            numeric
-                                                                          )
-                                                                        ) {
-                                                                          return;
-                                                                        }
-
-                                                                        // HARD LIMIT:
-                                                                        // Never allow >100.
-                                                                        if (
-                                                                          numeric >
-                                                                          100
-                                                                        ) {
-                                                                          numeric =
-                                                                            100;
-                                                                        }
-
-                                                                        if (
-                                                                          numeric <
-                                                                          0
-                                                                        ) {
-                                                                          numeric =
-                                                                            0;
-                                                                        }
-
-                                                                        value =
-                                                                          String(
-                                                                            Math.trunc(
-                                                                              numeric
-                                                                            )
-                                                                          );
-
-                                                                        setGradeInputs(
-                                                                          (
-                                                                            previous
-                                                                          ) => ({
-                                                                            ...previous,
-                                                                            [submission.id!]:
-                                                                              value,
-                                                                          })
-                                                                        );
-                                                                      }}
-                                                                      onKeyDown={(
-                                                                        e
-                                                                      ) => {
-                                                                        if (
-                                                                          [
-                                                                            'e',
-                                                                            'E',
-                                                                            '+',
-                                                                            '-',
-                                                                            '.',
-                                                                          ].includes(
-                                                                            e.key
-                                                                          )
-                                                                        ) {
-                                                                          e.preventDefault();
-                                                                        }
-                                                                      }}
-                                                                      onPaste={(
-                                                                        e
-                                                                      ) => {
-                                                                        const pasted =
-                                                                          e.clipboardData.getData(
-                                                                            'text'
-                                                                          );
-
-                                                                        const numeric =
-                                                                          Number(
-                                                                            pasted
-                                                                          );
-
-                                                                        if (
-                                                                          !Number.isInteger(
-                                                                            numeric
-                                                                          ) ||
-                                                                          numeric <
-                                                                            0 ||
-                                                                          numeric >
-                                                                            100
-                                                                        ) {
-                                                                          e.preventDefault();
-                                                                        }
-                                                                      }}
-                                                                      placeholder="—"
-                                                                      className="h-9 w-20 text-right"
-                                                                    />
-
-                                                                    <span className="text-muted-foreground">
-                                                                      /100
-                                                                    </span>
-
-                                                                    <Button
-                                                                      type="button"
-                                                                      size="sm"
-                                                                      onClick={() =>
-                                                                        handleSaveGrade(
-                                                                          submission
-                                                                        )
-                                                                      }
-                                                                      disabled={
-                                                                        savingGrades[
-                                                                          submission.id!
-                                                                        ]
-                                                                      }
-                                                                      className="gap-1.5"
-                                                                    >
-                                                                      {savingGrades[
-                                                                        submission.id!
-                                                                      ] ? (
-                                                                        <Loader2 className="size-3.5 animate-spin" />
-                                                                      ) : (
-                                                                        <Save className="size-3.5" />
-                                                                      )}
-
-                                                                      Save
-                                                                    </Button>
-                                                                  </div>
-                                                                </td>
-                                                              </tr>
-                                                            );
-                                                          }
-                                                        )}
-                                                    </tbody>
-                                                  </table>
-                                                </div>
-                                              )}
-                                            </div>
-                                          )}
-
-                                        {/* DELETE ASSIGNMENT */}
-
-                                        {isTeacher && (
-                                          <div className="flex justify-end border-t border-border px-4 py-2">
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() =>
-                                                handleDeleteAssignment(
-                                                  assignmentId,
-                                                  course.id!
-                                                )
-                                              }
-                                              className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
-                                            >
-                                              <Trash2 className="size-3.5" />
-                                              Delete Assignment
-                                            </Button>
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  }
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      )}
-                    </Card>
-                  );
-                }
-              )}
+                          )}
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                );
+              })}
             </div>
           )}
         </section>
       </main>
 
-      {/* =========================================================
+      {/* ==========================================================
           CREATE COURSE MODAL
-          ========================================================= */}
+          ========================================================== */}
 
       {isCourseModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
-
+          <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-foreground">
+                <h3 className="text-lg font-bold">
                   Create New Course
                 </h3>
 
                 <p className="mt-1 text-sm text-muted-foreground">
                   Add a course to{' '}
-                  {
-                    classData.class_name
-                  }.
+                  {classData.class_name}.
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={() =>
-                  setIsCourseModalOpen(
-                    false
-                  )
+                  setIsCourseModalOpen(false)
                 }
                 disabled={
                   creatingCourse
                 }
-                className="text-muted-foreground transition hover:text-foreground disabled:opacity-50"
               >
                 <X size={20} />
               </button>
@@ -3037,29 +2418,20 @@ export default function ClassDetailsPage() {
               }
               className="space-y-4"
             >
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-muted-foreground">
-                  Course Name
-                </label>
+              <Input
+                type="text"
+                placeholder="Course name"
+                value={courseName}
+                onChange={(e) =>
+                  setCourseName(
+                    e.target.value
+                  )
+                }
+                required
+                autoFocus
+              />
 
-                <Input
-                  type="text"
-                  placeholder="e.g. Mathematics - Module 1"
-                  value={
-                    courseName
-                  }
-                  onChange={(e) =>
-                    setCourseName(
-                      e.target.value
-                    )
-                  }
-                  required
-                  autoFocus
-                  className="h-11 bg-background"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-3">
                 <Button
                   type="button"
                   variant="outline"
@@ -3071,7 +2443,7 @@ export default function ClassDetailsPage() {
                   disabled={
                     creatingCourse
                   }
-                  className="h-11 w-1/2"
+                  className="w-1/2"
                 >
                   Cancel
                 </Button>
@@ -3082,7 +2454,7 @@ export default function ClassDetailsPage() {
                     creatingCourse ||
                     !courseName.trim()
                   }
-                  className="h-11 w-1/2"
+                  className="w-1/2"
                 >
                   {creatingCourse ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -3096,17 +2468,16 @@ export default function ClassDetailsPage() {
         </div>
       )}
 
-      {/* =========================================================
-          ADD MATERIAL / ASSIGNMENT MODAL
-          ========================================================= */}
+      {/* ==========================================================
+          ADD MODAL
+          ========================================================== */}
 
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
-
-            <div className="mb-6 flex items-start justify-between gap-4">
+          <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-2xl">
+            <div className="mb-6 flex items-start justify-between">
               <div>
-                <h3 className="text-lg font-bold text-foreground">
+                <h3 className="text-lg font-bold">
                   Add
                 </h3>
 
@@ -3124,13 +2495,12 @@ export default function ClassDetailsPage() {
 
               <button
                 type="button"
-                onClick={
-                  closeAddModal
+                onClick={() =>
+                  closeAddModal()
                 }
                 disabled={
                   creatingItem
                 }
-                className="text-muted-foreground transition hover:text-foreground disabled:opacity-50"
               >
                 <X size={20} />
               </button>
@@ -3142,317 +2512,171 @@ export default function ClassDetailsPage() {
               }
               className="space-y-5"
             >
-              {/* TYPE */}
+              <select
+                value={addType}
+                onChange={(e) => {
+                  setAddType(
+                    e.target
+                      .value as AddType
+                  );
 
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-muted-foreground">
-                  Select type
-                </label>
+                  setLinkCheckError(
+                    null
+                  );
 
-                <select
-                  value={
-                    addType
-                  }
-                  onChange={(e) => {
-                    setAddType(
-                      e.target
-                        .value as AddType
+                  if (
+                    e.target.value ===
+                      'assignment' &&
+                    !assignmentDueDate
+                  ) {
+                    setAssignmentDueDate(
+                      getTodayDateInput()
                     );
-
-                    setLinkCheckError(
-                      null
-                    );
-
-                    // Give assignment a default
-                    // due date when switching
-                    // to Assignment.
-                    if (
-                      e.target
-                        .value ===
-                        'assignment' &&
-                      !assignmentDueDate
-                    ) {
-                      setAssignmentDueDate(
-                        getTodayDateInput()
-                      );
-                    }
-                  }}
-                  disabled={
-                    creatingItem
                   }
-                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="material">
-                    Material
-                  </option>
+                }}
+                disabled={
+                  creatingItem
+                }
+                className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="material">
+                  Material
+                </option>
 
-                  <option value="assignment">
-                    Assignment
-                  </option>
-                </select>
-              </div>
-
-              {/* MATERIAL */}
+                <option value="assignment">
+                  Assignment
+                </option>
+              </select>
 
               {addType ===
                 'material' && (
                 <>
-                  <div className="space-y-2">
-                    <label className="block text-xs font-medium text-muted-foreground">
-                      Material Name
-                    </label>
+                  <Input
+                    type="text"
+                    placeholder="Material name"
+                    value={materialName}
+                    onChange={(e) => {
+                      setMaterialName(
+                        e.target.value
+                      );
+                      setLinkCheckError(
+                        null
+                      );
+                    }}
+                    required
+                  />
 
-                    <Input
-                      type="text"
-                      placeholder="e.g. Chapter 1 Notes"
-                      value={
-                        materialName
-                      }
-                      onChange={(e) => {
-                        setMaterialName(
-                          e.target
-                            .value
-                        );
-
-                        setLinkCheckError(
-                          null
-                        );
-                      }}
-                      required
-                      autoFocus
-                      disabled={
-                        creatingItem
-                      }
-                      className="h-11 bg-background"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-xs font-medium text-muted-foreground">
-                      Material Link
-                    </label>
-
-                    <Input
-                      type="url"
-                      placeholder="https://example.com/material"
-                      value={
-                        materialLink
-                      }
-                      onChange={(e) => {
-                        setMaterialLink(
-                          e.target
-                            .value
-                        );
-
-                        setLinkCheckError(
-                          null
-                        );
-                      }}
-                      required
-                      disabled={
-                        creatingItem
-                      }
-                      className="h-11 bg-background"
-                    />
-
-                    <p className="text-xs text-muted-foreground">
-                      The link will be
-                      automatically checked
-                      before it is published.
-                    </p>
-                  </div>
+                  <Input
+                    type="url"
+                    placeholder="https://example.com/material"
+                    value={materialLink}
+                    onChange={(e) => {
+                      setMaterialLink(
+                        e.target.value
+                      );
+                      setLinkCheckError(
+                        null
+                      );
+                    }}
+                    required
+                  />
                 </>
               )}
-
-              {/* ASSIGNMENT */}
 
               {addType ===
                 'assignment' && (
                 <>
-                  <div className="space-y-2">
-                    <label className="block text-xs font-medium text-muted-foreground">
-                      Assignment Name
-                    </label>
+                  <Input
+                    type="text"
+                    placeholder="Assignment name"
+                    value={assignmentName}
+                    onChange={(e) =>
+                      setAssignmentName(
+                        e.target.value
+                      )
+                    }
+                    required
+                  />
 
-                    <Input
-                      type="text"
-                      placeholder="e.g. Create a science poster"
-                      value={
-                        assignmentName
-                      }
-                      onChange={(e) =>
-                        setAssignmentName(
-                          e.target
-                            .value
-                        )
-                      }
-                      required
-                      autoFocus
-                      disabled={
-                        creatingItem
-                      }
-                      className="h-11 bg-background"
-                    />
-                  </div>
+                  <textarea
+                    value={
+                      assignmentDescription
+                    }
+                    onChange={(e) =>
+                      setAssignmentDescription(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Description"
+                    required
+                    rows={5}
+                    className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
 
-                  <div className="space-y-2">
-                    <label className="block text-xs font-medium text-muted-foreground">
-                      Description
-                    </label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="DD/MM/YYYY"
+                    value={
+                      assignmentDueDate
+                    }
+                    onChange={(e) =>
+                      handleDueDateChange(
+                        e.target.value
+                      )
+                    }
+                    required
+                  />
 
-                    <textarea
-                      value={
-                        assignmentDescription
-                      }
-                      onChange={(e) =>
-                        setAssignmentDescription(
-                          e.target
-                            .value
-                        )
-                      }
-                      placeholder="Explain what students need to do..."
-                      required
-                      disabled={
-                        creatingItem
-                      }
-                      rows={5}
-                      className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
-                    />
-                  </div>
-
-                  {/* DUE DATE */}
-
-                  <div className="space-y-2">
-                    <label className="block text-xs font-medium text-muted-foreground">
-                      Due Date
-                    </label>
-
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="DD/MM/YYYY"
-                      value={
-                        assignmentDueDate
-                      }
-                      onChange={(e) =>
-                        handleDueDateChange(
-                          e.target.value
-                        )
-                      }
-                      required
-                      disabled={
-                        creatingItem
-                      }
-                      className="h-11 bg-background"
-                    />
-
-                    <p className="text-xs text-muted-foreground">
-                      Enter the due date in
-                      DD/MM/YYYY format.
-                      The due date must be
-                      today or later.
-                    </p>
-
-                    {assignmentDueDate.length ===
-                      10 &&
-                      !isDueDateValid(
-                        assignmentDueDate
-                      ) && (
-                        <p className="text-xs font-medium text-destructive">
-                          The due date must be
-                          today or a future
-                          date.
-                        </p>
-                      )}
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Enter the due date as DD/MM/YYYY.
+                  </p>
                 </>
               )}
 
-              {/* ERROR */}
-
               {linkCheckError && (
                 <div className="flex gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
-                  <ShieldAlert className="mt-0.5 size-5 shrink-0 text-destructive" />
+                  <ShieldAlert className="size-5 shrink-0 text-destructive" />
 
-                  <div>
-                    <p className="font-medium text-destructive">
-                      {addType ===
-                      'assignment'
-                        ? 'Assignment not allowed'
-                        : 'Link not allowed'}
-                    </p>
-
-                    <p className="mt-1 text-sm text-destructive/80">
-                      {
-                        linkCheckError
-                      }
-                    </p>
-
-                    <p className="mt-2 text-xs text-destructive/70">
-                      The item was not added
-                      to the course.
-                    </p>
-                  </div>
+                  <p className="text-sm text-destructive">
+                    {linkCheckError}
+                  </p>
                 </div>
               )}
-
-              {/* CHECKING */}
 
               {checkingLink && (
-                <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-center gap-3 rounded-lg bg-primary/5 p-3">
                   <Loader2 className="size-5 animate-spin text-primary" />
-
-                  <div>
-                    <p className="font-medium text-foreground">
-                      Checking link...
-                    </p>
-
-                    <p className="text-xs text-muted-foreground">
-                      Making sure this
-                      material is appropriate
-                      for students.
-                    </p>
-                  </div>
+                  <span className="text-sm">
+                    Checking link...
+                  </span>
                 </div>
               )}
-
-              {/* SAFETY */}
 
               {addType ===
                 'material' &&
                 !checkingLink &&
                 !linkCheckError && (
-                  <div className="flex gap-3 rounded-lg border border-border bg-muted/30 p-3">
-                    <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
+                  <div className="flex gap-3 rounded-lg border p-3">
+                    <ShieldCheck className="size-5 text-primary" />
 
-                    <div>
-                      <p className="font-medium text-foreground">
-                        Link safety check
-                      </p>
-
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Links are checked
-                        before being
-                        published to
-                        students.
-                      </p>
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Links are checked before being published.
+                    </p>
                   </div>
                 )}
 
-              {/* BUTTONS */}
-
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-3">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={
-                    closeAddModal
+                  onClick={() =>
+                    closeAddModal()
                   }
                   disabled={
                     creatingItem
                   }
-                  className="h-11 w-1/2"
+                  className="w-1/2"
                 >
                   Cancel
                 </Button>
@@ -3462,30 +2686,19 @@ export default function ClassDetailsPage() {
                   disabled={
                     creatingItem ||
                     checkingLink ||
-
-                    (
-                      addType ===
-                        'material' &&
-                      (
-                        !materialName.trim() ||
-                        !materialLink.trim()
-                      )
-                    ) ||
-
-                    (
-                      addType ===
-                        'assignment' &&
-                      (
-                        !assignmentName.trim() ||
+                    (addType ===
+                      'material' &&
+                      (!materialName.trim() ||
+                        !materialLink.trim())) ||
+                    (addType ===
+                      'assignment' &&
+                      (!assignmentName.trim() ||
                         !assignmentDescription.trim() ||
-                        !assignmentDueDate.trim() ||
                         !isDueDateValid(
                           assignmentDueDate
-                        )
-                      )
-                    )
+                        )))
                   }
-                  className="h-11 w-1/2"
+                  className="w-1/2"
                 >
                   {checkingLink ? (
                     <>
@@ -3509,37 +2722,36 @@ export default function ClassDetailsPage() {
         </div>
       )}
 
-      {/* =========================================================
+      {/* ==========================================================
           STUDENT SUBMISSION MODAL
-          ========================================================= */}
+          ========================================================== */}
 
       {isSubmissionModalOpen &&
         selectedAssignment && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
-
-              <div className="mb-6 flex items-start justify-between gap-4">
+            <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-2xl">
+              <div className="mb-6 flex items-start justify-between">
                 <div>
-                  <h3 className="text-lg font-bold text-foreground">
+                  <h3 className="text-lg font-bold">
                     Submit Assignment
                   </h3>
 
-                  <p className="mt-1 text-sm font-medium text-foreground">
+                  <p className="mt-1 font-medium">
                     {
                       selectedAssignment.name
                     }
                   </p>
 
-                  <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {
                       selectedAssignment.description
                     }
                   </p>
 
                   {selectedAssignment.due_date && (
-                    <p className="mt-2 text-xs font-medium text-muted-foreground">
+                    <p className="mt-2 text-xs text-muted-foreground">
                       Due:{' '}
-                      <span className="text-foreground">
+                      <span className="font-medium text-foreground">
                         {formatDateForDisplay(
                           selectedAssignment.due_date
                         )}
@@ -3550,13 +2762,12 @@ export default function ClassDetailsPage() {
 
                 <button
                   type="button"
-                  onClick={
-                    closeSubmissionModal
+                  onClick={() =>
+                    closeSubmissionModal()
                   }
                   disabled={
                     submittingAssignment
                   }
-                  className="text-muted-foreground transition hover:text-foreground disabled:opacity-50"
                 >
                   <X size={20} />
                 </button>
@@ -3568,67 +2779,45 @@ export default function ClassDetailsPage() {
                 }
                 className="space-y-4"
               >
-
-                {/* FULL NAME */}
-
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-muted-foreground">
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
                     Full Name
                   </label>
 
                   <Input
-                    type="text"
                     value={
                       studentFullName
                     }
                     readOnly
                     disabled
-                    className="h-11 bg-muted"
+                    className="bg-muted"
                   />
-
-                  <p className="text-xs text-muted-foreground">
-                    Your name is taken from
-                    your account and cannot
-                    be changed.
-                  </p>
                 </div>
 
-                {/* CLASS */}
-
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-muted-foreground">
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
                     Class
                   </label>
 
                   <Input
-                    type="text"
                     placeholder="e.g. 8A"
                     value={
                       submissionClass
                     }
                     onChange={(e) =>
                       setSubmissionClass(
-                        e.target.value
-                          .toUpperCase()
+                        e.target.value.toUpperCase()
                       )
                     }
                     required
                     disabled={
                       submittingAssignment
                     }
-                    className="h-11 bg-background uppercase"
                   />
-
-                  <p className="text-xs text-muted-foreground">
-                    Enter your class, such as
-                    8A, 8B, or 8F.
-                  </p>
                 </div>
 
-                {/* LINK */}
-
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-muted-foreground">
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-muted-foreground">
                     Submission Link
                   </label>
 
@@ -3640,10 +2829,8 @@ export default function ClassDetailsPage() {
                     }
                     onChange={(e) => {
                       setSubmissionLink(
-                        e.target
-                          .value
+                        e.target.value
                       );
-
                       setLinkCheckError(
                         null
                       );
@@ -3652,75 +2839,40 @@ export default function ClassDetailsPage() {
                     disabled={
                       submittingAssignment
                     }
-                    className="h-11 bg-background"
                   />
-
-                  <p className="text-xs text-muted-foreground">
-                    Paste a link to your
-                    video, poster, document,
-                    or other work.
-                  </p>
                 </div>
-
-                {/* ERROR */}
 
                 {linkCheckError && (
                   <div className="flex gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
-                    <ShieldAlert className="mt-0.5 size-5 shrink-0 text-destructive" />
+                    <ShieldAlert className="size-5 shrink-0 text-destructive" />
 
-                    <div>
-                      <p className="font-medium text-destructive">
-                        Submission not allowed
-                      </p>
-
-                      <p className="mt-1 text-sm text-destructive/80">
-                        {
-                          linkCheckError
-                        }
-                      </p>
-
-                      <p className="mt-2 text-xs text-destructive/70">
-                        Your assignment was
-                        not submitted.
-                      </p>
-                    </div>
+                    <p className="text-sm text-destructive">
+                      {linkCheckError}
+                    </p>
                   </div>
                 )}
-
-                {/* CHECKING */}
 
                 {checkingLink && (
-                  <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                  <div className="flex items-center gap-3 rounded-lg bg-primary/5 p-3">
                     <Loader2 className="size-5 animate-spin text-primary" />
 
-                    <div>
-                      <p className="font-medium text-foreground">
-                        Checking link...
-                      </p>
-
-                      <p className="text-xs text-muted-foreground">
-                        Checking the
-                        submission before
-                        sending it to your
-                        teacher.
-                      </p>
-                    </div>
+                    <span className="text-sm">
+                      Checking link...
+                    </span>
                   </div>
                 )}
-
-                {/* BUTTONS */}
 
                 <div className="flex gap-3 pt-2">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={
-                      closeSubmissionModal
+                    onClick={() =>
+                      closeSubmissionModal()
                     }
                     disabled={
                       submittingAssignment
                     }
-                    className="h-11 w-1/2"
+                    className="w-1/2"
                   >
                     Cancel
                   </Button>
@@ -3732,9 +2884,9 @@ export default function ClassDetailsPage() {
                       checkingLink ||
                       !submissionClass.trim() ||
                       !submissionLink.trim() ||
-                      !studentFullName.trim()
+                      !studentId
                     }
-                    className="h-11 w-1/2"
+                    className="w-1/2"
                   >
                     {checkingLink ? (
                       <>
