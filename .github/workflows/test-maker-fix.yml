@@ -1,0 +1,32 @@
+name: Fix Test Maker Add Question
+on:
+  push:
+    paths:
+      - '.github/test-maker-fix.trigger'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Add Question button
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/dashboard/student/classes/[code]/page.tsx')
+          s=p.read_text()
+          old='<Button onClick={openNewQuestion}><PlusCircle className="mr-2 size-4" />Add Question</Button>'
+          new='<Button type="button" onClick={() => { setEditingQuestion(null); setQuestionText(\'\'); setOptionA(\'\'); setOptionB(\'\'); setOptionC(\'\'); setOptionD(\'\'); setCorrectAnswer(\'A\'); setMessage(\'\'); setQuestionModal(true); }}><PlusCircle className="mr-2 size-4" />Add Question</Button>'
+          if old not in s:
+              raise SystemExit('target button not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Remove temporary trigger and workflow
+        run: |
+          rm -f .github/test-maker-fix.trigger .github/workflows/test-maker-fix.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Fix Test Maker Add Question button" || exit 0
+          git push
