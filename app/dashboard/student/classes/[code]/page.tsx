@@ -73,11 +73,18 @@ type Test = {
   published: boolean;
 };
 
+type QuestionType =
+  | 'multiple-choice'
+  | 'true-false'
+  | 'fill-blank'
+  | 'matching';
+
 type Question = {
   id?: string;
   test_id: string;
   question_order: number;
   question: string;
+  question_type?: QuestionType | null;
   option_a: string;
   option_b: string;
   option_c: string;
@@ -151,7 +158,11 @@ export default function ClassDetailsPage() {
 
   const [materialName, setMaterialName] = useState('');
   const [materialLink, setMaterialLink] = useState('');
-  const [linkCheckStatus, setLinkCheckStatus] = useState<'idle' | 'checking' | 'safe' | 'unsafe' | 'error'>('idle');
+
+  const [linkCheckStatus, setLinkCheckStatus] = useState<
+    'idle' | 'checking' | 'safe' | 'unsafe' | 'error'
+  >('idle');
+
   const [linkCheckReason, setLinkCheckReason] = useState('');
 
   const [assignmentName, setAssignmentName] = useState('');
@@ -177,7 +188,8 @@ export default function ClassDetailsPage() {
   const [optionC, setOptionC] = useState('');
   const [optionD, setOptionD] = useState('');
 
-  const [questionType, setQuestionType] = useState<'multiple-choice' | 'true-false'>('multiple-choice');
+  const [questionType, setQuestionType] =
+    useState<QuestionType>('multiple-choice');
 
   const [correctAnswer, setCorrectAnswer] =
     useState<'A' | 'B' | 'C' | 'D'>('A');
@@ -319,6 +331,22 @@ export default function ClassDetailsPage() {
 
   const formatPoints = (count: number) =>
     Number(pointsFor(count).toFixed(2));
+
+  const questionTypeLabel = (type?: QuestionType | null) => {
+    switch (type) {
+      case 'true-false':
+        return 'True / False';
+
+      case 'fill-blank':
+        return 'Fill in the Blank';
+
+      case 'matching':
+        return 'Matching';
+
+      default:
+        return 'Multiple Choice';
+    }
+  };
 
   /* ---------------- CURRENT USER ---------------- */
 
@@ -555,43 +583,70 @@ export default function ClassDetailsPage() {
   }
 
   /* =========================================================
-     ADD MATERIAL / ASSIGNMENT
+     GEMINI LINK SAFETY
      ========================================================= */
 
   async function checkMaterialLink(link: string) {
     setLinkCheckStatus('checking');
-    setLinkCheckReason('Checking this link with Gemini...');
+    setLinkCheckReason(
+      'Gemini is checking this link...'
+    );
 
     try {
       const response = await fetch('/api/moderate-link', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: link.trim() }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: link.trim(),
+        }),
       });
 
-      const result = await response.json().catch(() => ({}));
+      const result = await response.json().catch(
+        () => ({})
+      );
 
       if (!response.ok) {
         setLinkCheckStatus('error');
-        setLinkCheckReason(result?.reason || 'The link could not be checked.');
+        setLinkCheckReason(
+          result?.reason ||
+            'The link could not be checked.'
+        );
+
         return false;
       }
 
       if (result?.safe === true) {
         setLinkCheckStatus('safe');
-        setLinkCheckReason(result.reason || 'Link passed the Gemini safety check.');
+        setLinkCheckReason(
+          result.reason ||
+            'Link passed the Gemini safety check.'
+        );
+
         return true;
       }
 
       setLinkCheckStatus('unsafe');
-      setLinkCheckReason(result?.reason || 'This link is not allowed as classroom material.');
+      setLinkCheckReason(
+        result?.reason ||
+          'This link is not allowed as classroom material.'
+      );
+
       return false;
     } catch {
       setLinkCheckStatus('error');
-      setLinkCheckReason('The link could not be checked. Please try again.');
+      setLinkCheckReason(
+        'The link could not be checked. Please try again.'
+      );
+
       return false;
     }
   }
+
+  /* =========================================================
+     ADD MATERIAL / ASSIGNMENT
+     ========================================================= */
 
   async function addItem(
     e: React.FormEvent<HTMLFormElement>
@@ -614,7 +669,13 @@ export default function ClassDetailsPage() {
           );
         }
 
-        const linkIsSafe = await checkMaterialLink(materialLink);
+        /*
+         * IMPORTANT:
+         * Gemini safety check automatically runs here.
+         * There is intentionally NO separate safety button.
+         */
+        const linkIsSafe =
+          await checkMaterialLink(materialLink);
 
         if (!linkIsSafe) {
           setBusy(false);
@@ -671,10 +732,12 @@ export default function ClassDetailsPage() {
       }
 
       setAddModal(false);
+
       setMaterialName('');
       setMaterialLink('');
       setLinkCheckStatus('idle');
       setLinkCheckReason('');
+
       setAssignmentName('');
       setAssignmentDescription('');
       setAssignmentDueDate('');
@@ -747,7 +810,9 @@ export default function ClassDetailsPage() {
 
       setBuilderTest(test as Test);
       setTestTitle(test.title || 'Untitled Test');
-      setTestDescription(test.description || '');
+      setTestDescription(
+        test.description || ''
+      );
       setTestDueDate('');
       setMessage('');
       setTestBuilder(true);
@@ -767,8 +832,12 @@ export default function ClassDetailsPage() {
   function openBuilder(test: Test) {
     setBuilderTest(test);
     setTestTitle(test.title || '');
-    setTestDescription(test.description || '');
-    setTestDueDate(displayDate(test.due_date));
+    setTestDescription(
+      test.description || ''
+    );
+    setTestDueDate(
+      displayDate(test.due_date)
+    );
     setMessage('');
     setTestBuilder(true);
   }
@@ -835,31 +904,47 @@ export default function ClassDetailsPage() {
     if (!builderTest) return;
 
     setEditingQuestion(null);
+
     setQuestionText('');
     setOptionA('');
     setOptionB('');
     setOptionC('');
     setOptionD('');
+
     setQuestionType('multiple-choice');
     setCorrectAnswer('A');
+
     setMessage('');
     setQuestionModal(true);
   }
 
   function openEditQuestion(question: Question) {
     setEditingQuestion(question);
+
     setQuestionText(question.question);
-    setOptionA(question.option_a);
-    setOptionB(question.option_b);
-    setOptionC(question.option_c);
-    setOptionD(question.option_d);
-    setQuestionType('multiple-choice');
-    setCorrectAnswer(question.correct_answer);
+
+    const type =
+      question.question_type ||
+      'multiple-choice';
+
+    setQuestionType(type);
+
+    setOptionA(question.option_a || '');
+    setOptionB(question.option_b || '');
+    setOptionC(question.option_c || '');
+    setOptionD(question.option_d || '');
+
+    setCorrectAnswer(
+      question.correct_answer || 'A'
+    );
+
     setMessage('');
     setQuestionModal(true);
   }
 
-  async function rebalanceQuestions(testId: string) {
+  async function rebalanceQuestions(
+    testId: string
+  ) {
     const qs = await get<Question[]>(
       `${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(
         testId
@@ -890,33 +975,143 @@ export default function ClassDetailsPage() {
 
     if (!builderTest) return;
 
+    if (!questionText.trim()) {
+      setMessage('Question text is required.');
+      return;
+    }
+
     if (
-      !questionText.trim() ||
-      !optionA.trim() ||
-      !optionB.trim() ||
-      !optionC.trim() ||
-      !optionD.trim()
+      questionType === 'multiple-choice' &&
+      (
+        !optionA.trim() ||
+        !optionB.trim() ||
+        !optionC.trim() ||
+        !optionD.trim()
+      )
     ) {
       setMessage(
-        'Question text and all four answers are required.'
+        'Multiple choice questions require all four answers.'
+      );
+      return;
+    }
+
+    if (
+      questionType === 'fill-blank' &&
+      !optionA.trim()
+    ) {
+      setMessage(
+        'Enter the correct answer.'
+      );
+      return;
+    }
+
+    if (
+      questionType === 'matching' &&
+      (!optionA.trim() ||
+        !optionB.trim())
+    ) {
+      setMessage(
+        'Matching questions require both items.'
       );
       return;
     }
 
     setBusy(true);
+    setMessage('');
 
     try {
+      let finalOptionA =
+        optionA.trim();
+
+      let finalOptionB =
+        optionB.trim();
+
+      let finalOptionC =
+        optionC.trim();
+
+      let finalOptionD =
+        optionD.trim();
+
+      let finalCorrectAnswer =
+        correctAnswer;
+
+      /*
+       * TRUE / FALSE
+       */
+      if (questionType === 'true-false') {
+        finalOptionA = 'True';
+        finalOptionB = 'False';
+        finalOptionC = '';
+        finalOptionD = '';
+
+        finalCorrectAnswer =
+          correctAnswer === 'B'
+            ? 'B'
+            : 'A';
+      }
+
+      /*
+       * FILL IN THE BLANK
+       */
+      if (questionType === 'fill-blank') {
+        finalOptionA =
+          optionA.trim();
+
+        finalOptionB = '';
+        finalOptionC = '';
+        finalOptionD = '';
+
+        finalCorrectAnswer = 'A';
+      }
+
+      /*
+       * MATCHING
+       */
+      if (questionType === 'matching') {
+        finalOptionA =
+          optionA.trim();
+
+        finalOptionB =
+          optionB.trim();
+
+        finalOptionC = '';
+        finalOptionD = '';
+
+        finalCorrectAnswer = 'B';
+      }
+
       const body = {
         test_id: builderTest.id,
-        question: questionText.trim(),
-        option_a: optionA.trim(),
-        option_b: optionB.trim(),
-        option_c: optionC.trim(),
-        option_d: optionD.trim(),
-        correct_answer: correctAnswer,
+
+        question:
+          questionText.trim(),
+
+        question_type:
+          questionType,
+
+        option_a:
+          finalOptionA,
+
+        option_b:
+          finalOptionB,
+
+        option_c:
+          finalOptionC,
+
+        option_d:
+          finalOptionD,
+
+        correct_answer:
+          finalCorrectAnswer,
+
         question_order:
           editingQuestion?.question_order ??
-          ((questions[builderTest.id]?.length || 0) + 1),
+          (
+            (questions[
+              builderTest.id
+            ]?.length || 0) + 1
+          ),
+
         points: 0,
       };
 
@@ -928,24 +1123,41 @@ export default function ClassDetailsPage() {
           body
         );
       } else {
-        const response = await fetch(
-          `${url}/rest/v1/test_questions`,
-          {
-            method: 'POST',
-            headers: jsonHeaders,
-            body: JSON.stringify(body),
-          }
-        );
+        const response =
+          await fetch(
+            `${url}/rest/v1/test_questions`,
+            {
+              method: 'POST',
+              headers: jsonHeaders,
+              body: JSON.stringify(body),
+            }
+          );
 
         if (!response.ok) {
-          throw new Error(await response.text());
+          throw new Error(
+            await response.text()
+          );
         }
       }
 
-      await rebalanceQuestions(builderTest.id);
+      await rebalanceQuestions(
+        builderTest.id
+      );
 
       setQuestionModal(false);
-      setMessage('');
+      setEditingQuestion(null);
+
+      setQuestionText('');
+      setOptionA('');
+      setOptionB('');
+      setOptionC('');
+      setOptionD('');
+
+      setQuestionType(
+        'multiple-choice'
+      );
+
+      setCorrectAnswer('A');
 
       await load();
     } catch (e) {
@@ -959,10 +1171,13 @@ export default function ClassDetailsPage() {
     }
   }
 
-  async function deleteQuestion(question: Question) {
+  async function deleteQuestion(
+    question: Question
+  ) {
     if (!question.id) return;
 
-    if (!confirm('Delete this question?')) return;
+    if (!confirm('Delete this question?'))
+      return;
 
     try {
       await del(
@@ -971,15 +1186,25 @@ export default function ClassDetailsPage() {
         )}`
       );
 
-      await rebalanceQuestions(question.test_id);
+      await rebalanceQuestions(
+        question.test_id
+      );
+
       await load();
     } catch {
-      alert('Failed to delete question.');
+      alert(
+        'Failed to delete question.'
+      );
     }
   }
 
   async function deleteTest(test: Test) {
-    if (!confirm(`Delete "${test.title}"?`)) return;
+    if (
+      !confirm(
+        `Delete "${test.title}"?`
+      )
+    )
+      return;
 
     try {
       await del(
@@ -996,7 +1221,8 @@ export default function ClassDetailsPage() {
 
   async function toggleTest(test: Test) {
     if (!test.published) {
-      const qs = questions[test.id] || [];
+      const qs =
+        questions[test.id] || [];
 
       if (
         !test.title.trim() ||
@@ -1006,6 +1232,7 @@ export default function ClassDetailsPage() {
         alert(
           'Finish the test in Test Maker first: add a title, due date, and at least one question.'
         );
+
         return;
       }
     }
@@ -1016,13 +1243,16 @@ export default function ClassDetailsPage() {
           test.id
         )}`,
         {
-          published: !test.published,
+          published:
+            !test.published,
         }
       );
 
       await load();
     } catch {
-      alert('Failed to change publication status.');
+      alert(
+        'Failed to change publication status.'
+      );
     }
   }
 
@@ -1030,19 +1260,33 @@ export default function ClassDetailsPage() {
      ASSIGNMENT SUBMISSIONS
      ========================================================= */
 
-  const studentSubmission = (id: string) =>
+  const studentSubmission = (
+    id: string
+  ) =>
     submissions[id]?.find(
       submission =>
-        String(submission.student_id) ===
-        String(studentId)
+        String(
+          submission.student_id
+        ) === String(studentId)
     );
 
-  function openSubmit(assignment: Assignment) {
-    if (studentSubmission(assignment.id!)) return;
+  function openSubmit(
+    assignment: Assignment
+  ) {
+    if (
+      studentSubmission(
+        assignment.id!
+      )
+    )
+      return;
 
-    setSelectedAssignment(assignment);
+    setSelectedAssignment(
+      assignment
+    );
+
     setSubmissionClass('');
     setSubmissionLink('');
+
     setSubmissionModal(true);
   }
 
@@ -1063,24 +1307,36 @@ export default function ClassDetailsPage() {
     setBusy(true);
 
     try {
-      const response = await fetch(
-        `${url}/rest/v1/assignment_submissions`,
-        {
-          method: 'POST',
-          headers: jsonHeaders,
-          body: JSON.stringify({
-            assignment_id: selectedAssignment.id,
-            student_id: studentId,
-            nickname: name,
-            class: submissionClass.toUpperCase(),
-            link: submissionLink.trim(),
-            grade: null,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          `${url}/rest/v1/assignment_submissions`,
+          {
+            method: 'POST',
+            headers: jsonHeaders,
+            body: JSON.stringify({
+              assignment_id:
+                selectedAssignment.id,
+
+              student_id:
+                studentId,
+
+              nickname: name,
+
+              class:
+                submissionClass.toUpperCase(),
+
+              link:
+                submissionLink.trim(),
+
+              grade: null,
+            }),
+          }
+        );
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw new Error(
+          await response.text()
+        );
       }
 
       setSubmissionModal(false);
@@ -1097,12 +1353,22 @@ export default function ClassDetailsPage() {
     }
   }
 
-  async function undo(assignment: Assignment) {
-    const submission = studentSubmission(assignment.id!);
+  async function undo(
+    assignment: Assignment
+  ) {
+    const submission =
+      studentSubmission(
+        assignment.id!
+      );
 
     if (!submission?.id) return;
 
-    if (!confirm('Undo your submission?')) return;
+    if (
+      !confirm(
+        'Undo your submission?'
+      )
+    )
+      return;
 
     try {
       await del(
@@ -1115,15 +1381,21 @@ export default function ClassDetailsPage() {
 
       await load();
     } catch {
-      alert('Failed to undo submission.');
+      alert(
+        'Failed to undo submission.'
+      );
     }
   }
 
-  async function saveGrade(submission: Submission) {
+  async function saveGrade(
+    submission: Submission
+  ) {
     if (!submission.id) return;
 
     const raw = Number(
-      gradeInputs[submission.id] ??
+      gradeInputs[
+        submission.id
+      ] ??
         submission.grade ??
         0
     );
@@ -1133,7 +1405,10 @@ export default function ClassDetailsPage() {
       raw < 0 ||
       raw > 100
     ) {
-      alert('Grade must be between 0 and 100.');
+      alert(
+        'Grade must be between 0 and 100.'
+      );
+
       return;
     }
 
@@ -1143,13 +1418,16 @@ export default function ClassDetailsPage() {
           submission.id
         )}`,
         {
-          grade: Math.trunc(raw),
+          grade:
+            Math.trunc(raw),
         }
       );
 
       await load();
     } catch {
-      alert('Failed to save grade.');
+      alert(
+        'Failed to save grade.'
+      );
     }
   }
 
@@ -1198,6 +1476,7 @@ export default function ClassDetailsPage() {
       <Navbar />
 
       <main className="container mx-auto space-y-8 px-6 py-8">
+
         {/* BACK BUTTON */}
 
         <Link
@@ -1250,38 +1529,50 @@ export default function ClassDetailsPage() {
         {/* COURSES */}
 
         <div className="space-y-3">
-          {courses.length === 0 && teacher && (
-            <Card>
-              <CardContent className="py-10 text-center">
-                <BookOpen className="mx-auto mb-3 size-10 text-muted-foreground" />
-                <p className="text-muted-foreground">No courses yet.</p>
-              </CardContent>
-            </Card>
-          )}
+
+          {courses.length === 0 &&
+            teacher && (
+              <Card>
+                <CardContent className="py-10 text-center">
+                  <BookOpen className="mx-auto mb-3 size-10 text-muted-foreground" />
+
+                  <p className="text-muted-foreground">
+                    No courses yet.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
           {courses.map(course => {
             if (!course.id) return null;
 
             const id = course.id;
+
             const courseMaterials =
               materials[id] || [];
+
             const courseAssignments =
               assignments[id] || [];
-            const courseTests = tests[id] || [];
+
+            const courseTests =
+              tests[id] || [];
 
             return (
               <Card
                 key={id}
                 className="overflow-hidden"
               >
+
                 <CardHeader className="flex flex-row items-center justify-between">
+
                   <button
                     type="button"
                     className="flex items-center gap-2 font-semibold"
                     onClick={() =>
                       setOpen(previous => ({
                         ...previous,
-                        [id]: !previous[id],
+                        [id]:
+                          !previous[id],
                       }))
                     }
                   >
@@ -1298,13 +1589,29 @@ export default function ClassDetailsPage() {
 
                   {teacher && (
                     <div className="flex gap-2">
+
                       <Button
                         type="button"
                         size="sm"
                         onClick={() => {
-                          setSelectedCourse(course);
-                          setAddType('material');
+                          setSelectedCourse(
+                            course
+                          );
+
+                          setAddType(
+                            'material'
+                          );
+
                           setMessage('');
+
+                          setLinkCheckStatus(
+                            'idle'
+                          );
+
+                          setLinkCheckReason(
+                            ''
+                          );
+
                           setAddModal(true);
                         }}
                       >
@@ -1325,15 +1632,19 @@ export default function ClassDetailsPage() {
                       >
                         <Trash2 size={15} />
                       </Button>
+
                     </div>
                   )}
+
                 </CardHeader>
 
                 {open[id] && (
                   <CardContent className="space-y-8 border-t pt-5">
+
                     {/* MATERIALS */}
 
                     <section>
+
                       <h3 className="mb-3 font-semibold">
                         📚 Materials
                       </h3>
@@ -1345,8 +1656,11 @@ export default function ClassDetailsPage() {
                               key={material.id}
                               className="mb-2 flex items-center gap-3 rounded-lg border p-3"
                             >
+
                               <a
-                                href={material.link}
+                                href={
+                                  material.link
+                                }
                                 target="_blank"
                                 rel="noreferrer"
                                 className="flex min-w-0 flex-1 items-center gap-2"
@@ -1354,7 +1668,9 @@ export default function ClassDetailsPage() {
                                 <LinkIcon className="size-4 text-primary" />
 
                                 <span className="truncate">
-                                  {material.name}
+                                  {
+                                    material.name
+                                  }
                                 </span>
 
                                 <ExternalLink className="ml-auto size-4" />
@@ -1375,6 +1691,7 @@ export default function ClassDetailsPage() {
                                   <Trash2 size={14} />
                                 </Button>
                               )}
+
                             </div>
                           )
                         )
@@ -1383,11 +1700,13 @@ export default function ClassDetailsPage() {
                           No materials yet.
                         </p>
                       )}
+
                     </section>
 
                     {/* ASSIGNMENTS */}
 
                     <section>
+
                       <h3 className="mb-1 font-semibold">
                         📝 Assignments
                       </h3>
@@ -1401,6 +1720,7 @@ export default function ClassDetailsPage() {
                       {courseAssignments.length ? (
                         courseAssignments.map(
                           assignment => {
+
                             const submission =
                               studentSubmission(
                                 assignment.id!
@@ -1413,9 +1733,12 @@ export default function ClassDetailsPage() {
 
                             return (
                               <div
-                                key={assignment.id}
+                                key={
+                                  assignment.id
+                                }
                                 className="mb-2 overflow-hidden rounded-lg border"
                               >
+
                                 <button
                                   type="button"
                                   className="flex w-full items-start gap-3 p-4 text-left"
@@ -1439,11 +1762,15 @@ export default function ClassDetailsPage() {
                                         )
                                   }
                                 >
+
                                   <ClipboardList className="size-5 text-primary" />
 
                                   <div className="flex-1">
+
                                     <b>
-                                      {assignment.name}
+                                      {
+                                        assignment.name
+                                      }
                                     </b>
 
                                     <p className="text-sm text-muted-foreground">
@@ -1475,6 +1802,7 @@ export default function ClassDetailsPage() {
                                           Click to submit →
                                         </p>
                                       )}
+
                                   </div>
 
                                   {teacher &&
@@ -1485,6 +1813,7 @@ export default function ClassDetailsPage() {
                                     ) : (
                                       <ChevronDown />
                                     ))}
+
                                 </button>
 
                                 {teacher &&
@@ -1492,14 +1821,18 @@ export default function ClassDetailsPage() {
                                     assignment.id!
                                   ] && (
                                     <div className="border-t p-4">
+
                                       {list.length === 0 ? (
                                         <p className="text-sm text-muted-foreground">
                                           No submissions yet.
                                         </p>
                                       ) : (
                                         <div className="overflow-x-auto">
+
                                           <table className="w-full text-sm">
+
                                             <tbody>
+
                                               {list.map(
                                                 submission => (
                                                   <tr
@@ -1508,6 +1841,7 @@ export default function ClassDetailsPage() {
                                                     }
                                                     className="border-b"
                                                   >
+
                                                     <td className="p-2">
                                                       {
                                                         submission.nickname
@@ -1534,7 +1868,9 @@ export default function ClassDetailsPage() {
                                                     </td>
 
                                                     <td className="p-2">
+
                                                       <div className="flex justify-end gap-2">
+
                                                         <Input
                                                           className="w-20"
                                                           type="number"
@@ -1542,8 +1878,7 @@ export default function ClassDetailsPage() {
                                                           max="100"
                                                           value={
                                                             gradeInputs[
-                                                              submission
-                                                                .id!
+                                                              submission.id!
                                                             ] ??
                                                             String(
                                                               submission.grade ??
@@ -1554,11 +1889,8 @@ export default function ClassDetailsPage() {
                                                             setGradeInputs(
                                                               previous => ({
                                                                 ...previous,
-                                                                [submission
-                                                                  .id!]:
-                                                                  e
-                                                                    .target
-                                                                    .value,
+                                                                [submission.id!]:
+                                                                  e.target.value,
                                                               })
                                                             )
                                                           }
@@ -1575,20 +1907,28 @@ export default function ClassDetailsPage() {
                                                         >
                                                           <Save className="size-3" />
                                                         </Button>
+
                                                       </div>
+
                                                     </td>
+
                                                   </tr>
                                                 )
                                               )}
+
                                             </tbody>
+
                                           </table>
+
                                         </div>
                                       )}
+
                                     </div>
                                   )}
 
                                 {teacher && (
                                   <div className="flex justify-end border-t p-2">
+
                                     <Button
                                       type="button"
                                       variant="ghost"
@@ -1603,8 +1943,10 @@ export default function ClassDetailsPage() {
                                       <Trash2 className="mr-1 size-3" />
                                       Delete
                                     </Button>
+
                                   </div>
                                 )}
+
                               </div>
                             );
                           }
@@ -1614,12 +1956,15 @@ export default function ClassDetailsPage() {
                           No assignments yet.
                         </p>
                       )}
+
                     </section>
 
                     {/* TESTS */}
 
                     <section>
+
                       <div className="mb-3 flex items-center gap-3">
+
                         <div>
                           <h3 className="font-semibold">
                             🧪 Tests
@@ -1645,28 +1990,41 @@ export default function ClassDetailsPage() {
                             Test Maker
                           </Button>
                         )}
+
                       </div>
 
                       {courseTests.length ? (
                         courseTests.map(test => {
+
                           const qs =
-                            questions[test.id] || [];
+                            questions[
+                              test.id
+                            ] || [];
 
                           const points =
-                            formatPoints(qs.length);
+                            formatPoints(
+                              qs.length
+                            );
 
                           return (
                             <div
                               key={test.id}
                               className="mb-2 overflow-hidden rounded-lg border"
                             >
+
                               <div className="flex items-start gap-3 p-4">
+
                                 <div className="flex-1">
-                                  <b>{test.title}</b>
+
+                                  <b>
+                                    {test.title}
+                                  </b>
 
                                   {test.description && (
                                     <p className="text-sm text-muted-foreground">
-                                      {test.description}
+                                      {
+                                        test.description
+                                      }
                                     </p>
                                   )}
 
@@ -1708,16 +2066,20 @@ export default function ClassDetailsPage() {
                                         </Button>
                                       </Link>
                                     )}
+
                                 </div>
 
                                 {teacher && (
                                   <div className="flex gap-1">
+
                                     <Button
                                       type="button"
                                       variant="outline"
                                       size="sm"
                                       onClick={() =>
-                                        toggleTest(test)
+                                        toggleTest(
+                                          test
+                                        )
                                       }
                                       title={
                                         test.published
@@ -1737,7 +2099,9 @@ export default function ClassDetailsPage() {
                                       variant="outline"
                                       size="sm"
                                       onClick={() =>
-                                        openBuilder(test)
+                                        openBuilder(
+                                          test
+                                        )
                                       }
                                     >
                                       <Pencil className="mr-1 size-4" />
@@ -1749,7 +2113,9 @@ export default function ClassDetailsPage() {
                                       variant="ghost"
                                       size="sm"
                                       onClick={() =>
-                                        deleteTest(test)
+                                        deleteTest(
+                                          test
+                                        )
                                       }
                                     >
                                       <Trash2 size={14} />
@@ -1771,19 +2137,24 @@ export default function ClassDetailsPage() {
                                         )
                                       }
                                     >
-                                      {openT[test.id] ? (
+                                      {openT[
+                                        test.id
+                                      ] ? (
                                         <ChevronUp />
                                       ) : (
                                         <ChevronDown />
                                       )}
                                     </Button>
+
                                   </div>
                                 )}
+
                               </div>
 
                               {teacher &&
                                 openT[test.id] && (
                                   <div className="space-y-2 border-t p-4">
+
                                     {qs.length === 0 && (
                                       <p className="text-sm text-muted-foreground">
                                         No questions yet. Open Test Maker to add them.
@@ -1801,8 +2172,11 @@ export default function ClassDetailsPage() {
                                           }
                                           className="rounded border p-3"
                                         >
+
                                           <div className="flex items-start justify-between gap-3">
+
                                             <div className="min-w-0">
+
                                               <p className="font-medium">
                                                 {index +
                                                   1}
@@ -1812,41 +2186,69 @@ export default function ClassDetailsPage() {
                                                 }
                                               </p>
 
-                                              <p className="mt-1 text-xs text-muted-foreground">
-                                                A:{' '}
-                                                {
-                                                  question.option_a
-                                                }{' '}
-                                                · B:{' '}
-                                                {
-                                                  question.option_b
-                                                }{' '}
-                                                · C:{' '}
-                                                {
-                                                  question.option_c
-                                                }{' '}
-                                                · D:{' '}
-                                                {
-                                                  question.option_d
-                                                }
+                                              <p className="mt-1 text-xs font-medium text-primary">
+                                                {questionTypeLabel(
+                                                  question.question_type
+                                                )}
                                               </p>
 
-                                              <p className="mt-1 text-xs">
-                                                Correct:{' '}
-                                                <b>
+                                              {question.question_type ===
+                                                'multiple-choice' ||
+                                              !question.question_type ? (
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                  A:{' '}
                                                   {
-                                                    question.correct_answer
+                                                    question.option_a
+                                                  }{' '}
+                                                  · B:{' '}
+                                                  {
+                                                    question.option_b
+                                                  }{' '}
+                                                  · C:{' '}
+                                                  {
+                                                    question.option_c
+                                                  }{' '}
+                                                  · D:{' '}
+                                                  {
+                                                    question.option_d
                                                   }
-                                                </b>{' '}
-                                                ·{' '}
+                                                </p>
+                                              ) : question.question_type ===
+                                                'true-false' ? (
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                  True / False
+                                                </p>
+                                              ) : question.question_type ===
+                                                'fill-blank' ? (
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                  Answer:{' '}
+                                                  {
+                                                    question.option_a
+                                                  }
+                                                </p>
+                                              ) : (
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                  {
+                                                    question.option_a
+                                                  }{' '}
+                                                  →{' '}
+                                                  {
+                                                    question.option_b
+                                                  }
+                                                </p>
+                                              )}
+
+                                              <p className="mt-1 text-xs">
                                                 {formatPoints(
                                                   qs.length
                                                 )}{' '}
                                                 pts
                                               </p>
+
                                             </div>
 
                                             <div className="flex shrink-0 gap-1">
+
                                               <Button
                                                 type="button"
                                                 variant="ghost"
@@ -1872,8 +2274,11 @@ export default function ClassDetailsPage() {
                                               >
                                                 <Trash2 className="size-3" />
                                               </Button>
+
                                             </div>
+
                                           </div>
+
                                         </div>
                                       )
                                     )}
@@ -1883,14 +2288,18 @@ export default function ClassDetailsPage() {
                                       variant="outline"
                                       size="sm"
                                       onClick={() =>
-                                        openBuilder(test)
+                                        openBuilder(
+                                          test
+                                        )
                                       }
                                     >
                                       <Pencil className="mr-1 size-4" />
                                       Open Test Maker
                                     </Button>
+
                                   </div>
                                 )}
+
                             </div>
                           );
                         })
@@ -1901,12 +2310,16 @@ export default function ClassDetailsPage() {
                             : 'No published tests yet.'}
                         </p>
                       )}
+
                     </section>
+
                   </CardContent>
                 )}
+
               </Card>
             );
           })}
+
         </div>
       </main>
 
@@ -1916,7 +2329,9 @@ export default function ClassDetailsPage() {
 
       {courseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+
           <Card className="w-full max-w-md">
+
             <CardHeader>
               <CardTitle>
                 Create New Course
@@ -1924,11 +2339,14 @@ export default function ClassDetailsPage() {
             </CardHeader>
 
             <CardContent>
+
               <form
                 onSubmit={createCourse}
                 className="space-y-4"
               >
+
                 <div className="space-y-2">
+
                   <label
                     htmlFor="course-name"
                     className="text-sm font-medium"
@@ -1940,16 +2358,20 @@ export default function ClassDetailsPage() {
                     id="course-name"
                     value={courseName}
                     onChange={e =>
-                      setCourseName(e.target.value)
+                      setCourseName(
+                        e.target.value
+                      )
                     }
                     placeholder="e.g. Mathematics"
                     autoFocus
                     disabled={busy}
                   />
+
                 </div>
 
                 {courseError && (
                   <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+
                     <p className="font-medium">
                       Could not create course
                     </p>
@@ -1957,10 +2379,12 @@ export default function ClassDetailsPage() {
                     <p className="mt-1 break-words">
                       {courseError}
                     </p>
+
                   </div>
                 )}
 
                 <div className="flex gap-2">
+
                   <Button
                     type="button"
                     variant="outline"
@@ -1991,10 +2415,15 @@ export default function ClassDetailsPage() {
                       'Create'
                     )}
                   </Button>
+
                 </div>
+
               </form>
+
             </CardContent>
+
           </Card>
+
         </div>
       )}
 
@@ -2004,7 +2433,9 @@ export default function ClassDetailsPage() {
 
       {addModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+
           <Card className="w-full max-w-md">
+
             <CardHeader>
               <CardTitle>
                 Add to {selectedCourse?.course_name}
@@ -2012,10 +2443,12 @@ export default function ClassDetailsPage() {
             </CardHeader>
 
             <CardContent>
+
               <form
                 onSubmit={addItem}
                 className="space-y-3"
               >
+
                 <select
                   className="h-10 w-full rounded border bg-background px-2"
                   value={addType}
@@ -2028,6 +2461,7 @@ export default function ClassDetailsPage() {
                   <option value="material">
                     Material
                   </option>
+
                   <option value="assignment">
                     Assignment
                   </option>
@@ -2035,6 +2469,7 @@ export default function ClassDetailsPage() {
 
                 {addType === 'material' && (
                   <>
+
                     <Input
                       placeholder="Material name"
                       value={materialName}
@@ -2051,55 +2486,80 @@ export default function ClassDetailsPage() {
                       placeholder="https://..."
                       value={materialLink}
                       onChange={e => {
-                        setMaterialLink(e.target.value);
-                        setLinkCheckStatus('idle');
+                        setMaterialLink(
+                          e.target.value
+                        );
+
+                        setLinkCheckStatus(
+                          'idle'
+                        );
+
                         setLinkCheckReason('');
                       }}
                       required
                     />
 
-                    {materialLink.trim() && validUrl(materialLink) && (
-                      <div className="space-y-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full"
-                          disabled={linkCheckStatus === 'checking'}
-                          onClick={() => checkMaterialLink(materialLink)}
-                        >
-                          {linkCheckStatus === 'checking' ? (
-                            <>
-                              <Loader2 className="mr-2 size-4 animate-spin" />
-                              Checking with Gemini...
-                            </>
-                          ) : (
-                            <>
-                              <LinkIcon className="mr-2 size-4" />
-                              Check Link Safety
-                            </>
-                          )}
-                        </Button>
+                    {materialLink.trim() &&
+                      validUrl(materialLink) && (
+                        <div className="rounded-md border bg-muted/30 p-3 text-sm">
 
-                        {linkCheckReason && (
-                          <div
-                            className={`rounded-md border p-2 text-sm ${
-                              linkCheckStatus === 'safe'
-                                ? 'border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400'
-                                : linkCheckStatus === 'unsafe' || linkCheckStatus === 'error'
-                                  ? 'border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400'
-                                  : 'border-muted bg-muted/50'
-                            }`}
-                          >
-                            {linkCheckReason}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                          {linkCheckStatus ===
+                            'idle' && (
+                            <div className="flex items-center gap-2 text-muted-foreground">
+
+                              <LinkIcon className="size-4" />
+
+                              <span>
+                                Gemini Link Safety will automatically check this link when you press Add.
+                              </span>
+
+                            </div>
+                          )}
+
+                          {linkCheckStatus ===
+                            'checking' && (
+                            <div className="flex items-center gap-2">
+
+                              <Loader2 className="size-4 animate-spin" />
+
+                              <span>
+                                Gemini is checking this link...
+                              </span>
+
+                            </div>
+                          )}
+
+                          {linkCheckStatus ===
+                            'safe' && (
+                            <div className="text-green-600 dark:text-green-400">
+                              ✓{' '}
+                              {
+                                linkCheckReason
+                              }
+                            </div>
+                          )}
+
+                          {(linkCheckStatus ===
+                            'unsafe' ||
+                            linkCheckStatus ===
+                              'error') && (
+                            <div className="text-red-600 dark:text-red-400">
+                              ✕{' '}
+                              {
+                                linkCheckReason
+                              }
+                            </div>
+                          )}
+
+                        </div>
+                      )}
+
                   </>
                 )}
 
                 {addType === 'assignment' && (
                   <>
+
                     <Input
                       placeholder="Assignment name"
                       value={assignmentName}
@@ -2128,7 +2588,9 @@ export default function ClassDetailsPage() {
 
                     <Input
                       placeholder="DD/MM/YYYY"
-                      value={assignmentDueDate}
+                      value={
+                        assignmentDueDate
+                      }
                       onChange={e =>
                         setAssignmentDueDate(
                           e.target.value
@@ -2136,6 +2598,7 @@ export default function ClassDetailsPage() {
                       }
                       required
                     />
+
                   </>
                 )}
 
@@ -2146,6 +2609,7 @@ export default function ClassDetailsPage() {
                 )}
 
                 <div className="flex gap-2">
+
                   <Button
                     type="button"
                     variant="outline"
@@ -2168,10 +2632,15 @@ export default function ClassDetailsPage() {
                       'Add'
                     )}
                   </Button>
+
                 </div>
+
               </form>
+
             </CardContent>
+
           </Card>
+
         </div>
       )}
 
@@ -2179,479 +2648,771 @@ export default function ClassDetailsPage() {
           TEST BUILDER
           ===================================================== */}
 
-      {testBuilder && builderTest && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4">
-          <div className="mx-auto my-6 w-full max-w-4xl">
-            <Card>
-              <CardHeader className="flex flex-row items-start justify-between gap-4">
-                <div>
-                  <CardTitle>
-                    Test Maker
-                  </CardTitle>
+      {testBuilder &&
+        builderTest && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4">
 
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Build the entire test here. Publishing is done from the Tests section.
-                  </p>
-                </div>
+            <div className="mx-auto my-6 w-full max-w-4xl">
 
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setTestBuilder(false);
-                    setMessage('');
-                  }}
-                >
-                  <X />
-                </Button>
-              </CardHeader>
+              <Card>
 
-              <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">
-                      Test title
-                    </label>
+                <CardHeader className="flex flex-row items-start justify-between gap-4">
 
-                    <Input
-                      value={testTitle}
-                      onChange={e =>
-                        setTestTitle(
-                          e.target.value
-                        )
-                      }
-                      placeholder="Test title"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">
-                      Due date
-                    </label>
-
-                    <Input
-                      value={testDueDate}
-                      onChange={e =>
-                        setTestDueDate(
-                          e.target.value
-                        )
-                      }
-                      placeholder="DD/MM/YYYY"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    Description
-                  </label>
-
-                  <textarea
-                    className="w-full rounded border bg-background p-2"
-                    rows={3}
-                    value={testDescription}
-                    onChange={e =>
-                      setTestDescription(
-                        e.target.value
-                      )
-                    }
-                    placeholder="Describe the test"
-                  />
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 p-3">
                   <div>
-                    <b>
-                      {questions[
-                        builderTest.id
-                      ]?.length || 0}{' '}
-                      questions
-                    </b>
 
-                    <p className="text-xs text-muted-foreground">
-                      100 points total ·{' '}
-                      {questions[
-                        builderTest.id
-                      ]?.length
-                        ? `${formatPoints(
-                            questions[
-                              builderTest.id
-                            ].length
-                          )} points per question`
-                        : 'add questions to calculate points'}
+                    <CardTitle>
+                      Test Maker
+                    </CardTitle>
+
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Build the entire test here. Publishing is done from the Tests section.
                     </p>
+
                   </div>
 
                   <Button
                     type="button"
-                    onClick={
-                      saveTestDetails
-                    }
-                    disabled={busy}
-                  >
-                    <Save className="mr-2 size-4" />
-                    Save Test Details
-                  </Button>
-                </div>
-
-                {message && (
-                  <p className="text-sm text-destructive">
-                    {message}
-                  </p>
-                )}
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">
-                      Questions
-                    </h3>
-
-                    <Button
-                      type="button"
-                      onClick={
-                        openNewQuestion
-                      }
-                      disabled={busy}
-                    >
-                      <PlusCircle className="mr-2 size-4" />
-                      Add Question
-                    </Button>
-                  </div>
-
-                  {(questions[
-                    builderTest.id
-                  ] || []).length === 0 && (
-                    <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                      No questions yet. Add your first question.
-                    </div>
-                  )}
-
-                  {(questions[
-                    builderTest.id
-                  ] || []).map(
-                    (
-                      question,
-                      index,
-                      array
-                    ) => (
-                      <div
-                        key={question.id}
-                        className="rounded-lg border p-4"
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <p className="font-medium">
-                              {index + 1}.{' '}
-                              {
-                                question.question
-                              }
-                            </p>
-
-                            <div className="mt-2 grid gap-1 text-sm md:grid-cols-2">
-                              <span>
-                                A.{' '}
-                                {
-                                  question.option_a
-                                }
-                              </span>
-
-                              <span>
-                                B.{' '}
-                                {
-                                  question.option_b
-                                }
-                              </span>
-
-                              <span>
-                                C.{' '}
-                                {
-                                  question.option_c
-                                }
-                              </span>
-
-                              <span>
-                                D.{' '}
-                                {
-                                  question.option_d
-                                }
-                              </span>
-                            </div>
-
-                            <p className="mt-2 text-xs text-muted-foreground">
-                              Correct answer:{' '}
-                              <b>
-                                {
-                                  question.correct_answer
-                                }
-                              </b>{' '}
-                              ·{' '}
-                              {formatPoints(
-                                array.length
-                              )}{' '}
-                              points
-                            </p>
-                          </div>
-
-                          <div className="flex shrink-0 gap-1">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                openEditQuestion(
-                                  question
-                                )
-                              }
-                            >
-                              <Pencil className="mr-1 size-3" />
-                              Edit
-                            </Button>
-
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                deleteQuestion(
-                                  question
-                                )
-                              }
-                            >
-                              <Trash2 className="size-3" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  )}
-                </div>
-
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => {
                       setTestBuilder(false);
                       setMessage('');
                     }}
                   >
-                    Done — Return to Tests
+                    <X />
                   </Button>
-                </div>
-              </CardContent>
-            </Card>
+
+                </CardHeader>
+
+                <CardContent className="space-y-6">
+
+                  <div className="grid gap-4 md:grid-cols-2">
+
+                    <div className="space-y-2">
+
+                      <label className="text-sm font-medium">
+                        Test title
+                      </label>
+
+                      <Input
+                        value={testTitle}
+                        onChange={e =>
+                          setTestTitle(
+                            e.target.value
+                          )
+                        }
+                        placeholder="Test title"
+                      />
+
+                    </div>
+
+                    <div className="space-y-2">
+
+                      <label className="text-sm font-medium">
+                        Due date
+                      </label>
+
+                      <Input
+                        value={testDueDate}
+                        onChange={e =>
+                          setTestDueDate(
+                            e.target.value
+                          )
+                        }
+                        placeholder="DD/MM/YYYY"
+                      />
+
+                    </div>
+
+                  </div>
+
+                  <div className="space-y-2">
+
+                    <label className="text-sm font-medium">
+                      Description
+                    </label>
+
+                    <textarea
+                      className="w-full rounded border bg-background p-2"
+                      rows={3}
+                      value={
+                        testDescription
+                      }
+                      onChange={e =>
+                        setTestDescription(
+                          e.target.value
+                        )
+                      }
+                      placeholder="Describe the test"
+                    />
+
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 p-3">
+
+                    <div>
+
+                      <b>
+                        {
+                          questions[
+                            builderTest.id
+                          ]?.length || 0
+                        }{' '}
+                        questions
+                      </b>
+
+                      <p className="text-xs text-muted-foreground">
+                        100 points total ·{' '}
+                        {questions[
+                          builderTest.id
+                        ]?.length
+                          ? `${formatPoints(
+                              questions[
+                                builderTest.id
+                              ].length
+                            )} points per question`
+                          : 'add questions to calculate points'}
+                      </p>
+
+                    </div>
+
+                    <Button
+                      type="button"
+                      onClick={
+                        saveTestDetails
+                      }
+                      disabled={busy}
+                    >
+                      <Save className="mr-2 size-4" />
+                      Save Test Details
+                    </Button>
+
+                  </div>
+
+                  {message && (
+                    <p className="text-sm text-destructive">
+                      {message}
+                    </p>
+                  )}
+
+                  <div className="space-y-3">
+
+                    <div className="flex items-center justify-between">
+
+                      <h3 className="text-lg font-semibold">
+                        Questions
+                      </h3>
+
+                      <Button
+                        type="button"
+                        onClick={
+                          openNewQuestion
+                        }
+                        disabled={busy}
+                      >
+                        <PlusCircle className="mr-2 size-4" />
+                        Add Question
+                      </Button>
+
+                    </div>
+
+                    {(questions[
+                      builderTest.id
+                    ] || []).length === 0 && (
+                      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                        No questions yet. Add your first question.
+                      </div>
+                    )}
+
+                    {(questions[
+                      builderTest.id
+                    ] || []).map(
+                      (
+                        question,
+                        index,
+                        array
+                      ) => (
+
+                        <div
+                          key={question.id}
+                          className="rounded-lg border p-4"
+                        >
+
+                          <div className="flex items-start justify-between gap-4">
+
+                            <div className="min-w-0">
+
+                              <p className="font-medium">
+                                {index + 1}.{' '}
+                                {
+                                  question.question
+                                }
+                              </p>
+
+                              <p className="mt-1 text-xs font-medium text-primary">
+                                {questionTypeLabel(
+                                  question.question_type
+                                )}
+                              </p>
+
+                              {(
+                                question.question_type ===
+                                  'multiple-choice' ||
+                                !question.question_type
+                              ) && (
+                                <div className="mt-2 grid gap-1 text-sm md:grid-cols-2">
+
+                                  <span>
+                                    A.{' '}
+                                    {
+                                      question.option_a
+                                    }
+                                  </span>
+
+                                  <span>
+                                    B.{' '}
+                                    {
+                                      question.option_b
+                                    }
+                                  </span>
+
+                                  <span>
+                                    C.{' '}
+                                    {
+                                      question.option_c
+                                    }
+                                  </span>
+
+                                  <span>
+                                    D.{' '}
+                                    {
+                                      question.option_d
+                                    }
+                                  </span>
+
+                                </div>
+                              )}
+
+                              {question.question_type ===
+                                'true-false' && (
+                                <div className="mt-2 text-sm">
+                                  <span>
+                                    True
+                                  </span>
+                                  {' / '}
+                                  <span>
+                                    False
+                                  </span>
+                                </div>
+                              )}
+
+                              {question.question_type ===
+                                'fill-blank' && (
+                                <p className="mt-2 text-sm">
+                                  Answer:{' '}
+                                  {
+                                    question.option_a
+                                  }
+                                </p>
+                              )}
+
+                              {question.question_type ===
+                                'matching' && (
+                                <p className="mt-2 text-sm">
+                                  {
+                                    question.option_a
+                                  }{' '}
+                                  →{' '}
+                                  {
+                                    question.option_b
+                                  }
+                                </p>
+                              )}
+
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                {formatPoints(
+                                  array.length
+                                )}{' '}
+                                points
+                              </p>
+
+                            </div>
+
+                            <div className="flex shrink-0 gap-1">
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  openEditQuestion(
+                                    question
+                                  )
+                                }
+                              >
+                                <Pencil className="mr-1 size-3" />
+                                Edit
+                              </Button>
+
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  deleteQuestion(
+                                    question
+                                  )
+                                }
+                              >
+                                <Trash2 className="size-3" />
+                              </Button>
+
+                            </div>
+
+                          </div>
+
+                        </div>
+                      )
+                    )}
+
+                  </div>
+
+                  <div className="flex justify-end">
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setTestBuilder(false);
+                        setMessage('');
+                      }}
+                    >
+                      Done — Return to Tests
+                    </Button>
+
+                  </div>
+
+                </CardContent>
+
+              </Card>
+
+            </div>
+
           </div>
-        </div>
-      )}
+        )}
 
       {/* =====================================================
           QUESTION MODAL
           ===================================================== */}
 
-      {questionModal && builderTest && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <Card className="w-full max-w-2xl">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>
-                {editingQuestion
-                  ? 'Edit Question'
-                  : 'Add Question'}
-              </CardTitle>
+      {questionModal &&
+        builderTest && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setQuestionModal(false)
-                }
-              >
-                <X />
-              </Button>
-            </CardHeader>
+            <Card className="w-full max-w-2xl">
 
-            <CardContent>
-              <form
-                onSubmit={saveQuestion}
-                className="space-y-3"
-              >
-                <div>
-                  <label className="text-sm font-medium">
-                    Question type
-                  </label>
-                  <select
-                    className="mt-1 h-10 w-full appearance-auto rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none focus:ring-2 focus:ring-ring"
-                    value={questionType}
-                    onChange={e =>
-                      setQuestionType(
-                        e.target.value as
-                          | 'multiple-choice'
-                          | 'true-false'
-                      )
-                    }
-                  >
-                    <option value="multiple-choice">
-                      Multiple Choice
-                    </option>
-                    <option value="true-false">
-                      True / False
-                    </option>
-                  </select>
-                </div>
+              <CardHeader className="flex flex-row items-center justify-between">
 
-                <div>
-                  <label className="text-sm font-medium">
-                    Question text
-                  </label>
+                <CardTitle>
+                  {editingQuestion
+                    ? 'Edit Question'
+                    : 'Add Question'}
+                </CardTitle>
 
-                  <textarea
-                    className="mt-1 w-full rounded border bg-background p-2"
-                    rows={3}
-                    value={questionText}
-                    onChange={e =>
-                      setQuestionText(
-                        e.target.value
-                      )
-                    }
-                    required
-                  />
-                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setQuestionModal(false)
+                  }
+                >
+                  <X />
+                </Button>
 
-                <div className="grid gap-3 md:grid-cols-2">
+              </CardHeader>
+
+              <CardContent>
+
+                <form
+                  onSubmit={saveQuestion}
+                  className="space-y-4"
+                >
+
+                  {/* QUESTION TYPE */}
+
                   <div>
+
                     <label className="text-sm font-medium">
-                      {questionType === 'true_false' ? 'True' : questionType === 'fill_blank' || questionType === 'matching' ? 'Item 1' : 'A'}
+                      Question type
                     </label>
 
-                    <Input
-                      value={optionA}
+                    <select
+                      className="mt-1 h-10 w-full appearance-auto rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none focus:ring-2 focus:ring-ring"
+                      value={questionType}
                       onChange={e =>
-                        setOptionA(
+                        setQuestionType(
+                          e.target.value as QuestionType
+                        )
+                      }
+                    >
+
+                      <option value="multiple-choice">
+                        Multiple Choice
+                      </option>
+
+                      <option value="true-false">
+                        True / False
+                      </option>
+
+                      <option value="fill-blank">
+                        Fill in the Blank
+                      </option>
+
+                      <option value="matching">
+                        Matching
+                      </option>
+
+                    </select>
+
+                  </div>
+
+                  {/* QUESTION TEXT */}
+
+                  <div>
+
+                    <label className="text-sm font-medium">
+                      Question text
+                    </label>
+
+                    <textarea
+                      className="mt-1 w-full rounded border bg-background p-2"
+                      rows={3}
+                      value={questionText}
+                      onChange={e =>
+                        setQuestionText(
                           e.target.value
                         )
                       }
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium">
-                      {questionType === 'true_false' ? 'False' : questionType === 'fill_blank' || questionType === 'matching' ? 'Item 2' : 'B'}
-                    </label>
-
-                    <Input
-                      value={optionB}
-                      onChange={e =>
-                        setOptionB(
-                          e.target.value
-                        )
+                      placeholder={
+                        questionType ===
+                        'fill-blank'
+                          ? 'Example: The capital of France is _____.'
+                          : questionType ===
+                            'matching'
+                          ? 'Example: Match the country with its capital.'
+                          : 'Enter your question'
                       }
                       required
                     />
+
                   </div>
 
-                  <div>
-                    <label className="text-sm font-medium">
-                      C
-                    </label>
+                  {/* MULTIPLE CHOICE */}
 
-                    <Input
-                      value={optionC}
-                      onChange={e =>
-                        setOptionC(
-                          e.target.value
-                        )
+                  {questionType ===
+                    'multiple-choice' && (
+                    <div className="grid gap-3 md:grid-cols-2">
+
+                      <div>
+
+                        <label className="text-sm font-medium">
+                          A
+                        </label>
+
+                        <Input
+                          value={optionA}
+                          onChange={e =>
+                            setOptionA(
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label className="text-sm font-medium">
+                          B
+                        </label>
+
+                        <Input
+                          value={optionB}
+                          onChange={e =>
+                            setOptionB(
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label className="text-sm font-medium">
+                          C
+                        </label>
+
+                        <Input
+                          value={optionC}
+                          onChange={e =>
+                            setOptionC(
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label className="text-sm font-medium">
+                          D
+                        </label>
+
+                        <Input
+                          value={optionD}
+                          onChange={e =>
+                            setOptionD(
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+
+                      </div>
+
+                    </div>
+                  )}
+
+                  {/* TRUE / FALSE */}
+
+                  {questionType ===
+                    'true-false' && (
+                    <div className="grid gap-3 md:grid-cols-2">
+
+                      <div>
+
+                        <label className="text-sm font-medium">
+                          True
+                        </label>
+
+                        <Input
+                          value="True"
+                          disabled
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label className="text-sm font-medium">
+                          False
+                        </label>
+
+                        <Input
+                          value="False"
+                          disabled
+                        />
+
+                      </div>
+
+                    </div>
+                  )}
+
+                  {/* FILL IN THE BLANK */}
+
+                  {questionType ===
+                    'fill-blank' && (
+                    <div className="space-y-2">
+
+                      <label className="text-sm font-medium">
+                        Correct Answer
+                      </label>
+
+                      <Input
+                        placeholder="Answer students must type"
+                        value={optionA}
+                        onChange={e =>
+                          setOptionA(
+                            e.target.value
+                          )
+                        }
+                        required
+                      />
+
+                      <p className="text-xs text-muted-foreground">
+                        Students will type the answer instead of choosing an option.
+                      </p>
+
+                    </div>
+                  )}
+
+                  {/* MATCHING */}
+
+                  {questionType ===
+                    'matching' && (
+                    <div className="space-y-3">
+
+                      <div>
+
+                        <label className="text-sm font-medium">
+                          Item
+                        </label>
+
+                        <Input
+                          placeholder="Example: France"
+                          value={optionA}
+                          onChange={e =>
+                            setOptionA(
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label className="text-sm font-medium">
+                          Matching Answer
+                        </label>
+
+                        <Input
+                          placeholder="Example: Paris"
+                          value={optionB}
+                          onChange={e =>
+                            setOptionB(
+                              e.target.value
+                            )
+                          }
+                          required
+                        />
+
+                      </div>
+
+                      <p className="text-xs text-muted-foreground">
+                        The item will be matched with its answer.
+                      </p>
+
+                    </div>
+                  )}
+
+                  {/* CORRECT ANSWER */}
+
+                  {(questionType ===
+                    'multiple-choice' ||
+                    questionType ===
+                      'true-false') && (
+                    <div>
+
+                      <label className="text-sm font-medium">
+                        Correct Answer
+                      </label>
+
+                      <select
+                        className="mt-1 h-10 w-full rounded border bg-background px-2"
+                        value={
+                          correctAnswer
+                        }
+                        onChange={e =>
+                          setCorrectAnswer(
+                            e.target
+                              .value as
+                              | 'A'
+                              | 'B'
+                              | 'C'
+                              | 'D'
+                          )
+                        }
+                      >
+
+                        <option value="A">
+                          {questionType ===
+                          'true-false'
+                            ? 'True'
+                            : 'A'}
+                        </option>
+
+                        <option value="B">
+                          {questionType ===
+                          'true-false'
+                            ? 'False'
+                            : 'B'}
+                        </option>
+
+                        {questionType ===
+                          'multiple-choice' && (
+                          <>
+                            <option value="C">
+                              C
+                            </option>
+
+                            <option value="D">
+                              D
+                            </option>
+                          </>
+                        )}
+
+                      </select>
+
+                    </div>
+                  )}
+
+                  {/* POINTS */}
+
+                  <div className="rounded border bg-muted/30 p-3 text-sm text-muted-foreground">
+                    No points are entered manually. This test is always worth 100 points total, and the system automatically recalculates every question to 100 ÷ total questions.
+                  </div>
+
+                  {message && (
+                    <p className="text-sm text-destructive">
+                      {message}
+                    </p>
+                  )}
+
+                  <div className="flex gap-2">
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-1/2"
+                      onClick={() =>
+                        setQuestionModal(false)
                       }
-                      required
-                    />
+                    >
+                      Cancel
+                    </Button>
+
+                    <Button
+                      type="submit"
+                      className="w-1/2"
+                      disabled={busy}
+                    >
+                      {busy ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : editingQuestion ? (
+                        'Save Changes'
+                      ) : (
+                        'Add Question'
+                      )}
+                    </Button>
+
                   </div>
 
-                  <div>
-                    <label className="text-sm font-medium">
-                      D
-                    </label>
+                </form>
 
-                    <Input
-                      value={optionD}
-                      onChange={e =>
-                        setOptionD(
-                          e.target.value
-                        )
-                      }
-                      required
-                    />
-                  </div>
-                </div>
+              </CardContent>
 
-                <div>
-                  <label className="text-sm font-medium">
-                    Correct answer
-                  </label>
+            </Card>
 
-                  <select
-                    className="mt-1 h-10 w-full rounded border bg-background px-2"
-                    value={correctAnswer}
-                    onChange={e =>
-                      setCorrectAnswer(
-                        e.target.value as
-                          | 'A'
-                          | 'B'
-                          | 'C'
-                          | 'D'
-                      )
-                    }
-                  >
-                    <option value="A">
-                      A
-                    </option>
-                    <option value="B">
-                      B
-                    </option>
-                    <option value="C">
-                      C
-                    </option>
-                    <option value="D">
-                      D
-                    </option>
-                  </select>
-                </div>
-
-                <div className="rounded border bg-muted/30 p-3 text-sm text-muted-foreground">
-                  No points are entered manually. This test is always worth 100 points total, and the system automatically recalculates every question to 100 ÷ total questions.
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-1/2"
-                    onClick={() =>
-                      setQuestionModal(false)
-                    }
-                  >
-                    Cancel
-                  </Button>
-
-                  <Button
-                    type="submit"
-                    className="w-1/2"
-                    disabled={busy}
-                  >
-                    {busy ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : editingQuestion ? (
-                      'Save Changes'
-                    ) : (
-                      'Add Question'
-                    )}
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+          </div>
+        )}
 
       {/* =====================================================
           SUBMISSION MODAL
@@ -2660,7 +3421,9 @@ export default function ClassDetailsPage() {
       {submissionModal &&
         selectedAssignment && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+
             <Card className="w-full max-w-md">
+
               <CardHeader>
                 <CardTitle>
                   Submit Assignment
@@ -2668,10 +3431,14 @@ export default function ClassDetailsPage() {
               </CardHeader>
 
               <CardContent>
+
                 <form
-                  onSubmit={submitAssignment}
+                  onSubmit={
+                    submitAssignment
+                  }
                   className="space-y-3"
                 >
+
                   <Input
                     value={name}
                     disabled
@@ -2679,7 +3446,9 @@ export default function ClassDetailsPage() {
 
                   <Input
                     placeholder="Class e.g. 8A"
-                    value={submissionClass}
+                    value={
+                      submissionClass
+                    }
                     onChange={e =>
                       setSubmissionClass(
                         e.target.value
@@ -2691,7 +3460,9 @@ export default function ClassDetailsPage() {
                   <Input
                     type="url"
                     placeholder="Submission link"
-                    value={submissionLink}
+                    value={
+                      submissionLink
+                    }
                     onChange={e =>
                       setSubmissionLink(
                         e.target.value
@@ -2701,12 +3472,15 @@ export default function ClassDetailsPage() {
                   />
 
                   <div className="flex gap-2">
+
                     <Button
                       type="button"
                       variant="outline"
                       className="w-1/2"
                       onClick={() =>
-                        setSubmissionModal(false)
+                        setSubmissionModal(
+                          false
+                        )
                       }
                     >
                       Cancel
@@ -2723,12 +3497,18 @@ export default function ClassDetailsPage() {
                         'Submit'
                       )}
                     </Button>
+
                   </div>
+
                 </form>
+
               </CardContent>
+
             </Card>
+
           </div>
         )}
+
     </>
   );
 }
