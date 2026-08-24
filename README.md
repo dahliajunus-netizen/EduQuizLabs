@@ -1,1 +1,1 @@
-# EduQuizLabs
+EduQuizLabs
