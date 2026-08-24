@@ -1204,23 +1204,7 @@ export default function ClassDetailsPage() {
             <Card>
               <CardContent className="py-10 text-center">
                 <BookOpen className="mx-auto mb-3 size-10 text-muted-foreground" />
-
-                <p className="text-muted-foreground">
-                  No courses yet.
-                </p>
-
-                <Button
-                  className="mt-4"
-                  type="button"
-                  onClick={() => {
-                    setCourseName('');
-                    setCourseError('');
-                    setCourseModal(true);
-                  }}
-                >
-                  <PlusCircle className="mr-2 size-4" />
-                  Create Your First Course
-                </Button>
+                <p className="text-muted-foreground">No courses yet.</p>
               </CardContent>
             </Card>
           )}
