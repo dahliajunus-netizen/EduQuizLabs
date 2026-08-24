@@ -73,14 +73,18 @@ export default function TeacherTestsPage() {
   }
 
   function newQuestion(testId: string) {
-    setError(''); setOpen(testId);
+    setError('');
+    setOpen(testId);
     setQ({ test_id: testId, question_order: (questions[testId]?.length || 0) + 1, question: '', option_a: '', option_b: '', option_c: '', option_d: '', correct_answer: 'A', question_type: 'multiple_choice' });
   }
 
   function changeType(type: QuestionType) {
-    if (!q) return;
-    if (type === 'true_false') setQ({ ...q, question_type: type, option_a: 'True', option_b: 'False', option_c: '', option_d: '', correct_answer: 'A' });
-    else setQ({ ...q, question_type: type, option_a: '', option_b: '', option_c: '', option_d: '', correct_answer: 'A' });
+    setQ(current => {
+      if (!current) return current;
+      return type === 'true_false'
+        ? { ...current, question_type: 'true_false', option_a: 'True', option_b: 'False', option_c: '', option_d: '', correct_answer: 'A' }
+        : { ...current, question_type: 'multiple_choice', option_a: '', option_b: '', option_c: '', option_d: '', correct_answer: 'A' };
+    });
   }
 
   async function recalculatePoints(testId: string) {
@@ -93,7 +97,7 @@ export default function TeacherTestsPage() {
 
   async function saveQuestion() {
     if (!q) return;
-    const draft = q; const missing: string[] = [];
+    const draft = { ...q }; const missing: string[] = [];
     if (!draft.question.trim()) missing.push('question');
     if (draft.question_type === 'true_false') { draft.option_a = 'True'; draft.option_b = 'False'; draft.option_c = ''; draft.option_d = ''; }
     else { if (!draft.option_a.trim()) missing.push('A'); if (!draft.option_b.trim()) missing.push('B'); if (!draft.option_c.trim()) missing.push('C'); if (!draft.option_d.trim()) missing.push('D'); }
@@ -133,15 +137,15 @@ export default function TeacherTestsPage() {
         <div className="rounded-lg border p-3"><div className="flex items-center justify-between"><p className="font-medium">Questions</p><Button type="button" onClick={() => newQuestion(t.id)} disabled={busy}><Plus className="mr-2 size-4" />Add Question</Button></div>
           {(questions[t.id] || []).map((x, i) => <div key={x.id || `${t.id}-${i}`} className="mt-3 flex items-start justify-between gap-3 border-t pt-3"><div><p className="font-medium">{i + 1}. {x.question}</p><p className="text-xs text-muted-foreground">{x.question_type === 'true_false' ? `True / False · Correct: ${x.correct_answer === 'A' ? 'True' : 'False'}` : `A: ${x.option_a} · B: ${x.option_b} · C: ${x.option_c} · D: ${x.option_d} · Correct: ${x.correct_answer}`} · {Number(x.points || 0).toFixed(2)} pts</p></div><Button type="button" variant="ghost" size="sm" onClick={() => x.id && void deleteQuestion(x.id, t.id)}><Trash2 className="size-4" /></Button></div>)}
           {open === t.id && q && <div className="mt-4 grid gap-3 rounded-lg bg-muted/30 p-4">
-            <div><p className="mb-1 text-sm font-medium">Question Type</p><select value={q.question_type || 'multiple_choice'} onChange={e => changeType(e.target.value as QuestionType)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="multiple_choice">Multiple Choice</option><option value="true_false">True / False</option></select></div>
+            <div><p className="mb-1 text-sm font-medium">Question Type</p><select key={`type-${q.question_type}`} value={q.question_type || 'multiple_choice'} onChange={e => changeType(e.target.value as QuestionType)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="multiple_choice">Multiple Choice</option><option value="true_false">True / False</option></select></div>
             <div><p className="mb-1 text-sm font-medium">Question text</p><Input value={q.question} onChange={e => setQ({ ...q, question: e.target.value })} placeholder="Question text" autoFocus /></div>
-            {q.question_type === 'multiple_choice' ? <>
+            {q.question_type === 'multiple_choice' ? <div key="multiple-choice-fields" className="grid gap-3">
               <Input value={q.option_a} onChange={e => setQ({ ...q, option_a: e.target.value })} placeholder="A" />
               <Input value={q.option_b} onChange={e => setQ({ ...q, option_b: e.target.value })} placeholder="B" />
               <Input value={q.option_c} onChange={e => setQ({ ...q, option_c: e.target.value })} placeholder="C" />
               <Input value={q.option_d} onChange={e => setQ({ ...q, option_d: e.target.value })} placeholder="D" />
               <div><p className="mb-1 text-sm font-medium">Correct answer</p><select value={q.correct_answer} onChange={e => setQ({ ...q, correct_answer: e.target.value as Question['correct_answer'] })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
-            </> : <div><p className="mb-1 text-sm font-medium">Correct answer</p><select value={q.correct_answer === 'B' ? 'B' : 'A'} onChange={e => setQ({ ...q, correct_answer: e.target.value as 'A' | 'B' })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="A">True</option><option value="B">False</option></select><p className="mt-1 text-xs text-muted-foreground">Students automatically get only True and False.</p></div>}
+            </div> : <div key="true-false-fields"><p className="mb-1 text-sm font-medium">Correct answer</p><select value={q.correct_answer === 'B' ? 'B' : 'A'} onChange={e => setQ({ ...q, correct_answer: e.target.value as 'A' | 'B' })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="A">True</option><option value="B">False</option></select><p className="mt-1 text-xs text-muted-foreground">Students automatically get only True and False.</p></div>}
             <div className="flex gap-2"><Button type="button" onClick={() => void saveQuestion()} disabled={busy}>{busy ? <Loader2 className="size-4 animate-spin" /> : 'Save Question'}</Button><Button type="button" variant="outline" onClick={() => { setQ(null); setOpen(null); }}>Cancel</Button></div>
           </div>}
         </div>
