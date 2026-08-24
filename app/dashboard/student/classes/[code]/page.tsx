@@ -177,6 +177,8 @@ export default function ClassDetailsPage() {
   const [optionC, setOptionC] = useState('');
   const [optionD, setOptionD] = useState('');
 
+  const [questionType, setQuestionType] = useState<'multiple-choice' | 'true-false'>('multiple-choice');
+
   const [correctAnswer, setCorrectAnswer] =
     useState<'A' | 'B' | 'C' | 'D'>('A');
 
@@ -838,6 +840,7 @@ export default function ClassDetailsPage() {
     setOptionB('');
     setOptionC('');
     setOptionD('');
+    setQuestionType('multiple-choice');
     setCorrectAnswer('A');
     setMessage('');
     setQuestionModal(true);
@@ -850,6 +853,7 @@ export default function ClassDetailsPage() {
     setOptionB(question.option_b);
     setOptionC(question.option_c);
     setOptionD(question.option_d);
+    setQuestionType('multiple-choice');
     setCorrectAnswer(question.correct_answer);
     setMessage('');
     setQuestionModal(true);
@@ -2078,13 +2082,13 @@ export default function ClassDetailsPage() {
 
                         {linkCheckReason && (
                           <div
-                            className={\`rounded-md border p-2 text-sm \${
+                            className={`rounded-md border p-2 text-sm ${
                               linkCheckStatus === 'safe'
                                 ? 'border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400'
                                 : linkCheckStatus === 'unsafe' || linkCheckStatus === 'error'
                                   ? 'border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400'
                                   : 'border-muted bg-muted/50'
-                            }\`}
+                            }`}
                           >
                             {linkCheckReason}
                           </div>
@@ -2474,6 +2478,30 @@ export default function ClassDetailsPage() {
               >
                 <div>
                   <label className="text-sm font-medium">
+                    Question type
+                  </label>
+                  <select
+                    className="mt-1 h-10 w-full appearance-auto rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none focus:ring-2 focus:ring-ring"
+                    value={questionType}
+                    onChange={e =>
+                      setQuestionType(
+                        e.target.value as
+                          | 'multiple-choice'
+                          | 'true-false'
+                      )
+                    }
+                  >
+                    <option value="multiple-choice">
+                      Multiple Choice
+                    </option>
+                    <option value="true-false">
+                      True / False
+                    </option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">
                     Question text
                   </label>
 
@@ -2493,7 +2521,7 @@ export default function ClassDetailsPage() {
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <label className="text-sm font-medium">
-                      A
+                      {questionType === 'true_false' ? 'True' : questionType === 'fill_blank' || questionType === 'matching' ? 'Item 1' : 'A'}
                     </label>
 
                     <Input
@@ -2509,7 +2537,7 @@ export default function ClassDetailsPage() {
 
                   <div>
                     <label className="text-sm font-medium">
-                      B
+                      {questionType === 'true_false' ? 'False' : questionType === 'fill_blank' || questionType === 'matching' ? 'Item 2' : 'B'}
                     </label>
 
                     <Input
