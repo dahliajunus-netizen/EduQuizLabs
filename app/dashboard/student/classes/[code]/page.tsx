@@ -151,6 +151,8 @@ export default function ClassDetailsPage() {
 
   const [materialName, setMaterialName] = useState('');
   const [materialLink, setMaterialLink] = useState('');
+  const [linkCheckStatus, setLinkCheckStatus] = useState<'idle' | 'checking' | 'safe' | 'unsafe' | 'error'>('idle');
+  const [linkCheckReason, setLinkCheckReason] = useState('');
 
   const [assignmentName, setAssignmentName] = useState('');
   const [assignmentDescription, setAssignmentDescription] = useState('');
@@ -554,6 +556,41 @@ export default function ClassDetailsPage() {
      ADD MATERIAL / ASSIGNMENT
      ========================================================= */
 
+  async function checkMaterialLink(link: string) {
+    setLinkCheckStatus('checking');
+    setLinkCheckReason('Checking this link with Gemini...');
+
+    try {
+      const response = await fetch('/api/moderate-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: link.trim() }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setLinkCheckStatus('error');
+        setLinkCheckReason(result?.reason || 'The link could not be checked.');
+        return false;
+      }
+
+      if (result?.safe === true) {
+        setLinkCheckStatus('safe');
+        setLinkCheckReason(result.reason || 'Link passed the Gemini safety check.');
+        return true;
+      }
+
+      setLinkCheckStatus('unsafe');
+      setLinkCheckReason(result?.reason || 'This link is not allowed as classroom material.');
+      return false;
+    } catch {
+      setLinkCheckStatus('error');
+      setLinkCheckReason('The link could not be checked. Please try again.');
+      return false;
+    }
+  }
+
   async function addItem(
     e: React.FormEvent<HTMLFormElement>
   ) {
@@ -573,6 +610,13 @@ export default function ClassDetailsPage() {
           throw new Error(
             'Enter a valid material name and link.'
           );
+        }
+
+        const linkIsSafe = await checkMaterialLink(materialLink);
+
+        if (!linkIsSafe) {
+          setBusy(false);
+          return;
         }
 
         const response = await fetch(
@@ -627,6 +671,8 @@ export default function ClassDetailsPage() {
       setAddModal(false);
       setMaterialName('');
       setMaterialLink('');
+      setLinkCheckStatus('idle');
+      setLinkCheckReason('');
       setAssignmentName('');
       setAssignmentDescription('');
       setAssignmentDueDate('');
@@ -2000,13 +2046,51 @@ export default function ClassDetailsPage() {
                       type="url"
                       placeholder="https://..."
                       value={materialLink}
-                      onChange={e =>
-                        setMaterialLink(
-                          e.target.value
-                        )
-                      }
+                      onChange={e => {
+                        setMaterialLink(e.target.value);
+                        setLinkCheckStatus('idle');
+                        setLinkCheckReason('');
+                      }}
                       required
                     />
+
+                    {materialLink.trim() && validUrl(materialLink) && (
+                      <div className="space-y-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full"
+                          disabled={linkCheckStatus === 'checking'}
+                          onClick={() => checkMaterialLink(materialLink)}
+                        >
+                          {linkCheckStatus === 'checking' ? (
+                            <>
+                              <Loader2 className="mr-2 size-4 animate-spin" />
+                              Checking with Gemini...
+                            </>
+                          ) : (
+                            <>
+                              <LinkIcon className="mr-2 size-4" />
+                              Check Link Safety
+                            </>
+                          )}
+                        </Button>
+
+                        {linkCheckReason && (
+                          <div
+                            className={\`rounded-md border p-2 text-sm \${
+                              linkCheckStatus === 'safe'
+                                ? 'border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400'
+                                : linkCheckStatus === 'unsafe' || linkCheckStatus === 'error'
+                                  ? 'border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400'
+                                  : 'border-muted bg-muted/50'
+                            }\`}
+                          >
+                            {linkCheckReason}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
 
