@@ -1,14 +1,16 @@
 'use client';
 
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, Plus, Trash2, X } from 'lucide-react';
 
 export type QuestionType = 'multiple-choice' | 'true-false' | 'fill-blank' | 'matching';
 type CorrectAnswer = 'A' | 'B' | 'C' | 'D';
+
+type MatchPair = { left: string; right: string };
 
 export type QuestionFormState = {
   questionText: string;
@@ -31,8 +33,6 @@ type Props = {
   message?: string;
 };
 
-// The database uses snake_case question type values while the UI uses
-// kebab-case values. Keep the UI readable and translate only at the API edge.
 const toDatabaseQuestionType: Record<QuestionType, string> = {
   'multiple-choice': 'multiple_choice',
   'true-false': 'true_false',
@@ -40,42 +40,49 @@ const toDatabaseQuestionType: Record<QuestionType, string> = {
   matching: 'matching',
 };
 
-const fromDatabaseQuestionType = (value: string): QuestionType => {
-  const map: Record<string, QuestionType> = {
-    'multiple-choice': 'multiple-choice',
-    multiple_choice: 'multiple-choice',
-    'true-false': 'true-false',
-    true_false: 'true-false',
-    'fill-blank': 'fill-blank',
-    fill_blank: 'fill-blank',
-    matching: 'matching',
-  };
-  return map[value] || 'multiple-choice';
-};
+const fromDatabaseQuestionType = (value: string): QuestionType => ({
+  'multiple-choice': 'multiple-choice',
+  multiple_choice: 'multiple-choice',
+  'true-false': 'true-false',
+  true_false: 'true-false',
+  'fill-blank': 'fill-blank',
+  fill_blank: 'fill-blank',
+  matching: 'matching',
+}[value] || 'multiple-choice');
+
+function readPairs(value: string): MatchPair[] {
+  if (!value.trim()) return [{ left: '', right: '' }];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      const pairs = parsed
+        .map((p: any) => ({ left: String(p?.left ?? ''), right: String(p?.right ?? '') }))
+        .filter((p: MatchPair) => p.left || p.right);
+      return pairs.length ? pairs : [{ left: '', right: '' }];
+    }
+  } catch {}
+  return [{ left: value, right: '' }];
+}
 
 export default function QuestionModal({ open, editing, form, setForm, onSubmit, onClose, busy = false, message = '' }: Props) {
-  // Existing rows come back from Supabase using the database spelling.
-  // Normalize them before the parent save/validation logic sees them.
-  useEffect(() => {
-    const normalized = fromDatabaseQuestionType(String(form.questionType));
-    if (normalized !== form.questionType) {
-      setForm(prev => ({ ...prev, questionType: normalized }));
-    }
-  }, [form.questionType, setForm]);
+  const [pairs, setPairs] = useState<MatchPair[]>([{ left: '', right: '' }]);
 
-  // Compatibility layer for the existing test_questions CHECK constraint.
-  // The rest of the builder can continue using the UI-friendly names.
+  useEffect(() => {
+    if (!open || form.questionType !== 'matching') return;
+    setPairs(readPairs(form.optionA));
+  }, [open, form.questionType]);
+
+  useEffect(() => {
+    if (!open) return;
+    const normalized = fromDatabaseQuestionType(String(form.questionType));
+    if (normalized !== form.questionType) setForm(prev => ({ ...prev, questionType: normalized }));
+  }, [open, form.questionType, setForm]);
+
   useEffect(() => {
     const originalFetch = window.fetch.bind(window);
-
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-      const isQuestionRequest = requestUrl.includes('/rest/v1/test_questions');
-
-      if (!isQuestionRequest || !init?.body || typeof init.body !== 'string') {
-        return originalFetch(input, init);
-      }
-
+      if (!requestUrl.includes('/rest/v1/test_questions') || !init?.body || typeof init.body !== 'string') return originalFetch(input, init);
       try {
         const parsed = JSON.parse(init.body) as Record<string, unknown>;
         if (typeof parsed.question_type === 'string') {
@@ -83,44 +90,116 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
           parsed.question_type = toDatabaseQuestionType[uiType];
         }
         return originalFetch(input, { ...init, body: JSON.stringify(parsed) });
-      } catch {
-        return originalFetch(input, init);
-      }
+      } catch { return originalFetch(input, init); }
     };
-
-    return () => {
-      window.fetch = originalFetch;
-    };
+    return () => { window.fetch = originalFetch; };
   }, []);
+
+  const matchingAnswers = useMemo(() => pairs.map(p => p.right.trim()).filter(Boolean), [pairs]);
 
   if (!open) return null;
 
   const setType = (type: QuestionType) => {
     setForm(prev => {
-      if (type === 'true-false') return { ...prev, questionType: type, optionA: 'True', optionB: 'False', optionC: '', optionD: '', correctAnswer: prev.correctAnswer === 'B' ? 'B' : 'A' };
+      if (type === 'true-false') return { ...prev, questionType: type, optionA: 'True', optionB: 'False', optionC: '', optionD: '', correctAnswer: 'A' };
       if (type === 'fill-blank') return { ...prev, questionType: type, optionA: '', optionB: '', optionC: '', optionD: '', correctAnswer: 'A' };
-      if (type === 'matching') return { ...prev, questionType: type, optionA: '', optionB: '', optionC: '', optionD: '', correctAnswer: 'B' };
-      return { ...prev, questionType: type, optionA: prev.optionA === 'True' ? '' : prev.optionA, optionB: prev.optionB === 'False' ? '' : prev.optionB, correctAnswer: 'A' };
+      if (type === 'matching') {
+        const nextPairs = [{ left: '', right: '' }];
+        setPairs(nextPairs);
+        return { ...prev, questionType: type, optionA: JSON.stringify(nextPairs), optionB: JSON.stringify([]), optionC: '', optionD: '', correctAnswer: 'A' };
+      }
+      return { ...prev, questionType: type, optionA: prev.optionA === 'True' ? '' : prev.optionA, optionB: prev.optionB === 'False' ? '' : prev.optionB, optionC: prev.optionC, optionD: prev.optionD, correctAnswer: 'A' };
     });
   };
 
-  const optionValue = (letter: 'A' | 'B' | 'C' | 'D') => form[`option${letter}` as keyof Pick<QuestionFormState, 'optionA' | 'optionB' | 'optionC' | 'optionD'>] as string;
-  const setOption = (letter: 'A' | 'B' | 'C' | 'D', value: string) => setForm(prev => ({ ...prev, [`option${letter}`]: value }));
+  const updatePair = (index: number, field: keyof MatchPair, value: string) => {
+    setPairs(prev => {
+      const next = prev.map((pair, i) => i === index ? { ...pair, [field]: value } : pair);
+      setForm(current => ({ ...current, optionA: JSON.stringify(next), optionB: JSON.stringify(next.map(p => p.right.trim()).filter(Boolean)) }));
+      return next;
+    });
+  };
+
+  const addPair = () => {
+    setPairs(prev => {
+      const next = [...prev, { left: '', right: '' }];
+      setForm(current => ({ ...current, optionA: JSON.stringify(next), optionB: JSON.stringify(next.map(p => p.right.trim()).filter(Boolean)) }));
+      return next;
+    });
+  };
+
+  const removePair = (index: number) => {
+    setPairs(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      const safe = next.length ? next : [{ left: '', right: '' }];
+      setForm(current => ({ ...current, optionA: JSON.stringify(safe), optionB: JSON.stringify(safe.map(p => p.right.trim()).filter(Boolean)) }));
+      return safe;
+    });
+  };
+
+  const setCorrect = (answer: CorrectAnswer) => setForm(prev => ({ ...prev, correctAnswer: answer }));
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-      <Card className="w-full max-w-2xl">
-        <CardHeader className="flex flex-row items-center justify-between"><CardTitle>{editing ? 'Edit Question' : 'Add Question'}</CardTitle><Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={busy}><X /></Button></CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div><label className="text-sm font-medium">Question type</label><select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fromDatabaseQuestionType(String(form.questionType))} onChange={e => setType(e.target.value as QuestionType)} disabled={busy}><option value="multiple-choice">Multiple Choice</option><option value="true-false">True / False</option><option value="fill-blank">Fill in the Blank</option><option value="matching">Matching</option></select></div>
-            <div><label className="text-sm font-medium">Question text</label><textarea className="mt-1 w-full rounded border bg-background p-2" rows={3} value={form.questionText} onChange={e => setForm(prev => ({ ...prev, questionText: e.target.value }))} required disabled={busy} /></div>
-            {form.questionType === 'multiple-choice' && <div className="grid gap-3 md:grid-cols-2">{(['A','B','C','D'] as const).map(letter => <div key={letter}><label className="text-sm font-medium">{letter}</label><Input value={optionValue(letter)} onChange={e => setOption(letter, e.target.value)} required disabled={busy} /></div>)}</div>}
-            {form.questionType === 'true-false' && <div className="grid gap-3 md:grid-cols-2"><div><label className="text-sm font-medium">True</label><Input value="True" disabled /></div><div><label className="text-sm font-medium">False</label><Input value="False" disabled /></div></div>}
-            {form.questionType === 'fill-blank' && <div><label className="text-sm font-medium">Correct Answer</label><Input value={form.optionA} onChange={e => setForm(prev => ({ ...prev, optionA: e.target.value }))} placeholder="Answer students must type" required disabled={busy} /></div>}
-            {form.questionType === 'matching' && <div className="grid gap-3 md:grid-cols-2"><div><label className="text-sm font-medium">Item</label><Input value={form.optionA} onChange={e => setForm(prev => ({ ...prev, optionA: e.target.value }))} placeholder="Example: France" required disabled={busy} /></div><div><label className="text-sm font-medium">Matching Answer</label><Input value={form.optionB} onChange={e => setForm(prev => ({ ...prev, optionB: e.target.value }))} placeholder="Example: Paris" required disabled={busy} /></div></div>}
-            {(form.questionType === 'multiple-choice' || form.questionType === 'true-false') && <div><label className="text-sm font-medium">Correct Answer</label><select className="mt-1 h-10 w-full rounded border bg-background px-3" value={form.correctAnswer} onChange={e => setForm(prev => ({ ...prev, correctAnswer: e.target.value as CorrectAnswer }))} disabled={busy}><option value="A">{form.questionType === 'true-false' ? 'True' : 'A'}</option><option value="B">{form.questionType === 'true-false' ? 'False' : 'B'}</option>{form.questionType === 'multiple-choice' && <><option value="C">C</option><option value="D">D</option></>}</select></div>}
-            <div className="rounded border bg-muted/30 p-3 text-sm text-muted-foreground">No points are entered manually. The test is always worth 100 points total and points are recalculated automatically.</div>
+      <Card className="max-h-[90vh] w-full max-w-3xl overflow-y-auto">
+        <CardHeader className="flex flex-row items-center justify-between border-b">
+          <div><CardTitle>{editing ? 'Edit Question' : 'Add Question'}</CardTitle><p className="mt-1 text-sm text-muted-foreground">Choose a question type and build it below.</p></div>
+          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={busy}><X /></Button>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <form onSubmit={onSubmit} className="space-y-6">
+            <div>
+              <label className="text-sm font-semibold">Question type</label>
+              <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+                {([
+                  ['multiple-choice', 'Multiple Choice'], ['true-false', 'True / False'], ['fill-blank', 'Fill in the Blank'], ['matching', 'Matching'],
+                ] as const).map(([value, label]) => (
+                  <button key={value} type="button" disabled={busy} onClick={() => setType(value)} className={`rounded-lg border p-3 text-sm font-medium transition ${form.questionType === value ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-accent'}`}>{label}</button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold">Question</label>
+              <textarea className="mt-2 min-h-24 w-full rounded-lg border bg-background p-3 outline-none focus:ring-2 focus:ring-primary" placeholder="Write your question..." rows={3} value={form.questionText} onChange={e => setForm(prev => ({ ...prev, questionText: e.target.value }))} required disabled={busy} />
+            </div>
+
+            {form.questionType === 'multiple-choice' && <section className="rounded-xl border bg-muted/20 p-4">
+              <h3 className="font-semibold">Answer choices</h3>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {(['A','B','C','D'] as const).map(letter => <div key={letter}><label className="text-sm font-medium">Option {letter}</label><Input className="mt-1" value={form[`option${letter}` as 'optionA'|'optionB'|'optionC'|'optionD']} onChange={e => setForm(prev => ({ ...prev, [`option${letter}`]: e.target.value }))} required disabled={busy} /></div>)}
+              </div>
+              <div className="mt-4"><label className="text-sm font-semibold">Correct answer</label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={form.correctAnswer} onChange={e => setCorrect(e.target.value as CorrectAnswer)} disabled={busy}>{(['A','B','C','D'] as const).map(x => <option key={x} value={x}>Option {x}</option>)}</select></div>
+            </section>}
+
+            {form.questionType === 'true-false' && <section className="rounded-xl border bg-muted/20 p-4">
+              <h3 className="font-semibold">Choose the correct answer</h3>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {(['A','B'] as const).map(value => { const selected = form.correctAnswer === value; return <button key={value} type="button" disabled={busy} onClick={() => setCorrect(value)} className={`rounded-xl border-2 p-5 text-lg font-semibold transition ${selected ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-accent'}`}>{value === 'A' ? '✓ True' : '✕ False'}</button>; })}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Students will see two clear True / False choices.</p>
+            </section>}
+
+            {form.questionType === 'fill-blank' && <section className="rounded-xl border bg-muted/20 p-4">
+              <h3 className="font-semibold">Correct answer</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Students will type their answer into an input box.</p>
+              <Input className="mt-3 h-12 text-base" value={form.optionA} onChange={e => setForm(prev => ({ ...prev, optionA: e.target.value }))} placeholder="Type the correct answer" required disabled={busy} />
+            </section>}
+
+            {form.questionType === 'matching' && <section className="rounded-xl border bg-muted/20 p-4">
+              <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">Matching pairs</h3><p className="mt-1 text-sm text-muted-foreground">Add as many pairs as you need. Each row is one match.</p></div><Button type="button" variant="outline" size="sm" onClick={addPair} disabled={busy}><Plus className="mr-1 size-4" />Add Match</Button></div>
+              <div className="mt-4 space-y-3">
+                {pairs.map((pair, index) => <div key={index} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 rounded-lg border bg-background p-3">
+                  <div><label className="text-xs font-medium text-muted-foreground">Item {index + 1}</label><Input className="mt-1" value={pair.left} onChange={e => updatePair(index, 'left', e.target.value)} placeholder="e.g. France" required disabled={busy} /></div>
+                  <span className="pt-5 text-muted-foreground">↔</span>
+                  <div><label className="text-xs font-medium text-muted-foreground">Matches with</label><Input className="mt-1" value={pair.right} onChange={e => updatePair(index, 'right', e.target.value)} placeholder="e.g. Paris" required disabled={busy} /></div>
+                  <Button type="button" variant="ghost" size="icon" className="mt-5" onClick={() => removePair(index)} disabled={busy || pairs.length === 1} title="Remove match"><Trash2 className="size-4" /></Button>
+                </div>)}
+              </div>
+              {matchingAnswers.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{matchingAnswers.length} match{matchingAnswers.length === 1 ? '' : 'es'} added.</p>}
+            </section>}
+
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">No points are entered manually. The test remains worth 100 points total and points are recalculated automatically.</div>
             {message && <p className="text-sm text-destructive">{message}</p>}
             <div className="flex gap-2"><Button type="button" variant="outline" className="w-1/2" onClick={onClose} disabled={busy}>Cancel</Button><Button type="submit" className="w-1/2" disabled={busy}>{busy ? <Loader2 className="size-4 animate-spin" /> : editing ? 'Save Changes' : 'Add Question'}</Button></div>
           </form>
