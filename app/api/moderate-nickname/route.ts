@@ -15,16 +15,30 @@ export async function POST(request: Request) {
     if (!nickname) return NextResponse.json({ allowed: false, reason: 'Enter a nickname.' }, { status: 400 });
     if (nickname.length > 15) return NextResponse.json({ allowed: false, reason: 'Nicknames can be at most 15 characters.' }, { status: 400 });
 
-    const prompt = `You moderate nicknames for a school live quiz used by students. Reject profanity, sexual/explicit content, slurs, hateful language, threats, harassment, obscene or deliberately offensive names, or graphic/disturbing references. Allow normal names, harmless nicknames, gaming names, numbers, jokes, non-English names, fictional character names, and harmless abbreviations. Return ONLY JSON: {"allowed":true} or {"allowed":false,"reason":"Choose a different classroom nickname."}. Nickname: ${JSON.stringify(nickname)}`;
+    const prompt = `You moderate nicknames for a school live quiz used by students. Reject profanity, sexual or explicit content, slurs, hateful language, threats, harassment, obscene or deliberately offensive names, and graphic or disturbing references. Allow normal names, harmless nicknames, gaming names, numbers, jokes, non-English names, fictional character names, and harmless abbreviations. Return a JSON object with allowed as true or false and, when false, a brief classroom-safe reason. Nickname: ${JSON.stringify(nickname)}`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+          generationConfig: {
+            temperature: 0,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'OBJECT',
+              properties: {
+                allowed: { type: 'BOOLEAN' },
+                reason: { type: 'STRING' },
+              },
+              required: ['allowed'],
+            },
+          },
         }),
         cache: 'no-store',
       },
@@ -37,7 +51,9 @@ export async function POST(request: Request) {
     }
 
     let data: any;
-    try { data = JSON.parse(responseText); } catch {
+    try {
+      data = JSON.parse(responseText);
+    } catch {
       console.error('Gemini API returned invalid JSON:', responseText);
       return NextResponse.json({ allowed: false, error: 'Nickname moderation returned an invalid response.' }, { status: 502 });
     }
@@ -49,13 +65,18 @@ export async function POST(request: Request) {
     }
 
     let result: { allowed?: boolean; reason?: string };
-    try { result = JSON.parse(raw); } catch {
+    try {
+      result = JSON.parse(raw);
+    } catch {
       console.error('Gemini moderation result was not JSON:', raw);
       return NextResponse.json({ allowed: false, error: 'Nickname moderation returned an invalid result.' }, { status: 502 });
     }
 
     if (result.allowed === true) return NextResponse.json({ allowed: true });
-    return NextResponse.json({ allowed: false, reason: result.reason || 'Choose a different nickname for the classroom.' });
+    return NextResponse.json({
+      allowed: false,
+      reason: result.reason || 'Choose a different nickname for the classroom.',
+    });
   } catch (error) {
     console.error('Nickname moderation exception:', error);
     return NextResponse.json({ allowed: false, error: 'Nickname moderation is temporarily unavailable.' }, { status: 500 });
