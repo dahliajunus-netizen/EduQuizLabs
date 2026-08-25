@@ -90,7 +90,10 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
         const used = attempts[test.id] || 0;
         const max = Math.max(1, Number(test.max_attempts) || 1);
         const exhausted = !teacher && used >= max;
-        const target = exhausted && test.allow_review !== false ? `/dashboard/student/tests/${test.id}?review=latest` : `/dashboard/student/tests/${test.id}`;
+        const target = exhausted && test.allow_review !== false
+          ? `/dashboard/student/tests/${encodeURIComponent(test.id)}/review`
+          : `/dashboard/student/tests/${encodeURIComponent(test.id)}`;
+
         return <div key={test.id} className="mb-2 overflow-hidden rounded-lg border">
           <div className="flex items-start gap-3 p-4">
             <div className="flex-1"><b>{test.title}</b>{test.description&&<p className="text-sm text-muted-foreground">{test.description}</p>}{test.due_date&&<p className="mt-1 text-xs text-muted-foreground">Due: {displayDate(test.due_date)}</p>}<p className="text-xs text-muted-foreground">{qs.length} question{qs.length===1?'':'s'} · {test.published?'Published':'Draft'}{qs.length?` · ${formatPoints(qs.length)} points/question`:''}</p>{!teacher&&test.published&&<div className="mt-3 flex flex-wrap items-center gap-2"><Link href={target}><Button type="button" size="sm" variant={exhausted ? 'outline' : 'default'}>{exhausted ? 'Review Test' : 'Take Test'}</Button></Link>{!exhausted&&<span className="text-xs text-muted-foreground">Attempt {Math.min(used + 1, max)} of {max}</span>}{exhausted&&test.allow_review===false&&<span className="text-xs text-muted-foreground">Review not permitted</span>}</div>}</div>
