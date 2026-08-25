@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
 
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'gemini-3.6-flash';
 
 export async function POST(request: Request) {
   try {
     const apiKey = process.env.GEMINI_API_KEY?.trim();
-    if (!apiKey) {
-      console.error('[nickname moderation] GEMINI_API_KEY is missing');
-      return NextResponse.json({ allowed: false, error: 'GEMINI_API_KEY is missing on the deployed server.' }, { status: 503 });
-    }
+    if (!apiKey) return NextResponse.json({ allowed: false, error: 'GEMINI_API_KEY is missing on the deployed server.' }, { status: 503 });
 
     const body = await request.json();
     const nickname = typeof body?.nickname === 'string' ? body.nickname.trim() : '';
@@ -27,11 +24,8 @@ export async function POST(request: Request) {
     const responseText = await response.text();
     if (!response.ok) {
       let detail = responseText;
-      try {
-        const parsed = JSON.parse(responseText);
-        detail = parsed?.error?.message || parsed?.error?.status || responseText;
-      } catch {}
-      console.error(`[nickname moderation] Gemini HTTP ${response.status}: ${detail}`);
+      try { detail = JSON.parse(responseText)?.error?.message || detail; } catch {}
+      console.error(`[nickname moderation] Gemini ${response.status}: ${detail}`);
       return NextResponse.json({ allowed: false, error: `Gemini rejected the moderation request (${response.status}): ${detail}` }, { status: 502 });
     }
 
@@ -45,8 +39,8 @@ export async function POST(request: Request) {
     try { result = JSON.parse(cleaned); }
     catch {
       const match = cleaned.match(/\{[\s\S]*\}/);
-      if (!match) return NextResponse.json({ allowed: false, error: `Gemini returned an invalid moderation result: ${raw}` }, { status: 502 });
-      try { result = JSON.parse(match[0]); } catch { return NextResponse.json({ allowed: false, error: `Gemini returned an invalid moderation result: ${raw}` }, { status: 502 }); }
+      if (!match) return NextResponse.json({ allowed: false, error: 'Gemini returned an invalid moderation result.' }, { status: 502 });
+      try { result = JSON.parse(match[0]); } catch { return NextResponse.json({ allowed: false, error: 'Gemini returned an invalid moderation result.' }, { status: 502 }); }
     }
 
     if (result.allowed === true) return NextResponse.json({ allowed: true });
