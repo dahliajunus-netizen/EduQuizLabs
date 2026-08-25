@@ -205,6 +205,8 @@ export default function TeacherLiveQuiz() {
     try { await navigator.clipboard.writeText(quiz.game_code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
   }
 
+  const connectedPlayers = [...players].sort((x, y) => x.nickname.localeCompare(y.nickname));
+
   if (quiz) {
     return <main className="min-h-screen bg-gradient-to-b from-background via-background to-primary/[0.04] px-4 py-6 sm:px-6">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -220,7 +222,15 @@ export default function TeacherLiveQuiz() {
 
         {error && <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm font-medium text-destructive">{error}</div>}
 
-        {quiz.status === 'lobby' && <Card className="rounded-3xl"><CardContent className="py-16 text-center"><MonitorPlay className="mx-auto size-14 text-primary" /><h2 className="mt-5 text-3xl font-black">Ready when your class is in</h2><p className="mx-auto mt-2 max-w-lg text-muted-foreground">Share this screen. Students will use their devices as answer controllers.</p><p className="mt-5 font-bold">{players.length} player{players.length === 1 ? '' : 's'} connected</p><Button size="lg" className="mt-6 rounded-xl px-8" disabled={!questions.length} onClick={() => beginReveal(0)}><Play className="mr-2 size-5" />Start Question 1</Button></CardContent></Card>}
+        {quiz.status === 'lobby' && <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <Card className="rounded-3xl"><CardContent className="py-16 text-center"><MonitorPlay className="mx-auto size-14 text-primary" /><h2 className="mt-5 text-3xl font-black">Ready when your class is in</h2><p className="mx-auto mt-2 max-w-lg text-muted-foreground">Share this screen. Students will use their devices as answer controllers.</p><p className="mt-5 font-bold">{players.length} player{players.length === 1 ? '' : 's'} connected</p><Button size="lg" className="mt-6 rounded-xl px-8" disabled={!questions.length} onClick={() => beginReveal(0)}><Play className="mr-2 size-5" />Start Question 1</Button></CardContent></Card>
+          <Card className="rounded-3xl">
+            <CardHeader className="pb-3"><CardTitle className="flex items-center justify-between gap-3"><span className="flex items-center gap-2"><Users className="size-5 text-primary" />Connected Players</span><span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-black text-primary">{connectedPlayers.length}</span></CardTitle></CardHeader>
+            <CardContent className="pt-0">
+              {connectedPlayers.length === 0 ? <div className="rounded-2xl border border-dashed p-7 text-center"><Users className="mx-auto size-8 text-muted-foreground/50" /><p className="mt-3 text-sm font-bold">Waiting for players…</p><p className="mt-1 text-xs text-muted-foreground">Nicknames will appear here as students join.</p></div> : <div className="max-h-80 space-y-2 overflow-y-auto pr-1">{connectedPlayers.map((p, i) => <div key={p.id} className="flex items-center gap-3 rounded-2xl border bg-card p-3 shadow-sm"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-black text-primary">{i + 1}</span><span className="size-2.5 shrink-0 rounded-full bg-green-500" /><span className="min-w-0 flex-1 truncate font-bold">{p.nickname}</span></div>)}</div>}
+            </CardContent>
+          </Card>
+        </div>}
 
         {(quiz.status === 'question_reveal' || quiz.status === 'answering') && currentQ && <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_320px]">
           <Card className="overflow-hidden rounded-3xl border-0 shadow-xl">
