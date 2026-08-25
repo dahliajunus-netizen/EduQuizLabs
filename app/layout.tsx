@@ -25,7 +25,9 @@ export const metadata: Metadata = {
     'Sign in to EduQuizLabs to build, share, and take smarter quizzes.',
   generator: 'v0.app',
   icons: {
-    icon: '/image-removebg-preview (1) (1).png',
+    icon: '/image-removebg-preview (3).png',
+    shortcut: '/image-removebg-preview (3).png',
+    apple: '/image-removebg-preview (3).png',
   },
 }
 
