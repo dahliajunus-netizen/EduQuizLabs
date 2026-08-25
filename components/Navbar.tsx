@@ -6,21 +6,20 @@ import { usePathname, useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { LayoutDashboard, BookOpen, Users, LogOut, Sparkles, Menu, X } from 'lucide-react';
-import { translations, Language } from '@/lib/translations';
+import { useLanguage } from '@/components/language-provider';
+import type { Language } from '@/lib/translations';
 
 export function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
-  const [language, setLanguage] = useState<Language>('en');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { language, setLanguage, t } = useLanguage();
 
   useEffect(() => {
     try {
       const rawUser = localStorage.getItem('current_user');
       if (rawUser) setUser(JSON.parse(rawUser));
-      const savedLanguage = localStorage.getItem('language');
-      if (savedLanguage === 'en' || savedLanguage === 'id') setLanguage(savedLanguage);
     } catch (e) {
       console.error('Error loading navbar settings', e);
     }
@@ -28,14 +27,11 @@ export function Navbar() {
 
   useEffect(() => setMobileOpen(false), [pathname]);
 
-  const t = translations[language];
   const role = user?.role ? user.role.toLowerCase() : 'student';
   const dashboardHref = role === 'teacher' ? '/dashboard/teacher' : role === 'parent' ? '/dashboard/parent' : '/dashboard/student';
 
   const handleLanguageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const newLanguage = event.target.value as Language;
-    setLanguage(newLanguage);
-    localStorage.setItem('language', newLanguage);
+    setLanguage(event.target.value as Language);
   };
 
   const handleLogout = () => {
@@ -82,7 +78,7 @@ export function Navbar() {
             <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{role}</div>
           </div>
           <ThemeToggle />
-          <select value={language} onChange={handleLanguageChange} aria-label="Select language" className="hidden h-9 rounded-xl border border-border/70 bg-card px-2.5 text-xs font-semibold text-foreground shadow-sm outline-none transition focus:ring-2 focus:ring-primary sm:block">
+          <select value={language} onChange={handleLanguageChange} aria-label="Select language" className="hidden h-9 rounded-xl border border-border/70 bg-card px-2.5 text-xs font-semibold text-foreground shadow-sm outline-none transition focus:ring-2 focus:ring-primary">
             <option value="en">{t.english}</option>
             <option value="id">{t.indonesian}</option>
           </select>
