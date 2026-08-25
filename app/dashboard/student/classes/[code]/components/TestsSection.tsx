@@ -10,7 +10,6 @@ type Props = {
   tests: Test[];
   questions: Record<string, Question[]>;
   teacher: boolean;
-  studentId?: string;
   open: Record<string, boolean>;
   busy?: boolean;
   displayDate: (value?: string | null) => string;
@@ -28,8 +27,16 @@ type Props = {
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
-
 type AttemptMap = Record<string, number>;
+
+function getStudentId() {
+  try {
+    const raw = localStorage.getItem('current_user');
+    if (!raw) return '';
+    const u = JSON.parse(raw);
+    return String(u.student_id ?? u.id ?? u.user_id ?? u.uid ?? u.user?.student_id ?? u.user?.id ?? '').trim();
+  } catch { return ''; }
+}
 
 function matchingPairs(value: string) {
   try {
@@ -39,8 +46,14 @@ function matchingPairs(value: string) {
   } catch { return value ? [value] : []; }
 }
 
-export default function TestsSection({ tests, questions, teacher, studentId, open, busy, displayDate, formatPoints, questionTypeLabel, onCreate, onTogglePublish, onEdit, onDelete, onToggleQuestions, onEditQuestion, onDeleteQuestion }: Props) {
+export default function TestsSection({ tests, questions, teacher, open, busy, displayDate, formatPoints, questionTypeLabel, onCreate, onTogglePublish, onEdit, onDelete, onToggleQuestions, onEditQuestion, onDeleteQuestion }: Props) {
+  const [studentId, setStudentId] = useState('');
   const [attempts, setAttempts] = useState<AttemptMap>({});
+
+  useEffect(() => {
+    if (teacher) return;
+    setStudentId(getStudentId());
+  }, [teacher]);
 
   useEffect(() => {
     if (teacher || !studentId || !tests.length) {
@@ -53,19 +66,11 @@ export default function TestsSection({ tests, questions, teacher, studentId, ope
       const next: AttemptMap = {};
       await Promise.all(tests.map(async (test) => {
         try {
-          const response = await fetch(
-            `${supabaseUrl}/rest/v1/test_submissions?test_id=eq.${encodeURIComponent(test.id)}&student_id=eq.${encodeURIComponent(studentId)}&select=id`,
-            { headers, cache: 'no-store' }
-          );
-          if (response.ok) {
-            const rows = await response.json();
-            next[test.id] = Array.isArray(rows) ? rows.length : 0;
-          } else {
-            next[test.id] = 0;
-          }
-        } catch {
-          next[test.id] = 0;
-        }
+          const response = await fetch(`${supabaseUrl}/rest/v1/test_submissions?test_id=eq.${encodeURIComponent(test.id)}&student_id=eq.${encodeURIComponent(studentId)}&select=id`, { headers, cache: 'no-store' });
+          if (!response.ok) { next[test.id] = 0; return; }
+          const rows = await response.json();
+          next[test.id] = Array.isArray(rows) ? rows.length : 0;
+        } catch { next[test.id] = 0; }
       }));
       if (!cancelled) setAttempts(next);
     })();
