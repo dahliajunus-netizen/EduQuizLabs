@@ -5,21 +5,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Loader2, Plus, Trash2, X, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Plus, Trash2, X, Image as ImageIcon, Upload, FileImage } from 'lucide-react';
 
 export type QuestionType = 'multiple-choice' | 'true-false' | 'fill-blank' | 'matching';
 type CorrectAnswer = 'A' | 'B' | 'C' | 'D';
 type MatchPair = { left: string; right: string };
-
-export type QuestionFormState = {
-  questionText: string;
-  optionA: string;
-  optionB: string;
-  optionC: string;
-  optionD: string;
-  questionType: QuestionType;
-  correctAnswer: CorrectAnswer;
-};
 
 type Props = {
   open: boolean;
@@ -30,6 +20,16 @@ type Props = {
   onClose: () => void;
   busy?: boolean;
   message?: string;
+};
+
+export type QuestionFormState = {
+  questionText: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  questionType: QuestionType;
+  correctAnswer: CorrectAnswer;
 };
 
 const toDatabaseQuestionType: Record<QuestionType, string> = {
@@ -59,13 +59,51 @@ function readPairs(value: string): MatchPair[] {
 }
 
 const clearStoredImage = () => {
-  if (typeof window !== 'undefined') window.sessionStorage.removeItem('eduquiz_question_image_url');
+  if (typeof window !== 'undefined') {
+    window.sessionStorage.removeItem('eduquiz_question_image_url');
+    window.sessionStorage.removeItem('eduquiz_question_image_file');
+  }
 };
+
+/** Compress uploaded images so storing the image with the question does not create huge database rows. */
+async function fileToDataUrl(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) throw new Error('Please choose an image file.');
+  if (file.size > 8 * 1024 * 1024) throw new Error('Images must be 8 MB or smaller.');
+
+  const source = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('That image could not be read.'));
+      img.src = String(reader.result);
+    };
+    reader.onerror = () => reject(new Error('Could not read the image file.'));
+    reader.readAsDataURL(file);
+  });
+
+  const maxSize = 1600;
+  const scale = Math.min(1, maxSize / Math.max(source.naturalWidth || source.width, source.naturalHeight || source.height));
+  const width = Math.max(1, Math.round((source.naturalWidth || source.width) * scale));
+  const height = Math.max(1, Math.round((source.naturalHeight || source.height) * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Your browser could not process this image.');
+  ctx.drawImage(source, 0, 0, width, height);
+
+  return canvas.toDataURL('image/jpeg', 0.82);
+}
 
 export default function QuestionModal({ open, editing, form, setForm, onSubmit, onClose, busy = false, message = '' }: Props) {
   const [pairs, setPairs] = useState<MatchPair[]>([{ left: '', right: '' }]);
   const [imageUrl, setImageUrl] = useState('');
+  const [imageDataUrl, setImageDataUrl] = useState('');
   const [imageError, setImageError] = useState(false);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageMessage, setImageMessage] = useState('');
+  const [draggingImage, setDraggingImage] = useState(false);
 
   useEffect(() => {
     if (!open || form.questionType !== 'matching') return;
@@ -75,8 +113,11 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
   useEffect(() => {
     if (!open) return;
     setImageError(false);
-    const saved = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_url') : '';
-    setImageUrl(saved || '');
+    setImageMessage('');
+    const savedUrl = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_url') : '';
+    const savedFile = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_file') : '';
+    setImageUrl(savedUrl || '');
+    setImageDataUrl(savedFile || '');
   }, [open]);
 
   useEffect(() => {
@@ -93,8 +134,10 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
       try {
         const parsed = JSON.parse(init.body) as Record<string, unknown>;
         if (typeof parsed.question_type === 'string') parsed.question_type = toDatabaseQuestionType[fromDatabaseQuestionType(parsed.question_type)];
-        const storedImage = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_url') || '' : '';
-        if (storedImage.trim()) parsed.image_url = storedImage.trim();
+        const storedFile = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_file') || '' : '';
+        const storedUrl = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_url') || '' : '';
+        if (storedFile.trim()) parsed.image_url = storedFile.trim();
+        else if (storedUrl.trim()) parsed.image_url = storedUrl.trim();
         return originalFetch(input, { ...init, body: JSON.stringify(parsed) });
       } catch { return originalFetch(input, init); }
     };
@@ -128,23 +171,46 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
   const setCorrect = (answer: CorrectAnswer) => setForm(prev => ({ ...prev, correctAnswer: answer }));
 
   const handleImageUrlChange = (value: string) => {
-    setImageUrl(value); setImageError(false);
+    setImageUrl(value); setImageDataUrl(''); setImageError(false); setImageMessage('');
     if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem('eduquiz_question_image_file');
       if (value.trim()) window.sessionStorage.setItem('eduquiz_question_image_url', value.trim());
-      else clearStoredImage();
+      else window.sessionStorage.removeItem('eduquiz_question_image_url');
+    }
+  };
+
+  const handleImageFile = async (file?: File) => {
+    if (!file) return;
+    setImageBusy(true); setImageMessage(''); setImageError(false);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setImageDataUrl(dataUrl);
+      setImageUrl('');
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem('eduquiz_question_image_file', dataUrl);
+        window.sessionStorage.removeItem('eduquiz_question_image_url');
+      }
+    } catch (e) {
+      setImageDataUrl('');
+      setImageMessage(e instanceof Error ? e.message : 'Could not use that image.');
+      if (typeof window !== 'undefined') window.sessionStorage.removeItem('eduquiz_question_image_file');
+    } finally {
+      setImageBusy(false);
     }
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     if (typeof window !== 'undefined') {
-      if (imageUrl.trim()) window.sessionStorage.setItem('eduquiz_question_image_url', imageUrl.trim());
+      if (imageDataUrl.trim()) window.sessionStorage.setItem('eduquiz_question_image_file', imageDataUrl.trim());
+      else if (imageUrl.trim()) window.sessionStorage.setItem('eduquiz_question_image_url', imageUrl.trim());
       else clearStoredImage();
     }
     onSubmit(e);
     window.setTimeout(clearStoredImage, 1000);
   };
 
-  const close = () => { clearStoredImage(); setImageUrl(''); onClose(); };
+  const close = () => { clearStoredImage(); setImageUrl(''); setImageDataUrl(''); onClose(); };
+  const displayedImage = imageDataUrl || imageUrl.trim();
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
@@ -158,7 +224,25 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
             <div><label className="text-sm font-semibold">Question type</label><div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">{([['multiple-choice','Multiple Choice'],['true-false','True / False'],['fill-blank','Fill in the Blank'],['matching','Matching']] as const).map(([value,label])=><button key={value} type="button" disabled={busy} onClick={()=>setType(value)} className={`rounded-lg border p-3 text-sm font-medium transition ${form.questionType===value?'border-primary bg-primary/10 text-primary':'hover:bg-accent'}`}>{label}</button>)}</div></div>
             <div><label className="text-sm font-semibold">Question</label><textarea className="mt-2 min-h-24 w-full rounded-lg border bg-background p-3 outline-none focus:ring-2 focus:ring-primary" placeholder="Write your question..." rows={3} value={form.questionText} onChange={e=>setForm(prev=>({...prev,questionText:e.target.value}))} required disabled={busy}/></div>
 
-            <section className="rounded-xl border bg-muted/20 p-4"><div className="flex items-center gap-2"><ImageIcon className="size-5 text-primary"/><div><h3 className="font-semibold">Question image</h3><p className="text-xs text-muted-foreground">Optional — paste a direct image URL.</p></div></div><Input className="mt-3" type="url" value={imageUrl} onChange={e=>handleImageUrlChange(e.target.value)} placeholder="https://example.com/question-image.jpg" disabled={busy}/>{imageUrl.trim()&&!imageError&&<div className="mt-3 overflow-hidden rounded-lg border bg-background p-2"><img src={imageUrl.trim()} alt="Question preview" className="max-h-64 max-w-full rounded object-contain" onError={()=>setImageError(true)}/><p className="mt-2 text-xs text-muted-foreground">Preview</p></div>}{imageUrl.trim()&&imageError&&<p className="mt-2 text-sm text-destructive">That image could not be loaded. Check that the URL points directly to an image.</p>}</section>
+            <section className="rounded-xl border bg-muted/20 p-4">
+              <div className="flex items-center gap-2"><ImageIcon className="size-5 text-primary"/><div><h3 className="font-semibold">Question image</h3><p className="text-xs text-muted-foreground">Optional — paste an image URL or drop an image file here.</p></div></div>
+
+              <div
+                className={`mt-3 rounded-xl border-2 border-dashed p-5 text-center transition ${draggingImage ? 'border-primary bg-primary/10' : 'border-muted-foreground/25 bg-background hover:border-primary/50'}`}
+                onDragOver={e => { e.preventDefault(); if (!busy && !imageBusy) setDraggingImage(true); }}
+                onDragLeave={() => setDraggingImage(false)}
+                onDrop={e => { e.preventDefault(); setDraggingImage(false); if (!busy && !imageBusy) void handleImageFile(e.dataTransfer.files?.[0]); }}
+              >
+                <input id="question-image-file" type="file" accept="image/*" className="hidden" disabled={busy || imageBusy} onChange={e => { void handleImageFile(e.target.files?.[0]); e.currentTarget.value = ''; }} />
+                {imageBusy ? <><Loader2 className="mx-auto size-8 animate-spin text-primary"/><p className="mt-2 text-sm font-semibold">Processing image…</p></> : <><Upload className="mx-auto size-8 text-primary"/><p className="mt-2 text-sm font-semibold">Drag & drop an image here</p><p className="mt-1 text-xs text-muted-foreground">or</p><label htmlFor="question-image-file" className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border bg-background px-4 py-2 text-sm font-semibold hover:bg-accent"><FileImage className="size-4"/>Choose image file</label><p className="mt-2 text-[11px] text-muted-foreground">PNG, JPG, GIF, WebP • maximum 8 MB</p></>}
+              </div>
+
+              <div className="my-3 flex items-center gap-3"><div className="h-px flex-1 bg-border"/><span className="text-xs font-medium text-muted-foreground">OR IMAGE URL</span><div className="h-px flex-1 bg-border"/></div>
+              <Input type="url" value={imageUrl} onChange={e=>handleImageUrlChange(e.target.value)} placeholder="https://example.com/question-image.jpg" disabled={busy || imageBusy}/>
+              {imageMessage && <p className="mt-2 text-sm text-destructive">{imageMessage}</p>}
+              {displayedImage && !imageError && <div className="mt-3 overflow-hidden rounded-lg border bg-background p-2"><img src={displayedImage} alt="Question preview" className="max-h-64 max-w-full rounded object-contain" onError={()=>setImageError(true)}/><p className="mt-2 text-xs text-muted-foreground">Preview</p></div>}
+              {displayedImage && imageError && <p className="mt-2 text-sm text-destructive">That image could not be loaded. Check the file or URL and try again.</p>}
+            </section>
 
             {form.questionType==='multiple-choice'&&<section className="rounded-xl border bg-muted/20 p-4"><h3 className="font-semibold">Answer choices</h3><div className="mt-3 grid gap-3 md:grid-cols-2">{(['A','B','C','D'] as const).map(letter=><div key={letter}><label className="text-sm font-medium">Option {letter}</label><Input className="mt-1" value={form[`option${letter}` as 'optionA'|'optionB'|'optionC'|'optionD']} onChange={e=>setForm(prev=>({...prev,[`option${letter}`]:e.target.value}))} required disabled={busy}/></div>)}</div><div className="mt-4"><label className="text-sm font-semibold">Correct answer</label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={form.correctAnswer} onChange={e=>setCorrect(e.target.value as CorrectAnswer)} disabled={busy}>{(['A','B','C','D'] as const).map(x=><option key={x} value={x}>Option {x}</option>)}</select></div></section>}
             {form.questionType==='true-false'&&<section className="rounded-xl border bg-muted/20 p-4"><h3 className="font-semibold">Choose the correct answer</h3><div className="mt-3 grid grid-cols-2 gap-3">{(['A','B'] as const).map(value=>{const selected=form.correctAnswer===value;return <button key={value} type="button" disabled={busy} onClick={()=>setCorrect(value)} className={`rounded-xl border-2 p-5 text-lg font-semibold transition ${selected?'border-primary bg-primary/10 text-primary':'hover:bg-accent'}`}>{value==='A'?'✓ True':'✕ False'}</button>})}</div><p className="mt-2 text-xs text-muted-foreground">Students will see two clear True / False choices.</p></section>}
@@ -166,7 +250,7 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
             {form.questionType==='matching'&&<section className="rounded-xl border bg-muted/20 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">Matching pairs</h3><p className="mt-1 text-sm text-muted-foreground">Add as many pairs as you need. Each row is one match.</p></div><Button type="button" variant="outline" size="sm" onClick={addPair} disabled={busy}><Plus className="mr-1 size-4"/>Add Match</Button></div><div className="mt-4 space-y-3">{pairs.map((pair,index)=><div key={index} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 rounded-lg border bg-background p-3"><div><label className="text-xs font-medium text-muted-foreground">Item {index+1}</label><Input className="mt-1" value={pair.left} onChange={e=>updatePair(index,'left',e.target.value)} placeholder="e.g. France" required disabled={busy}/></div><span className="pt-5 text-muted-foreground">↔</span><div><label className="text-xs font-medium text-muted-foreground">Matches with</label><Input className="mt-1" value={pair.right} onChange={e=>updatePair(index,'right',e.target.value)} placeholder="e.g. Paris" required disabled={busy}/></div><Button type="button" variant="ghost" size="icon" className="mt-5" onClick={()=>removePair(index)} disabled={busy||pairs.length===1} title="Remove match"><Trash2 className="size-4"/></Button></div>)}</div>{matchingAnswers.length>0&&<p className="mt-3 text-xs text-muted-foreground">{matchingAnswers.length} match{matchingAnswers.length===1?'':'es'} added.</p>}</section>}
             <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">No points are entered manually. The test remains worth 100 points total and points are recalculated automatically.</div>
             {message&&<p className="text-sm text-destructive">{message}</p>}
-            <div className="flex gap-2"><Button type="button" variant="outline" className="w-1/2" onClick={close} disabled={busy}>Cancel</Button><Button type="submit" className="w-1/2" disabled={busy}>{busy?<Loader2 className="size-4 animate-spin"/>:editing?'Save Changes':'Add Question'}</Button></div>
+            <div className="flex gap-2"><Button type="button" variant="outline" className="w-1/2" onClick={close} disabled={busy}>Cancel</Button><Button type="submit" className="w-1/2" disabled={busy || imageBusy}>{busy?<Loader2 className="size-4 animate-spin"/>:editing?'Save Changes':'Add Question'}</Button></div>
           </form>
         </CardContent>
       </Card>
