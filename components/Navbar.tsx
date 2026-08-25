@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, BookOpen, Users, LogOut, Sparkles } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, LogOut, Sparkles, Menu, X } from 'lucide-react';
 import { translations, Language } from '@/lib/translations';
 
 export function Navbar() {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [language, setLanguage] = useState<Language>('en');
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -24,9 +26,11 @@ export function Navbar() {
     }
   }, []);
 
+  useEffect(() => setMobileOpen(false), [pathname]);
+
   const t = translations[language];
   const role = user?.role ? user.role.toLowerCase() : 'student';
-  const dashboardHref = role === 'teacher' ? '/dashboard/teacher' : '/dashboard/student';
+  const dashboardHref = role === 'teacher' ? '/dashboard/teacher' : role === 'parent' ? '/dashboard/parent' : '/dashboard/student';
 
   const handleLanguageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const newLanguage = event.target.value as Language;
@@ -39,59 +43,76 @@ export function Navbar() {
     router.push('/');
   };
 
+  const navItems = [
+    { href: dashboardHref, label: t.overview, icon: LayoutDashboard },
+    ...(role === 'teacher' ? [{ href: '/dashboard/teacher/live-quiz', label: 'Live Quiz', icon: Sparkles }] : []),
+    ...(role === 'student' ? [{ href: '/dashboard/student/live-quiz', label: 'Join Live Quiz', icon: Sparkles }] : []),
+    ...(role === 'parent' ? [{ href: '/dashboard/parent/children', label: t.children, icon: Users }] : []),
+  ];
+
   return (
-    <header className="sticky top-0 z-50 border-b border-border/70 bg-background/85 shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
-      <div className="mx-auto flex h-[68px] w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link href={dashboardHref} className="group flex shrink-0 items-center gap-2.5">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm transition-transform duration-200 group-hover:scale-105">
+    <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 shadow-sm backdrop-blur-2xl supports-[backdrop-filter]:bg-background/65">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 sm:h-[68px] sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-5">
+          <Link href={dashboardHref} className="group flex shrink-0 items-center gap-2.5" aria-label="EduQuizLabs dashboard">
+            <span className="relative flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md transition duration-200 group-hover:scale-105 group-hover:shadow-lg">
               <BookOpen className="size-5" />
+              <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-background" />
             </span>
-            <span className="hidden text-base font-extrabold tracking-tight text-foreground sm:inline">EduQuizLabs</span>
+            <span className="hidden text-base font-black tracking-tight text-foreground sm:inline">EduQuizLabs</span>
           </Link>
 
-          <nav className="hidden items-center gap-1 md:flex">
-            <Link href={dashboardHref} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-              <LayoutDashboard className="size-4" />
-              {t.overview}
-            </Link>
-            {role === 'teacher' && (
-              <Link href="/dashboard/teacher/live-quiz" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10">
-                <Sparkles className="size-4" />
-                Live Quiz
-              </Link>
-            )}
-            {role === 'student' && (
-              <Link href="/dashboard/student/live-quiz" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10">
-                <Sparkles className="size-4" />
-                Join Live Quiz
-              </Link>
-            )}
-            {role === 'parent' && (
-              <Link href="/dashboard/parent/children" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                <Users className="size-4" />
-                {t.children}
-              </Link>
-            )}
+          <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
+            {navItems.map(({ href, label, icon: Icon }) => {
+              const active = pathname === href || (href !== dashboardHref && pathname.startsWith(href));
+              return (
+                <Link key={href} href={href} className={`relative flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+                  <Icon className="size-4" />
+                  {label}
+                  {active && <span className="absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full bg-primary" />}
+                </Link>
+              );
+            })}
           </nav>
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <div className="hidden rounded-xl border border-border/70 bg-card/70 px-3 py-1.5 text-right sm:block">
-            <div className="max-w-[150px] truncate text-sm font-semibold text-foreground">{user?.fullName || user?.full_name || t.guestUser}</div>
-            <div className="text-[11px] font-medium capitalize text-muted-foreground">{t.role}: {role}</div>
+          <div className="hidden max-w-[190px] rounded-xl border border-border/70 bg-card/70 px-3 py-1.5 text-right shadow-sm sm:block">
+            <div className="truncate text-sm font-bold text-foreground">{user?.fullName || user?.full_name || t.guestUser}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{role}</div>
           </div>
           <ThemeToggle />
-          <select value={language} onChange={handleLanguageChange} aria-label="Select language" className="hidden h-9 rounded-xl border border-border/70 bg-card px-2.5 text-xs font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary sm:block">
+          <select value={language} onChange={handleLanguageChange} aria-label="Select language" className="hidden h-9 rounded-xl border border-border/70 bg-card px-2.5 text-xs font-semibold text-foreground shadow-sm outline-none transition focus:ring-2 focus:ring-primary sm:block">
             <option value="en">{t.english}</option>
             <option value="id">{t.indonesian}</option>
           </select>
-          <Button variant="outline" size="sm" onClick={handleLogout} className="h-9 gap-2 rounded-xl px-3">
+          <Button variant="outline" size="sm" onClick={handleLogout} className="hidden h-9 gap-2 rounded-xl px-3 sm:flex">
             <LogOut className="size-4" />
-            <span className="hidden sm:inline">{t.exit}</span>
+            <span> {t.exit}</span>
+          </Button>
+          <Button variant="outline" size="icon" onClick={() => setMobileOpen(v => !v)} className="size-9 rounded-xl md:hidden" aria-label={mobileOpen ? 'Close menu' : 'Open menu'}>
+            {mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}
           </Button>
         </div>
       </div>
+
+      {mobileOpen && (
+        <div className="border-t border-border/60 bg-background/95 px-4 pb-4 pt-3 shadow-lg backdrop-blur-xl md:hidden">
+          <nav className="space-y-1" aria-label="Mobile navigation">
+            {navItems.map(({ href, label, icon: Icon }) => {
+              const active = pathname === href || (href !== dashboardHref && pathname.startsWith(href));
+              return <Link key={href} href={href} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}><Icon className="size-4" />{label}</Link>;
+            })}
+          </nav>
+          <div className="mt-3 flex items-center gap-2 border-t border-border/60 pt-3">
+            <select value={language} onChange={handleLanguageChange} aria-label="Select language" className="h-10 flex-1 rounded-xl border border-border/70 bg-card px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary">
+              <option value="en">{t.english}</option>
+              <option value="id">{t.indonesian}</option>
+            </select>
+            <Button variant="outline" onClick={handleLogout} className="h-10 gap-2 rounded-xl"><LogOut className="size-4" />{t.exit}</Button>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
