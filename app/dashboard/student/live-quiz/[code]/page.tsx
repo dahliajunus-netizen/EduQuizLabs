@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Check, Clock, Loader2, Trophy, Wifi, Zap, ArrowLeft, Lock, Sparkles } from 'lucide-react';
@@ -26,6 +26,7 @@ async function api(path:string,opts:RequestInit={}){const r=await fetch(`${url}/
 export default function LiveQuizGame(){
   const params=useParams<{code:string}>();
   const search=useSearchParams();
+  const router=useRouter();
   const code=String(params?.code||'').toUpperCase();
   const nickname=search.get('name')||'Player';
 
@@ -105,7 +106,7 @@ export default function LiveQuizGame(){
     }catch(e){setAnswered(false);setSubmitting(false);setError(e instanceof Error?e.message:'Could not submit answer.');}
   }
 
-  if(error&&!quiz)return <main className="flex min-h-screen items-center justify-center px-5"><Card className="w-full max-w-md rounded-[2rem]"><CardContent className="p-8 text-center"><h1 className="text-2xl font-black">Unable to join game</h1><p className="mt-2 text-sm text-muted-foreground">{error}</p></CardContent></Card></main>;
+  if(error&&!quiz)return <main className="flex min-h-screen items-center justify-center px-5"><Card className="w-full max-w-md rounded-[2rem]"><CardContent className="p-8 text-center"><h1 className="text-2xl font-black">Unable to join game</h1><p className="mt-2 text-sm text-muted-foreground">{error}</p><Button variant="outline" className="mt-5 rounded-xl" onClick={()=>router.push('/dashboard/student')}><ArrowLeft className="mr-2 size-4"/>Back to Dashboard</Button></CardContent></Card></main>;
 
   if(!quiz)return <main className="flex min-h-screen items-center justify-center"><div className="flex items-center gap-3 rounded-2xl border bg-card px-5 py-4 font-semibold text-muted-foreground shadow-lg"><Loader2 className="size-5 animate-spin text-primary"/>Connecting to live quiz…</div></main>;
 
@@ -113,7 +114,7 @@ export default function LiveQuizGame(){
 
   if(quiz.status==='lobby')return <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-5"><div className="w-full max-w-xl text-center"><div className="mx-auto flex size-24 animate-pulse items-center justify-center rounded-[2rem] bg-primary text-primary-foreground shadow-2xl"><Wifi className="size-10"/></div><p className="mt-7 text-[11px] font-black uppercase tracking-[0.35em] text-primary">Connected to host</p><h1 className="mt-2 text-5xl font-black">You're in!</h1><p className="mt-4 text-muted-foreground">Keep your eyes on the teacher's screen. Your device is your answer controller.</p><div className="mx-auto mt-8 rounded-[2rem] border bg-card p-6 shadow-xl"><div className="flex items-center justify-center gap-2"><span className="size-2.5 animate-pulse rounded-full bg-green-500"/><span className="font-bold">Waiting for the host to start</span></div><div className="mt-6 grid grid-cols-4 gap-2.5">{shapes.map(s=><div key={s.letter} className={`flex h-16 items-center justify-center rounded-2xl ${s.className} text-3xl font-black text-white`}>{s.symbol}</div>)}</div></div></div></main>;
 
-  if(quiz.status==='finished')return <main className="min-h-screen px-4 py-8"><div className="mx-auto max-w-2xl"><Card className="overflow-hidden rounded-[2rem] border-0 shadow-2xl"><CardHeader className="bg-primary/5 p-10 text-center"><Trophy className="mx-auto size-16 text-primary"/><p className="mt-5 text-[11px] font-black uppercase tracking-[0.3em] text-primary">Game complete</p><CardTitle className="mt-2 text-4xl font-black">Quiz Finished!</CardTitle><p className="mt-3 text-muted-foreground"><b className="text-foreground">{player.correct_answers}</b> correct</p></CardHeader><CardContent className="p-5"><div className="space-y-2">{ranking.map((p,i)=><div key={p.id} className={`flex items-center gap-3 rounded-2xl border p-4 ${p.id===player.id?'border-primary bg-primary/10':''}`}><span className="flex size-9 items-center justify-center rounded-xl bg-muted font-black">{i+1}</span><span className="flex-1 truncate font-bold">{p.nickname}{p.id===player.id&&<span className="ml-2 text-xs text-primary">YOU</span>}</span><span className="text-sm font-black">{p.correct_answers} correct</span></div>)}</div><Button variant="outline" className="mt-6 w-full rounded-xl" onClick={()=>window.location.reload()}><ArrowLeft className="mr-2 size-4"/>Back</Button></CardContent></Card></div></main>;
+  if(quiz.status==='finished')return <main className="min-h-screen px-4 py-8"><div className="mx-auto max-w-2xl"><Card className="overflow-hidden rounded-[2rem] border-0 shadow-2xl"><CardHeader className="bg-primary/5 p-10 text-center"><Trophy className="mx-auto size-16 text-primary"/><p className="mt-5 text-[11px] font-black uppercase tracking-[0.3em] text-primary">Game complete</p><CardTitle className="mt-2 text-4xl font-black">Quiz Finished!</CardTitle><p className="mt-3 text-muted-foreground"><b className="text-foreground">{player.correct_answers}</b> correct</p></CardHeader><CardContent className="p-5"><div className="space-y-2">{ranking.map((p,i)=><div key={p.id} className={`flex items-center gap-3 rounded-2xl border p-4 ${p.id===player.id?'border-primary bg-primary/10':''}`}><span className="flex size-9 items-center justify-center rounded-xl bg-muted font-black">{i+1}</span><span className="flex-1 truncate font-bold">{p.nickname}{p.id===player.id&&<span className="ml-2 text-xs text-primary">YOU</span>}</span><span className="text-sm font-black">{p.correct_answers} correct</span></div>)}</div><Button className="mt-6 w-full rounded-xl" onClick={()=>router.push('/dashboard/student')}><ArrowLeft className="mr-2 size-4"/>Back to Student Dashboard</Button></CardContent></Card></div></main>;
 
   if(!currentQ)return <main className="flex min-h-screen items-center justify-center text-center"><div><Loader2 className="mx-auto size-9 animate-spin text-primary"/><p className="mt-4 font-black">Waiting for the next question…</p></div></main>;
 
