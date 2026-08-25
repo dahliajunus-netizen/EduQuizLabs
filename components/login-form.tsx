@@ -248,6 +248,24 @@ export function LoginForm() {
             Create one
           </Link>
         </p>
+
+        <p className="text-center text-xs text-muted-foreground">
+          By signing in you agree to our{' '}
+          <Link
+            href="/terms?from=signin"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Terms
+          </Link>{' '}
+          and{' '}
+          <Link
+            href="/privacy?from=signin"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </form>
 
       {isCreditsOpen && (
