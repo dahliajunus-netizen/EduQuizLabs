@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { BookOpen, ChevronDown, ChevronUp, PlusCircle, Trash2, LogOut, Loader2 } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, PlusCircle, Trash2, LogOut, Loader2, Sparkles } from 'lucide-react';
 
 export type CourseItem = { id?: string; course_name: string; class_code: string };
 
@@ -38,5 +38,52 @@ export default function CourseSection({ course, isOpen, teacher, onToggle, onAdd
     }
   }
 
-  return <Card className="overflow-hidden"><CardHeader className="flex flex-row items-center justify-between"><button type="button" className="flex items-center gap-2 font-semibold" onClick={onToggle}>{isOpen?<ChevronUp/>:<ChevronDown/>}<BookOpen className="size-4 text-primary"/>{course.course_name}</button>{teacher?<div className="flex gap-2"><Button type="button" size="sm" onClick={onAdd}><PlusCircle className="mr-1 size-4"/>Add</Button><Button type="button" variant="ghost" size="sm" onClick={onDelete}><Trash2 size={15}/></Button></div>:<Button type="button" variant="outline" size="sm" onClick={leaveClass} disabled={leaving} className="shrink-0"><LogOut className="mr-1 size-4"/>{leaving?<Loader2 className="size-4 animate-spin"/>:'Leave Class'}</Button>}</CardHeader>{isOpen&&<CardContent className="space-y-8 border-t pt-5">{children}</CardContent>}</Card>;
+  return (
+    <Card className={`overflow-hidden rounded-3xl border bg-card shadow-sm transition-all duration-200 ${isOpen?'border-primary/20 shadow-md':'hover:-translate-y-0.5 hover:shadow-md'}`}>
+      <CardHeader className="p-0">
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <button type="button" className="group flex min-w-0 flex-1 items-center gap-3 rounded-2xl p-1 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-primary" onClick={onToggle} aria-expanded={isOpen}>
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+              {isOpen?<ChevronUp className="size-5"/>:<ChevronDown className="size-5"/>}
+            </span>
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                <BookOpen className="size-5"/>
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-base font-bold sm:text-lg">{course.course_name}</span>
+                <span className="mt-0.5 block text-xs font-medium text-muted-foreground">Class {course.class_code}</span>
+              </span>
+            </span>
+          </button>
+
+          {teacher ? (
+            <div className="flex items-center gap-2 pl-14 sm:pl-0">
+              <Button type="button" size="sm" onClick={onAdd} className="rounded-xl shadow-sm">
+                <PlusCircle className="mr-1.5 size-4"/>Add
+              </Button>
+              <Button type="button" variant="ghost" size="icon" onClick={onDelete} className="size-9 rounded-xl text-muted-foreground hover:text-destructive" aria-label={`Delete ${course.course_name}`}>
+                <Trash2 className="size-4"/>
+              </Button>
+            </div>
+          ) : (
+            <Button type="button" variant="outline" size="sm" onClick={leaveClass} disabled={leaving} className="rounded-xl sm:shrink-0">
+              {leaving?<Loader2 className="mr-1.5 size-4 animate-spin"/>:<LogOut className="mr-1.5 size-4"/>}
+              {leaving?'Leaving…':'Leave Class'}
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+
+      {isOpen && (
+        <CardContent className="space-y-7 border-t bg-muted/[0.12] p-4 pt-5 sm:p-6 sm:pt-6">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
+            <Sparkles className="size-3.5 text-primary"/>
+            Course workspace
+          </div>
+          {children}
+        </CardContent>
+      )}
+    </Card>
+  );
 }
