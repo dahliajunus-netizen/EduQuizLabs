@@ -15,73 +15,93 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Apply image persistence and display fixes
+        shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          p=Path('app/dashboard/student/classes/[code]/components/QuestionModal.tsx')
-          s=p.read_text()
-          old="""        const currentImage = imageDataUrl.trim() || imageUrl.trim();
+          # Save uploaded/URL images inside answer_data so this works even when
+          # the database table does not have an image_url column.
+          p = Path('app/dashboard/student/classes/[code]/components/QuestionModal.tsx')
+          s = p.read_text()
+          old = '''        const currentImage = imageDataUrl.trim() || imageUrl.trim();
         if (currentImage) parsed.image_url = currentImage;
         else delete parsed.image_url;
 
-        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });"""
-          new="""        const currentImage = imageDataUrl.trim() || imageUrl.trim();
+        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });'''
+          new = '''        const currentImage = imageDataUrl.trim() || imageUrl.trim();
         if (currentImage) {
           const existingAnswerData = parsed.answer_data && typeof parsed.answer_data === 'object' && !Array.isArray(parsed.answer_data)
             ? parsed.answer_data as Record<string, unknown>
             : {};
           parsed.answer_data = { ...existingAnswerData, image_url: currentImage };
+        } else if (parsed.answer_data && typeof parsed.answer_data === 'object' && !Array.isArray(parsed.answer_data)) {
+          const existingAnswerData = parsed.answer_data as Record<string, unknown>;
+          const nextAnswerData = { ...existingAnswerData };
+          delete nextAnswerData.image_url;
+          parsed.answer_data = nextAnswerData;
         }
         delete parsed.image_url;
 
-        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });"""
-          if old in s: s=s.replace(old,new,1)
+        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });'''
+          if old in s:
+              s = s.replace(old, new, 1)
           p.write_text(s)
 
-          p=Path('app/dashboard/student/classes/[code]/components/types.ts')
-          s=p.read_text()
-          old="""  correct_answer: 'A' | 'B' | 'C' | 'D';
+          # Expose image fields to the TypeScript question model.
+          p = Path('app/dashboard/student/classes/[code]/components/types.ts')
+          s = p.read_text()
+          old = '''  correct_answer: 'A' | 'B' | 'C' | 'D';
   points: number;
-};"""
-          new="""  correct_answer: 'A' | 'B' | 'C' | 'D';
+};'''
+          new = '''  correct_answer: 'A' | 'B' | 'C' | 'D';
   points: number;
   image_url?: string | null;
   answer_data?: Record<string, unknown> | null;
-};"""
-          if old in s: s=s.replace(old,new,1)
+};'''
+          if old in s:
+              s = s.replace(old, new, 1)
           p.write_text(s)
 
-          p=Path('app/dashboard/student/classes/[code]/components/TestsSection.tsx')
-          s=p.read_text()
-          marker="""</div>{type==='multiple-choice'&&<div className=\"mt-2 grid gap-1 text-sm text-muted-foreground md:grid-cols-2\">"""
-          replacement="""</div>{(question.image_url || (question.answer_data as any)?.image_url) && <img src={String(question.image_url || (question.answer_data as any)?.image_url)} alt=\"Question illustration\" className=\"mt-3 max-h-64 max-w-full rounded-xl border object-contain\" />}{type==='multiple-choice'&&<div className=\"mt-2 grid gap-1 text-sm text-muted-foreground md:grid-cols-2\">"""
-          if marker in s: s=s.replace(marker,replacement,1)
+          # Show saved images in the teacher's question list.
+          p = Path('app/dashboard/student/classes/[code]/components/TestsSection.tsx')
+          s = p.read_text()
+          marker = '''</div>{type==='multiple-choice'&&<div className="mt-2 grid gap-1 text-sm text-muted-foreground md:grid-cols-2">'''
+          replacement = '''</div>{(question.image_url || (question.answer_data as any)?.image_url) && <img src={String(question.image_url || (question.answer_data as any)?.image_url)} alt="Question illustration" className="mt-3 max-h-64 max-w-full rounded-xl border object-contain" />}{type==='multiple-choice'&&<div className="mt-2 grid gap-1 text-sm text-muted-foreground md:grid-cols-2">'''
+          if marker in s:
+              s = s.replace(marker, replacement, 1)
           p.write_text(s)
 
-          p=Path('app/dashboard/student/tests/[id]/page.tsx')
-          s=p.read_text()
-          old="""type Question={id:string;test_id:string;question_order:number;question:string;question_type?:string|null;option_a:string;option_b:string;option_c:string;option_d:string;correct_answer:string;points:number};"""
-          new="""type Question={id:string;test_id:string;question_order:number;question:string;question_type?:string|null;option_a:string;option_b:string;option_c:string;option_d:string;correct_answer:string;points:number;image_url?:string|null;answer_data?:Record<string,unknown>|null};"""
-          if old in s: s=s.replace(old,new,1)
-          old="""function publicDescription(d:string|null){return(d||'').replace(/^\\[\\[EQ_PASSWORD:[^\\]]+\\]\\]\\s*/,'');}"""
-          new="""function publicDescription(d:string|null){return(d||'').replace(/^\\[\\[EQ_PASSWORD:[^\\]]+\\]\\]\\s*/,'');}
-function questionImage(q:Question){return String(q.image_url||((q.answer_data as any)?.image_url)||'').trim();}"""
-          if old in s: s=s.replace(old,new,1)
-          marker="""<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle><p className={`text-sm font-medium ${isCorrect?'text-green-600':'text-red-600'}`}>"""
-          replacement="""<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle>{questionImage(q)&&<img src={questionImage(q)} alt=\"Question illustration\" className=\"mt-3 max-h-80 w-full rounded-xl border object-contain\" />}<p className={`text-sm font-medium ${isCorrect?'text-green-600':'text-red-600'}`}>"""
-          if marker in s: s=s.replace(marker,replacement,1)
-          marker="""<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle></CardHeader><CardContent className=\"space-y-3\">"""
-          replacement="""<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle>{questionImage(q)&&<img src={questionImage(q)} alt=\"Question illustration\" className=\"mt-3 max-h-80 w-full rounded-xl border object-contain\" />}</CardHeader><CardContent className=\"space-y-3\">"""
-          if marker in s: s=s.replace(marker,replacement,1)
+          # Show saved images while taking and reviewing a test.
+          p = Path('app/dashboard/student/tests/[id]/page.tsx')
+          s = p.read_text()
+          old = '''type Question={id:string;test_id:string;question_order:number;question:string;question_type?:string|null;option_a:string;option_b:string;option_c:string;option_d:string;correct_answer:string;points:number};'''
+          new = '''type Question={id:string;test_id:string;question_order:number;question:string;question_type?:string|null;option_a:string;option_b:string;option_c:string;option_d:string;correct_answer:string;points:number;image_url?:string|null;answer_data?:Record<string,unknown>|null};'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          old = '''function publicDescription(d:string|null){return(d||'').replace(/^\\[\\[EQ_PASSWORD:[^\\]]+\\]\\]\\s*/,'');}'''
+          new = '''function publicDescription(d:string|null){return(d||'').replace(/^\\[\\[EQ_PASSWORD:[^\\]]+\\]\\]\\s*/,'');}
+function questionImage(q:Question){return String(q.image_url||((q.answer_data as any)?.image_url)||'').trim();}'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          marker = '''<CardTitle className="text-lg">{i+1}. {q.question}</CardTitle><p className={`text-sm font-medium ${isCorrect?'text-green-600':'text-red-600'}`}>'''
+          replacement = '''<CardTitle className="text-lg">{i+1}. {q.question}</CardTitle>{questionImage(q)&&<img src={questionImage(q)} alt="Question illustration" className="mt-3 max-h-80 w-full rounded-xl border object-contain" />}<p className={`text-sm font-medium ${isCorrect?'text-green-600':'text-red-600'}`}>'''
+          if marker in s:
+              s = s.replace(marker, replacement, 1)
+          marker = '''<CardTitle className="text-lg">{i+1}. {q.question}</CardTitle></CardHeader><CardContent className="space-y-3">'''
+          replacement = '''<CardTitle className="text-lg">{i+1}. {q.question}</CardTitle>{questionImage(q)&&<img src={questionImage(q)} alt="Question illustration" className="mt-3 max-h-80 w-full rounded-xl border object-contain" />}</CardHeader><CardContent className="space-y-3">'''
+          if marker in s:
+              s = s.replace(marker, replacement, 1)
           p.write_text(s)
           PY
 
       - name: Commit and remove temporary workflow
+        shell: bash
         run: |
           rm -f .github/workflows/fix-test-question-images.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .
-          git commit -m 'fix: persist and display test question images' || exit 0
+          git add app/dashboard/student/classes/[code]/components/QuestionModal.tsx app/dashboard/student/classes/[code]/components/types.ts app/dashboard/student/classes/[code]/components/TestsSection.tsx app/dashboard/student/tests/[id]/page.tsx .github/workflows/fix-test-question-images.yml
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: persist and display test question images'
           git push
