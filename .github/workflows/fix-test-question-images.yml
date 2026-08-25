@@ -1,0 +1,128 @@
+name: Fix Test Question Images
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch image persistence and student display
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # 1. Stop relying on image_url as a database column. Store the image
+          # inside answer_data, which already exists for the four question types.
+          p = Path('app/dashboard/student/classes/[code]/components/QuestionModal.tsx')
+          s = p.read_text()
+          old = """        const currentImage = imageDataUrl.trim() || imageUrl.trim();
+        if (currentImage) parsed.image_url = currentImage;
+        else delete parsed.image_url;
+
+        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });"""
+          new = """        const currentImage = imageDataUrl.trim() || imageUrl.trim();
+        if (currentImage) {
+          const existingAnswerData =
+            parsed.answer_data &&
+            typeof parsed.answer_data === 'object' &&
+            !Array.isArray(parsed.answer_data)
+              ? parsed.answer_data as Record<string, unknown>
+              : {};
+          parsed.answer_data = { ...existingAnswerData, image_url: currentImage };
+        }
+
+        // Do not send image_url as a top-level column. Some deployments only
+        // have the original test_questions schema. answer_data is guaranteed by
+        // the question-type migration and safely carries the optional image.
+        delete parsed.image_url;
+
+        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });"""
+          if old not in s:
+              raise SystemExit('QuestionModal image interceptor block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # 2. Add image metadata to the shared question type.
+          p = Path('app/dashboard/student/classes/[code]/components/types.ts')
+          s = p.read_text()
+          old = """  correct_answer: 'A' | 'B' | 'C' | 'D';
+  points: number;
+};"""
+          new = """  correct_answer: 'A' | 'B' | 'C' | 'D';
+  points: number;
+  image_url?: string | null;
+  answer_data?: Record<string, unknown> | null;
+};"""
+          if old not in s:
+              raise SystemExit('Shared Question type block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # 3. Show the image in the teacher's question list too.
+          p = Path('app/dashboard/student/classes/[code]/components/TestsSection.tsx')
+          s = p.read_text()
+          old = """<p className=\"font-medium\">{index+1}. {question.question}</p><span className=\"rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary\">{questionTypeLabel(type)}</span>"""
+          new = """<p className=\"font-medium\">{index+1}. {question.question}</p><span className=\"rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary\">{questionTypeLabel(type)}</span>"""
+          if old not in s:
+              raise SystemExit('TestsSection question heading not found')
+          # Insert image immediately after the heading row's closing div.
+          marker = """</div>{type==='multiple-choice'&&<div className=\"mt-2 grid gap-1 text-sm text-muted-foreground md:grid-cols-2\">"""
+          replacement = """</div>{(question.image_url || (question.answer_data as any)?.image_url) && <img src={String(question.image_url || (question.answer_data as any)?.image_url)} alt=\"Question illustration\" className=\"mt-3 max-h-64 max-w-full rounded-xl border object-contain\" />}{type==='multiple-choice'&&<div className=\"mt-2 grid gap-1 text-sm text-muted-foreground md:grid-cols-2\">"""
+          if marker not in s:
+              raise SystemExit('TestsSection image insertion marker not found')
+          s = s.replace(marker, replacement, 1)
+          p.write_text(s)
+
+          # 4. Student test page: fetch metadata (select=* already does) and render it.
+          p = Path('app/dashboard/student/tests/[id]/page.tsx')
+          s = p.read_text()
+          old = """type Question={id:string;test_id:string;question_order:number;question:string;question_type?:string|null;option_a:string;option_b:string;option_c:string;option_d:string;correct_answer:string;points:number};"""
+          new = """type Question={id:string;test_id:string;question_order:number;question:string;question_type?:string|null;option_a:string;option_b:string;option_c:string;option_d:string;correct_answer:string;points:number;image_url?:string|null;answer_data?:Record<string,unknown>|null};"""
+          if old not in s:
+              raise SystemExit('Student Question type not found')
+          s = s.replace(old, new, 1)
+
+          old = """function publicDescription(d:string|null){return(d||'').replace(/^\\[\\[EQ_PASSWORD:[^\\]]+\\]\\]\\s*/,'');}"""
+          new = """function publicDescription(d:string|null){return(d||'').replace(/^\\[\\[EQ_PASSWORD:[^\\]]+\\]\\]\\s*/,'');}
+function questionImage(q:Question){const fromData=(q.answer_data as any)?.image_url;return String(q.image_url||fromData||'').trim();}"""
+          if old not in s:
+              raise SystemExit('Student publicDescription helper not found')
+          s = s.replace(old, new, 1)
+
+          # Add image to review cards.
+          marker = """<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle><p className={`text-sm font-medium ${isCorrect?'text-green-600':'text-red-600'}`}>"""
+          replacement = """<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle>{questionImage(q)&&<img src={questionImage(q)} alt=\"Question illustration\" className=\"mt-3 max-h-80 w-full rounded-xl border object-contain\" />}</CardTitle><p className={`text-sm font-medium ${isCorrect?'text-green-600':'text-red-600'}`}>"""
+          # Do not accidentally create invalid nested CardTitle; use a clean replacement instead.
+          replacement = """<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle>{questionImage(q)&&<img src={questionImage(q)} alt=\"Question illustration\" className=\"mt-3 max-h-80 w-full rounded-xl border object-contain\" />}<p className={`text-sm font-medium ${isCorrect?'text-green-600':'text-red-600'}`}>"""
+          if marker not in s:
+              raise SystemExit('Student review question heading not found')
+          s = s.replace(marker, replacement, 1)
+
+          # Add image to the active test view.
+          marker = """<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle></CardHeader><CardContent className=\"space-y-3\">"""
+          replacement = """<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle>{questionImage(q)&&<img src={questionImage(q)} alt=\"Question illustration\" className=\"mt-3 max-h-80 w-full rounded-xl border object-contain\" />}</CardHeader><CardContent className=\"space-y-3\">"""
+          if marker not in s:
+              raise SystemExit('Student active question heading not found')
+          s = s.replace(marker, replacement, 1)
+          p.write_text(s)
+
+          print('Patched test question image persistence and rendering.')
+          PY
+
+      - name: Remove temporary workflow and commit
+        run: |
+          rm -f .github/workflows/fix-test-question-images.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add 'app/dashboard/student/classes/[code]/components/QuestionModal.tsx' 'app/dashboard/student/classes/[code]/components/types.ts' 'app/dashboard/student/classes/[code]/components/TestsSection.tsx' 'app/dashboard/student/tests/[id]/page.tsx' '.github/workflows/fix-test-question-images.yml'
+          git commit -m 'fix: persist and display test question images' || exit 0
+          git push
