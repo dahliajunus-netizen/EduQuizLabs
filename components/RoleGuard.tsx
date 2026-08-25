@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
 export type AppRole = 'teacher' | 'student';
 
@@ -12,11 +13,14 @@ type CurrentUser = {
 export function RoleGuard({
   role,
   children,
+  allowTeacherClassPages = false,
 }: {
   role: AppRole;
   children: React.ReactNode;
+  allowTeacherClassPages?: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
@@ -30,7 +34,16 @@ export function RoleGuard({
       const user: CurrentUser = JSON.parse(raw);
       const actualRole = String(user?.role ?? '').trim().toLowerCase();
 
-      if (actualRole !== role) {
+      // Teacher class pages live under /dashboard/student/classes/[code]
+      // for historical reasons. They are shared class-management pages,
+      // not the student dashboard itself.
+      const isTeacherClassPage =
+        allowTeacherClassPages &&
+        role === 'student' &&
+        actualRole === 'teacher' &&
+        pathname?.startsWith('/dashboard/student/classes/');
+
+      if (actualRole !== role && !isTeacherClassPage) {
         router.replace(`/dashboard/${actualRole === 'teacher' ? 'teacher' : 'student'}`);
         return;
       }
@@ -40,7 +53,7 @@ export function RoleGuard({
       localStorage.removeItem('current_user');
       router.replace('/login');
     }
-  }, [role, router]);
+  }, [role, router, pathname, allowTeacherClassPages]);
 
   if (!allowed) {
     return (
