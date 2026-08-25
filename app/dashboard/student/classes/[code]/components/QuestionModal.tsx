@@ -5,11 +5,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Loader2, Plus, Trash2, X } from 'lucide-react';
+import { Loader2, Plus, Trash2, X, Image as ImageIcon } from 'lucide-react';
 
 export type QuestionType = 'multiple-choice' | 'true-false' | 'fill-blank' | 'matching';
 type CorrectAnswer = 'A' | 'B' | 'C' | 'D';
-
 type MatchPair = { left: string; right: string };
 
 export type QuestionFormState = {
@@ -66,11 +65,20 @@ function readPairs(value: string): MatchPair[] {
 
 export default function QuestionModal({ open, editing, form, setForm, onSubmit, onClose, busy = false, message = '' }: Props) {
   const [pairs, setPairs] = useState<MatchPair[]>([{ left: '', right: '' }]);
+  const [imageUrl, setImageUrl] = useState('');
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     if (!open || form.questionType !== 'matching') return;
     setPairs(readPairs(form.optionA));
   }, [open, form.questionType]);
+
+  useEffect(() => {
+    if (!open) return;
+    setImageError(false);
+    const saved = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_url') : '';
+    setImageUrl(saved || '');
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -89,6 +97,8 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
           const uiType = fromDatabaseQuestionType(parsed.question_type);
           parsed.question_type = toDatabaseQuestionType[uiType];
         }
+        const storedImage = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_url') || '' : '';
+        if (storedImage.trim()) parsed.image_url = storedImage.trim();
         return originalFetch(input, { ...init, body: JSON.stringify(parsed) });
       } catch { return originalFetch(input, init); }
     };
@@ -139,15 +149,32 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
 
   const setCorrect = (answer: CorrectAnswer) => setForm(prev => ({ ...prev, correctAnswer: answer }));
 
+  const handleImageUrlChange = (value: string) => {
+    setImageUrl(value);
+    setImageError(false);
+    if (typeof window !== 'undefined') {
+      if (value.trim()) window.sessionStorage.setItem('eduquiz_question_image_url', value.trim());
+      else window.sessionStorage.removeItem('eduquiz_question_image_url');
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    if (typeof window !== 'undefined') {
+      if (imageUrl.trim()) window.sessionStorage.setItem('eduquiz_question_image_url', imageUrl.trim());
+      else window.sessionStorage.removeItem('eduquiz_question_image_url');
+    }
+    onSubmit(e);
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <Card className="max-h-[90vh] w-full max-w-3xl overflow-y-auto">
-        <CardHeader className="flex flex-row items-center justify-between border-b">
+        <CardHeader className="flex flex-row items-start justify-between border-b">
           <div><CardTitle>{editing ? 'Edit Question' : 'Add Question'}</CardTitle><p className="mt-1 text-sm text-muted-foreground">Choose a question type and build it below.</p></div>
           <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={busy}><X /></Button>
         </CardHeader>
         <CardContent className="pt-6">
-          <form onSubmit={onSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="text-sm font-semibold">Question type</label>
               <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -163,6 +190,19 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
               <label className="text-sm font-semibold">Question</label>
               <textarea className="mt-2 min-h-24 w-full rounded-lg border bg-background p-3 outline-none focus:ring-2 focus:ring-primary" placeholder="Write your question..." rows={3} value={form.questionText} onChange={e => setForm(prev => ({ ...prev, questionText: e.target.value }))} required disabled={busy} />
             </div>
+
+            <section className="rounded-xl border bg-muted/20 p-4">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="size-5 text-primary" />
+                <div>
+                  <h3 className="font-semibold">Question image</h3>
+                  <p className="text-xs text-muted-foreground">Optional — paste a direct image URL.</p>
+                </div>
+              </div>
+              <Input className="mt-3" type="url" value={imageUrl} onChange={e => handleImageUrlChange(e.target.value)} placeholder="https://example.com/question-image.jpg" disabled={busy} />
+              {imageUrl.trim() && !imageError && <div className="mt-3 overflow-hidden rounded-lg border bg-background p-2"><img src={imageUrl.trim()} alt="Question preview" className="max-h-64 max-w-full rounded object-contain" onError={() => setImageError(true)} /><p className="mt-2 text-xs text-muted-foreground">Preview</p></div>}
+              {imageUrl.trim() && imageError && <p className="mt-2 text-sm text-destructive">That image could not be loaded. Check that the URL points directly to an image.</p>}
+            </section>
 
             {form.questionType === 'multiple-choice' && <section className="rounded-xl border bg-muted/20 p-4">
               <h3 className="font-semibold">Answer choices</h3>
