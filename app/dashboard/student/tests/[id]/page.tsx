@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,7 @@ function tf(v:string){const x=norm(v);if(x==='a'||x==='true')return'A';if(x==='b
 function publicDescription(d:string|null){return(d||'').replace(/^\[\[EQ_PASSWORD:[^\]]+\]\]\s*/,'');}
 
 export default function TakeTestPage(){
- const params=useParams<{id:string}>(); const router=useRouter(); const id=String(params?.id||'');
+ const params=useParams<{id:string}>(); const router=useRouter(); const searchParams=useSearchParams(); const id=String(params?.id||''); const reviewLatest=searchParams.get('review')==='latest';
  const [test,setTest]=useState<Test|null>(null),[questions,setQuestions]=useState<Question[]>([]),[answers,setAnswers]=useState<Record<string,string>>({}),[loading,setLoading]=useState(true),[submitting,setSubmitting]=useState(false),[password,setPassword]=useState(''),[enteredPassword,setEnteredPassword]=useState(''),[unlocked,setUnlocked]=useState(false),[confirmSubmit,setConfirmSubmit]=useState(false),[error,setError]=useState('');
  const [submissions,setSubmissions]=useState<Submission[]>([]),[reviewing,setReviewing]=useState<Submission|null>(null),[startedAt,setStartedAt]=useState<number|null>(null),[timeRemaining,setTimeRemaining]=useState<number|null>(null);
  const [studentId,setStudentId]=useState<string|null>(null);
@@ -32,8 +32,8 @@ export default function TakeTestPage(){
    const tr=await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(id)}&published=eq.true&select=*`,{headers,cache:'no-store'});const td=await tr.json();if(!tr.ok||!td[0])throw new Error('Test not found or not published.');const loadedTest=td[0] as Test;setTest(loadedTest);
    const required=String(loadedTest.test_password||'').trim();setPassword(required);setUnlocked(!required);
    const qr=await fetch(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(id)}&select=*&order=question_order.asc,id.asc`,{headers,cache:'no-store'});if(!qr.ok)throw new Error(await qr.text());setQuestions(await qr.json());
-   const sr=await fetch(`${url}/rest/v1/test_submissions?test_id=eq.${encodeURIComponent(id)}&student_id=eq.${encodeURIComponent(sid)}&select=*&order=created_at.desc`,{headers,cache:'no-store'});if(sr.ok){const data=await sr.json();setSubmissions(Array.isArray(data)?data:[]);if(!required&&Array.isArray(data)&&data.length<Math.max(1,Number(loadedTest.max_attempts)||1)){setStartedAt(Date.now());setTimeRemaining(loadedTest.time_limit_minutes?Number(loadedTest.time_limit_minutes)*60:null);}}
- }catch(e){console.error(e);setError(e instanceof Error?e.message:'Failed to load test.');}finally{setLoading(false);}})();},[id]);
+   const sr=await fetch(`${url}/rest/v1/test_submissions?test_id=eq.${encodeURIComponent(id)}&student_id=eq.${encodeURIComponent(sid)}&select=*&order=created_at.desc`,{headers,cache:'no-store'});if(sr.ok){const data=await sr.json();const rows=Array.isArray(data)?data:[];setSubmissions(rows);if(reviewLatest&&loadedTest.allow_review!==false&&rows[0]){setReviewing(rows[0]);}else if(!required&&rows.length<Math.max(1,Number(loadedTest.max_attempts)||1)){setStartedAt(Date.now());setTimeRemaining(loadedTest.time_limit_minutes?Number(loadedTest.time_limit_minutes)*60:null);}}
+ }catch(e){console.error(e);setError(e instanceof Error?e.message:'Failed to load test.');}finally{setLoading(false);}})();},[id,reviewLatest]);
 
  useEffect(()=>{if(loading||reviewing||!unlocked||attemptsLeft<=0||!startedAt)return;const block=()=>history.pushState(null,'',location.href);history.pushState(null,'',location.href);window.addEventListener('popstate',block);const before=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',before);return()=>{window.removeEventListener('popstate',block);window.removeEventListener('beforeunload',before);};},[loading,reviewing,unlocked,attemptsLeft,startedAt]);
  useEffect(()=>{if(!startedAt||!test?.time_limit_minutes||reviewing||attemptsLeft<=0||submitting)return;const limitMs=Number(test.time_limit_minutes)*60*1000;const update=()=>{const remaining=Math.max(0,Math.ceil((startedAt+limitMs-Date.now())/1000));setTimeRemaining(remaining);if(remaining<=0&&!submitting)void doSubmit(true);};update();const timer=window.setInterval(update,1000);return()=>window.clearInterval(timer);},[startedAt,test?.time_limit_minutes,reviewing,attemptsLeft,submitting]);
