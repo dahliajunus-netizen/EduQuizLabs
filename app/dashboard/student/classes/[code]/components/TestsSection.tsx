@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronDown, ChevronUp, Eye, EyeOff, Pencil, PlusCircle, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ type Props = {
   tests: Test[];
   questions: Record<string, Question[]>;
   teacher: boolean;
+  studentId?: string;
   open: Record<string, boolean>;
   busy?: boolean;
   displayDate: (value?: string | null) => string;
@@ -23,15 +25,54 @@ type Props = {
   onDeleteQuestion: (question: Question) => void;
 };
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+
+type AttemptMap = Record<string, number>;
+
 function matchingPairs(value: string) {
   try {
     const parsed = JSON.parse(value || '[]');
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((p:any)=>p?.left&&p?.right).map((p:any)=>`${String(p.left)} → ${String(p.right)}`);
+    return parsed.filter((p: any) => p?.left && p?.right).map((p: any) => `${String(p.left)} → ${String(p.right)}`);
   } catch { return value ? [value] : []; }
 }
 
-export default function TestsSection({ tests, questions, teacher, open, busy, displayDate, formatPoints, questionTypeLabel, onCreate, onTogglePublish, onEdit, onDelete, onToggleQuestions, onEditQuestion, onDeleteQuestion }: Props) {
+export default function TestsSection({ tests, questions, teacher, studentId, open, busy, displayDate, formatPoints, questionTypeLabel, onCreate, onTogglePublish, onEdit, onDelete, onToggleQuestions, onEditQuestion, onDeleteQuestion }: Props) {
+  const [attempts, setAttempts] = useState<AttemptMap>({});
+
+  useEffect(() => {
+    if (teacher || !studentId || !tests.length) {
+      setAttempts({});
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const next: AttemptMap = {};
+      await Promise.all(tests.map(async (test) => {
+        try {
+          const response = await fetch(
+            `${supabaseUrl}/rest/v1/test_submissions?test_id=eq.${encodeURIComponent(test.id)}&student_id=eq.${encodeURIComponent(studentId)}&select=id`,
+            { headers, cache: 'no-store' }
+          );
+          if (response.ok) {
+            const rows = await response.json();
+            next[test.id] = Array.isArray(rows) ? rows.length : 0;
+          } else {
+            next[test.id] = 0;
+          }
+        } catch {
+          next[test.id] = 0;
+        }
+      }));
+      if (!cancelled) setAttempts(next);
+    })();
+
+    return () => { cancelled = true; };
+  }, [teacher, studentId, tests.map(test => `${test.id}:${test.max_attempts}`).join('|')]);
+
   return (
     <section>
       <div className="mb-3 flex items-center gap-3">
@@ -41,9 +82,12 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
 
       {tests.length ? tests.map(test => {
         const qs = questions[test.id] || [];
+        const used = attempts[test.id] || 0;
+        const max = Math.max(1, Number(test.max_attempts) || 1);
+        const exhausted = !teacher && used >= max;
         return <div key={test.id} className="mb-2 overflow-hidden rounded-lg border">
           <div className="flex items-start gap-3 p-4">
-            <div className="flex-1"><b>{test.title}</b>{test.description&&<p className="text-sm text-muted-foreground">{test.description}</p>}{test.due_date&&<p className="mt-1 text-xs text-muted-foreground">Due: {displayDate(test.due_date)}</p>}<p className="text-xs text-muted-foreground">{qs.length} question{qs.length===1?'':'s'} · {test.published?'Published':'Draft'}{qs.length?` · ${formatPoints(qs.length)} points/question`:''}</p>{!teacher&&test.published&&<Link href={`/dashboard/student/tests/${test.id}`}><Button type="button" size="sm" className="mt-3">Take Test</Button></Link>}</div>
+            <div className="flex-1"><b>{test.title}</b>{test.description&&<p className="text-sm text-muted-foreground">{test.description}</p>}{test.due_date&&<p className="mt-1 text-xs text-muted-foreground">Due: {displayDate(test.due_date)}</p>}<p className="text-xs text-muted-foreground">{qs.length} question{qs.length===1?'':'s'} · {test.published?'Published':'Draft'}{qs.length?` · ${formatPoints(qs.length)} points/question`:''}</p>{!teacher&&test.published&&<div className="mt-3 flex flex-wrap items-center gap-2"><Link href={`/dashboard/student/tests/${test.id}`}><Button type="button" size="sm" variant={exhausted ? 'outline' : 'default'}>{exhausted ? 'Review Test' : 'Take Test'}</Button></Link>{!exhausted&&<span className="text-xs text-muted-foreground">Attempt {Math.min(used + 1, max)} of {max}</span>}{exhausted&&test.allow_review===false&&<span className="text-xs text-muted-foreground">Review not permitted</span>}</div>}</div>
             {teacher&&<div className="flex gap-1"><Button type="button" variant="outline" size="sm" onClick={()=>onTogglePublish(test)} title={test.published?'Unpublish':'Publish'}>{test.published?<EyeOff className="size-4"/>:<Eye className="size-4"/>}</Button><Button type="button" variant="outline" size="sm" onClick={()=>onEdit(test)}><Pencil className="mr-1 size-4"/>Edit</Button><Button type="button" variant="ghost" size="sm" onClick={()=>onDelete(test)}><Trash2 size={14}/></Button><Button type="button" variant="ghost" size="sm" onClick={()=>onToggleQuestions(test.id)}>{open[test.id]?<ChevronUp/>:<ChevronDown/>}</Button></div>}
           </div>
 
