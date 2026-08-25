@@ -34,7 +34,7 @@ function teacherId() {
 function gameCode() { return Math.random().toString(36).slice(2, 8).toUpperCase(); }
 
 function formatResponseTime(ms: number) {
-  if (!ms) return '—';
+  if (!ms || ms < 0) return '—';
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
@@ -166,6 +166,7 @@ export default function TeacherLiveQuiz() {
       const result = await rpc('live_quiz_begin_answering', { p_quiz_id: quiz.id });
       setQuiz(result?.[0] || result || { ...quiz, status: 'answering', question_started_at: new Date().toISOString() });
       setRemaining(30);
+      setAnsweredCount(0);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not open answers.'); }
   }
 
@@ -191,15 +192,17 @@ export default function TeacherLiveQuiz() {
       const liveQuiz = x?.[0] as Quiz | undefined;
       if (liveQuiz) setQuiz(liveQuiz);
 
-      const questionId = questions[liveQuiz?.current_question ?? quiz.current_question]?.id;
-      if (questionId && (liveQuiz?.status ?? quiz.status) === 'answering') {
+      const activeQuiz = liveQuiz || quiz;
+      const questionId = questions[activeQuiz.current_question]?.id;
+
+      if (questionId && activeQuiz.status === 'answering') {
         const responseRows = await api(`live_quiz_answers?quiz_id=eq.${quiz.id}&question_id=eq.${encodeURIComponent(questionId)}&select=id`);
         const count = Array.isArray(responseRows) ? responseRows.length : 0;
         setAnsweredCount(count);
 
-        const currentQuestionIndex = liveQuiz?.current_question ?? quiz.current_question;
-        const advanceKey = `${quiz.id}:${currentQuestionIndex}`;
-        if (livePlayers.length > 0 && count >= livePlayers.length && autoAdvanceKey.current !== advanceKey) {
+        const playerCount = livePlayers.length;
+        const advanceKey = `${quiz.id}:${activeQuiz.current_question}`;
+        if (playerCount > 0 && count >= playerCount && autoAdvanceKey.current !== advanceKey) {
           autoAdvanceKey.current = advanceKey;
           await finishOrNext();
         }
@@ -218,6 +221,7 @@ export default function TeacherLiveQuiz() {
 
   useEffect(() => {
     if (!quiz || !currentQ) return;
+
     if (quiz.status === 'question_reveal') {
       const start = quiz.question_started_at ? new Date(quiz.question_started_at).getTime() : Date.now();
       const timer = window.setInterval(() => {
@@ -236,7 +240,14 @@ export default function TeacherLiveQuiz() {
       const timer = window.setInterval(() => {
         const left = Math.max(0, 30000 - (Date.now() - start));
         setRemaining(Math.ceil(left / 1000));
-        if (left <= 0) window.clearInterval(timer);
+        if (left <= 0) {
+          window.clearInterval(timer);
+          const key = `${quiz.id}:${quiz.current_question}:timeout`;
+          if (autoAdvanceKey.current !== key) {
+            autoAdvanceKey.current = key;
+            finishOrNext();
+          }
+        }
       }, 100);
       return () => window.clearInterval(timer);
     }
@@ -279,23 +290,28 @@ export default function TeacherLiveQuiz() {
             <CardHeader className="border-b bg-muted/30 p-6 sm:p-8">
               <div className="flex items-center justify-between"><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">QUESTION {current + 1} / {questions.length}</span>{quiz.status === 'answering' ? <span className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xl font-black ${remaining <= 5 ? 'bg-destructive/10 text-destructive animate-pulse' : 'bg-primary/10 text-primary'}`}><Clock className="size-5" />{remaining}s</span> : <span className="rounded-full bg-primary/10 px-4 py-2 text-sm font-black text-primary">GET READY</span>}</div>
               {quiz.status === 'answering' && <>
-                <div className="mt-3 text-center text-sm font-black text-primary">{answeredCount} / {players.length} answered</div>
+                <div className="mt-4 flex items-center justify-center rounded-xl border bg-card/70 px-4 py-2 text-sm font-black"><Users className="mr-2 size-4 text-primary" />Answered: <span className="mx-1 text-primary">{answeredCount}</span> / {players.length}</div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all duration-100" style={{ width: `${(remaining / 30) * 100}%` }} /></div>
               </>}
               <CardTitle className="mt-7 text-center text-3xl leading-tight sm:text-4xl">{currentQ.question}</CardTitle>
-              <p className="mt-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">{quiz.status === 'question_reveal' ? 'Watch the answers appear' : 'Students can answer now'}</p>
+              <p className="mt-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">{quiz.status === 'question_reveal' ? 'Watch the answers appear' : answeredCount >= players.length && players.length > 0 ? 'Everyone answered — moving on…' : 'Students can answer now'}</p>
             </CardHeader>
             <CardContent className="p-5 sm:p-7">
               <div className="grid grid-cols-2 gap-3 sm:gap-4">{answers.map((item, index) => { const visible = quiz.status === 'answering' || revealStep >= index + 1; return <div key={item.letter} className={`min-h-32 rounded-2xl p-5 text-white shadow-sm transition-all duration-500 sm:min-h-36 sm:p-6 ${item.className} ${visible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-4 scale-95 opacity-0'}`}><div className="flex items-center justify-between"><span className="text-4xl font-black">{item.label}</span><span className="rounded-lg bg-black/10 px-2 py-1 text-xs font-black">{item.letter}</span></div>{visible && <p className="mt-4 text-lg font-bold sm:text-xl">{currentQ[item.key]}</p>}</div>; })}</div>
               {quiz.status === 'question_reveal' && <div className="mt-6 flex items-center justify-center gap-2 rounded-2xl border bg-muted/30 p-4 text-sm font-bold text-muted-foreground"><Sparkles className="size-4 text-primary" />Answers unlock one by one…</div>}
-              {quiz.status === 'answering' && <div className="mt-6 flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-bold text-muted-foreground">The timer automatically skips when everyone has answered.</p><Button className="rounded-xl" onClick={finishOrNext}>{current + 1 >= questions.length ? 'Finish Quiz' : 'Next Question'}<ChevronRight className="ml-2 size-4" /></Button></div>}
+              {quiz.status === 'answering' && <div className="mt-6 flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-bold text-muted-foreground">{answeredCount >= players.length && players.length > 0 ? 'All connected players have answered.' : 'Students are answering on their devices.'}</p><Button className="rounded-xl" onClick={finishOrNext}>{current + 1 >= questions.length ? 'Finish Quiz' : 'Next Question'}<ChevronRight className="ml-2 size-4" /></Button></div>}
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl"><CardHeader><CardTitle className="flex items-center gap-2"><Trophy className="size-5 text-primary" />Live Ranking</CardTitle><p className="text-xs text-muted-foreground">Score first, response time breaks ties.</p></CardHeader><CardContent className="space-y-2">{rankedPlayers.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Waiting for players…</p> : rankedPlayers.slice(0, 10).map((p, i) => <div key={p.id} className="rounded-xl border p-3"><div className="flex items-center gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-black">{i + 1}</span><span className="min-w-0 flex-1 truncate font-bold">{p.nickname}</span><span className="text-sm font-black">{p.score} pts</span></div><div className="mt-2 flex justify-between pl-11 text-[11px] font-semibold text-muted-foreground"><span>{p.correct_answers} correct</span><span>{formatResponseTime(p.total_response_time_ms)} response time</span></div></div>)}</CardContent></Card>
+          <Card className="rounded-3xl">
+            <CardHeader><CardTitle className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><Trophy className="size-5 text-primary" />Live Ranking</span><span className="text-xs font-bold text-muted-foreground">Score + speed</span></CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {rankedPlayers.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Waiting for players…</p> : rankedPlayers.slice(0, 10).map((p, i) => <div key={p.id} className="rounded-xl border p-3"><div className="flex items-center gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-black">{i + 1}</span><span className="min-w-0 flex-1 truncate font-bold">{p.nickname}</span><span className="text-sm font-black">{p.score.toLocaleString()}</span></div><div className="mt-2 flex items-center justify-between pl-11 text-[11px] font-semibold text-muted-foreground"><span>{p.correct_answers} correct</span><span>{formatResponseTime(p.total_response_time_ms)} total response time</span></div></div>)}
+            </CardContent>
+          </Card>
         </div>}
 
-        {quiz.status === 'finished' && <Card className="rounded-3xl"><CardContent className="py-16 text-center"><Trophy className="mx-auto size-16 text-primary" /><h2 className="mt-5 text-4xl font-black">Quiz Finished!</h2><p className="mt-2 text-muted-foreground">Final leaderboard</p><div className="mx-auto mt-7 max-w-xl space-y-2">{rankedPlayers.map((p, i) => <div key={p.id} className="rounded-2xl border p-4 text-left"><div className="flex items-center gap-3"><span className="font-black">#{i + 1}</span><span className="flex-1 font-bold">{p.nickname}</span><span className="font-black">{p.score} pts</span></div><div className="mt-1 pl-8 text-xs font-semibold text-muted-foreground">{p.correct_answers} correct • {formatResponseTime(p.total_response_time_ms)} total response time</div></div>)}</div></CardContent></Card>}
+        {quiz.status === 'finished' && <Card className="rounded-3xl"><CardContent className="py-16 text-center"><Trophy className="mx-auto size-16 text-primary" /><h2 className="mt-5 text-4xl font-black">Quiz Finished!</h2><p className="mt-2 text-muted-foreground">Final leaderboard — score first, then fastest total response time.</p><div className="mx-auto mt-7 max-w-xl space-y-2">{rankedPlayers.map((p, i) => <div key={p.id} className="flex items-center gap-3 rounded-2xl border p-4 text-left"><span className="flex size-8 items-center justify-center rounded-lg bg-muted text-xs font-black">#{i + 1}</span><span className="flex-1 font-bold">{p.nickname}</span><div className="text-right"><div className="font-black">{p.score.toLocaleString()} pts</div><div className="text-xs text-muted-foreground">{p.correct_answers} correct · {formatResponseTime(p.total_response_time_ms)}</div></div></div>)}</div></CardContent></Card>}
       </div>
     </main>;
   }
