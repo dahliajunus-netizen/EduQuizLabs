@@ -1,3 +1,6 @@
+'use client';
+
+import { usePathname } from 'next/navigation';
 import { RoleGuard } from '@/components/RoleGuard';
 
 export default function StudentDashboardLayout({
@@ -5,5 +8,12 @@ export default function StudentDashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <RoleGuard role="student">{children}</RoleGuard>;
+  const pathname = usePathname();
+  const allowTeacherClassPages = pathname.startsWith('/dashboard/student/classes/');
+
+  return (
+    <RoleGuard role="student" allowTeacherClassPages={allowTeacherClassPages}>
+      {children}
+    </RoleGuard>
+  );
 }
