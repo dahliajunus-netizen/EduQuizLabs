@@ -39,35 +39,38 @@ export default function CourseSection({ course, isOpen, teacher, onToggle, onAdd
   }
 
   return (
-    <Card className={`overflow-hidden rounded-3xl border bg-card shadow-sm transition-all duration-200 ${isOpen?'border-primary/20 shadow-md':'hover:-translate-y-0.5 hover:shadow-md'}`}>
+    <Card className={`group overflow-hidden rounded-3xl border bg-card shadow-sm transition-all duration-200 ${isOpen?'border-primary/20 shadow-md ring-1 ring-primary/5':'hover:-translate-y-0.5 hover:border-primary/15 hover:shadow-md'}`}>
       <CardHeader className="p-0">
         <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-          <button type="button" className="group flex min-w-0 flex-1 items-center gap-3 rounded-2xl p-1 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-primary" onClick={onToggle} aria-expanded={isOpen}>
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+          <button type="button" className="group/header flex min-w-0 flex-1 items-center gap-3 rounded-2xl p-1 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-primary" onClick={onToggle} aria-expanded={isOpen}>
+            <span className={`flex size-11 shrink-0 items-center justify-center rounded-2xl transition-all ${isOpen?'bg-primary text-primary-foreground shadow-sm':'bg-primary/10 text-primary group-hover/header:bg-primary group-hover/header:text-primary-foreground'}`}>
               {isOpen?<ChevronUp className="size-5"/>:<ChevronDown className="size-5"/>}
             </span>
             <span className="flex min-w-0 items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <span className="hidden size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground sm:flex">
                 <BookOpen className="size-5"/>
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-base font-bold sm:text-lg">{course.course_name}</span>
-                <span className="mt-0.5 block text-xs font-medium text-muted-foreground">Class {course.class_code}</span>
+                <span className="mt-1 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                  <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono tracking-wider">{course.class_code}</span>
+                  <span className="hidden sm:inline">{isOpen?'Workspace open':'Open workspace'}</span>
+                </span>
               </span>
             </span>
           </button>
 
           {teacher ? (
             <div className="flex items-center gap-2 pl-14 sm:pl-0">
-              <Button type="button" size="sm" onClick={onAdd} className="rounded-xl shadow-sm">
+              <Button type="button" size="sm" onClick={onAdd} className="rounded-xl font-semibold shadow-sm">
                 <PlusCircle className="mr-1.5 size-4"/>Add
               </Button>
-              <Button type="button" variant="ghost" size="icon" onClick={onDelete} className="size-9 rounded-xl text-muted-foreground hover:text-destructive" aria-label={`Delete ${course.course_name}`}>
+              <Button type="button" variant="ghost" size="icon" onClick={onDelete} className="size-9 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete ${course.course_name}`}>
                 <Trash2 className="size-4"/>
               </Button>
             </div>
           ) : (
-            <Button type="button" variant="outline" size="sm" onClick={leaveClass} disabled={leaving} className="rounded-xl sm:shrink-0">
+            <Button type="button" variant="outline" size="sm" onClick={leaveClass} disabled={leaving} className="rounded-xl font-semibold sm:shrink-0">
               {leaving?<Loader2 className="mr-1.5 size-4 animate-spin"/>:<LogOut className="mr-1.5 size-4"/>}
               {leaving?'Leaving…':'Leave Class'}
             </Button>
@@ -77,9 +80,10 @@ export default function CourseSection({ course, isOpen, teacher, onToggle, onAdd
 
       {isOpen && (
         <CardContent className="space-y-7 border-t bg-muted/[0.12] p-4 pt-5 sm:p-6 sm:pt-6">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
             <Sparkles className="size-3.5 text-primary"/>
-            Course workspace
+            <span>Course workspace</span>
+            <span className="font-normal tracking-normal text-muted-foreground/70">· Materials · Assignments · Tests</span>
           </div>
           {children}
         </CardContent>
