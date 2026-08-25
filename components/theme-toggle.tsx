@@ -13,9 +13,10 @@ export function ThemeToggle() {
 
   useEffect(() => setMounted(true), [])
 
-  const isDark = resolvedTheme === 'dark'
-
   const toggleTheme = () => {
+    if (!mounted || animating) return
+
+    const isDark = resolvedTheme === 'dark'
     const nextTheme = isDark ? 'light' : 'dark'
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -29,47 +30,55 @@ export function ThemeToggle() {
     const rect = buttonRef.current?.getBoundingClientRect()
     const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
     const y = rect ? rect.top + rect.height / 2 : window.innerHeight / 2
-    const radius = Math.max(
-      Math.hypot(x, y),
-      Math.hypot(window.innerWidth - x, y),
-      Math.hypot(x, window.innerHeight - y),
-      Math.hypot(window.innerWidth - x, window.innerHeight - y),
+    const radius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y),
     )
 
-    // The new theme is revealed as a soft expanding circle from the toggle.
-    const reveal = document.createElement('div')
-    reveal.setAttribute('aria-hidden', 'true')
-    reveal.style.cssText = `
+    // Keep the old theme visible underneath while the new theme grows over it.
+    const overlay = document.createElement('div')
+    overlay.setAttribute('aria-hidden', 'true')
+    overlay.style.cssText = `
       position:fixed;
+      inset:0;
+      z-index:2147483646;
+      pointer-events:none;
+      overflow:hidden;
+    `
+
+    const circle = document.createElement('div')
+    circle.style.cssText = `
+      position:absolute;
       left:${x - radius}px;
       top:${y - radius}px;
       width:${radius * 2}px;
       height:${radius * 2}px;
       border-radius:50%;
-      pointer-events:none;
-      z-index:2147483647;
-      background:${nextTheme === 'dark' ? 'oklch(0.19 0.03 245)' : 'oklch(0.985 0.004 230)'};
+      background:${nextTheme === 'dark' ? 'rgb(18, 24, 38)' : 'rgb(248, 250, 252)'};
+      box-shadow:0 0 80px ${nextTheme === 'dark' ? 'rgba(80,110,180,.18)' : 'rgba(255,255,255,.8)'};
       transform:scale(0);
-      transform-origin:center;
-      transition:transform 650ms cubic-bezier(0.22,1,0.36,1);
+      transition:transform 700ms cubic-bezier(.16,1,.3,1);
       will-change:transform;
     `
 
-    document.body.appendChild(reveal)
-    void reveal.offsetWidth
-    setTheme(nextTheme)
+    overlay.appendChild(circle)
+    document.body.appendChild(overlay)
+    void circle.offsetWidth
 
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        reveal.style.transform = 'scale(1)'
-      })
+      circle.style.transform = 'scale(1)'
     })
 
+    // Delay the actual theme swap until the reveal has visibly started.
+    window.setTimeout(() => setTheme(nextTheme), 90)
+
     window.setTimeout(() => {
-      reveal.remove()
+      overlay.remove()
       setAnimating(false)
-    }, 700)
+    }, 760)
   }
+
+  const isDark = resolvedTheme === 'dark'
 
   return (
     <Button
@@ -86,16 +95,8 @@ export function ThemeToggle() {
       <span className="absolute inset-0 rounded-xl bg-primary/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
       {mounted ? (
         <span className="relative flex size-5 items-center justify-center">
-          <Sun
-            className={`absolute size-5 transition-[transform,opacity] duration-500 ease-out ${
-              isDark ? 'rotate-[135deg] scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'
-            }`}
-          />
-          <Moon
-            className={`absolute size-5 transition-[transform,opacity] duration-500 ease-out ${
-              isDark ? 'rotate-0 scale-100 opacity-100' : 'rotate-[-135deg] scale-50 opacity-0'
-            }`}
-          />
+          <Sun className={`absolute size-5 transition-all duration-500 ease-out ${isDark ? 'rotate-[180deg] scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'}`} />
+          <Moon className={`absolute size-5 transition-all duration-500 ease-out ${isDark ? 'rotate-0 scale-100 opacity-100' : 'rotate-[-180deg] scale-50 opacity-0'}`} />
         </span>
       ) : (
         <span className="relative size-5 rounded-full bg-muted animate-pulse" aria-hidden="true" />
