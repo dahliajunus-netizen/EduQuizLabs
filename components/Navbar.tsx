@@ -78,13 +78,22 @@ export function Navbar() {
             <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{role}</div>
           </div>
           <ThemeToggle />
-          <select value={language} onChange={handleLanguageChange} aria-label="Select language" className="hidden h-9 rounded-xl border border-border/70 bg-card px-2.5 text-xs font-semibold text-foreground shadow-sm outline-none transition focus:ring-2 focus:ring-primary">
-            <option value="en">{t.english}</option>
-            <option value="id">{t.indonesian}</option>
+
+          {/* Language selector — intentionally visible on desktop and mobile. */}
+          <select
+            value={language}
+            onChange={handleLanguageChange}
+            aria-label="Select language"
+            title="Select language"
+            className="h-9 min-w-[108px] rounded-xl border border-border/70 bg-card px-2.5 text-xs font-semibold text-foreground shadow-sm outline-none transition focus:ring-2 focus:ring-primary"
+          >
+            <option value="en">English</option>
+            <option value="id">Bahasa Indonesia</option>
           </select>
+
           <Button variant="outline" size="sm" onClick={handleLogout} className="hidden h-9 gap-2 rounded-xl px-3 sm:flex">
             <LogOut className="size-4" />
-            <span> {t.exit}</span>
+            <span>{t.exit}</span>
           </Button>
           <Button variant="outline" size="icon" onClick={() => setMobileOpen(v => !v)} className="size-9 rounded-xl md:hidden" aria-label={mobileOpen ? 'Close menu' : 'Open menu'}>
             {mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}
@@ -101,11 +110,7 @@ export function Navbar() {
             })}
           </nav>
           <div className="mt-3 flex items-center gap-2 border-t border-border/60 pt-3">
-            <select value={language} onChange={handleLanguageChange} aria-label="Select language" className="h-10 flex-1 rounded-xl border border-border/70 bg-card px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary">
-              <option value="en">{t.english}</option>
-              <option value="id">{t.indonesian}</option>
-            </select>
-            <Button variant="outline" onClick={handleLogout} className="h-10 gap-2 rounded-xl"><LogOut className="size-4" />{t.exit}</Button>
+            <Button variant="outline" onClick={handleLogout} className="h-10 flex-1 gap-2 rounded-xl"><LogOut className="size-4" />{t.exit}</Button>
           </div>
         </div>
       )}
