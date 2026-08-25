@@ -1,9 +1,8 @@
-name: Patch Gemini Link Checker
+name: Patch EduQuizLabs Classroom Fixes
 
 on:
   push:
-    branches:
-      - 'v0/dahliajunus-3851-8e914645-2'
+    branches: [main]
 
 permissions:
   contents: write
@@ -15,288 +14,81 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Patch class page
+      - name: Apply fixes
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('app/dashboard/student/classes/[code]/page.tsx')
-          s = p.read_text()
-          if 'async function checkLinkSafety' in s:
-              print('Gemini checker already patched; nothing to do.')
-              raise SystemExit(0)
 
-          replacements = []
+          # Question images are stored in answer_data, which already exists in
+          # test_questions for the four question types. This avoids depending on
+          # the optional top-level image_url column being present in every database.
+          p=Path('app/dashboard/student/classes/[code]/components/QuestionModal.tsx')
+          s=p.read_text()
+          old="""        const currentImage = imageDataUrl.trim() || imageUrl.trim();
+        if (currentImage) parsed.image_url = currentImage;
+        else delete parsed.image_url;
 
-          replacements.append(("""  const [gradeInputs, setGradeInputs] =
-    useState<Record<string, string>>({});
-
-  /* ---------------- HTTP HELPERS ---------------- */""", """  const [gradeInputs, setGradeInputs] =
-    useState<Record<string, string>>({});
-
-  /* ---------------- GEMINI LINK SAFETY ---------------- */
-
-  const [linkCheck, setLinkCheck] = useState<{
-    status: 'idle' | 'checking' | 'safe' | 'unsafe';
-    reason: string;
-  }>({ status: 'idle', reason: '' });
-
-  async function checkLinkSafety(link: string) {
-    const trimmed = link.trim();
-
-    if (!validUrl(trimmed)) {
-      setLinkCheck({
-        status: 'unsafe',
-        reason: 'Please enter a valid HTTP or HTTPS link.',
-      });
-      return false;
-    }
-
-    setLinkCheck({ status: 'checking', reason: '' });
-
-    try {
-      const response = await fetch('/api/moderate-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: trimmed }),
-      });
-
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok || result?.safe !== true) {
-        const reason =
-          result?.reason ||
-          'This link could not be approved for use on EduQuizLabs.';
-
-        setLinkCheck({ status: 'unsafe', reason });
-        return false;
-      }
-
-      setLinkCheck({
-        status: 'safe',
-        reason: result.reason || 'Link passed the safety check.',
-      });
-
-      return true;
-    } catch {
-      setLinkCheck({
-        status: 'unsafe',
-        reason: 'The link safety checker is unavailable. Please try again.',
-      });
-      return false;
-    }
-  }
-
-  function resetLinkCheck() {
-    setLinkCheck({ status: 'idle', reason: '' });
-  }
-
-  /* ---------------- HTTP HELPERS ---------------- */"""))
-
-          replacements.append(("""      if (addType === 'material') {
-        if (
-          !materialName.trim() ||
-          !validUrl(materialLink)
-        ) {
-          throw new Error(
-            'Enter a valid material name and link.'
-          );
+        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });"""
+          new="""        const currentImage = imageDataUrl.trim() || imageUrl.trim();
+        if (currentImage) {
+          const existingAnswerData = parsed.answer_data && typeof parsed.answer_data === 'object' && !Array.isArray(parsed.answer_data)
+            ? parsed.answer_data as Record<string, unknown>
+            : {};
+          parsed.answer_data = { ...existingAnswerData, image_url: currentImage };
         }
+        delete parsed.image_url;
 
-        const response = await fetch(""", """      if (addType === 'material') {
-        if (
-          !materialName.trim() ||
-          !validUrl(materialLink)
-        ) {
-          throw new Error(
-            'Enter a valid material name and link.'
-          );
-        }
-
-        const safe = await checkLinkSafety(materialLink);
-        if (!safe) {
-          return;
-        }
-
-        const response = await fetch("""))
-
-          replacements.append(("""      setAddModal(false);
-      setMaterialName('');
-      setMaterialLink('');""", """      setAddModal(false);
-      setMaterialName('');
-      setMaterialLink('');
-      resetLinkCheck();"""))
-
-          replacements.append(("""    if (
-      !selectedAssignment?.id ||
-      !studentId ||
-      !submissionClass ||
-      !validUrl(submissionLink)
-    ) {
-      return;
-    }
-
-    setBusy(true);""", """    if (
-      !selectedAssignment?.id ||
-      !studentId ||
-      !submissionClass ||
-      !validUrl(submissionLink)
-    ) {
-      return;
-    }
-
-    const safe = await checkLinkSafety(submissionLink);
-    if (!safe) {
-      return;
-    }
-
-    setBusy(true);"""))
-
-          replacements.append(("""      setSubmissionModal(false);
-
-      await load();""", """      setSubmissionModal(false);
-      resetLinkCheck();
-
-      await load();"""))
-
-          replacements.append(("""                    <Input
-                      type=\"url\"
-                      placeholder=\"https://...\"
-                      value={materialLink}
-                      onChange={e =>
-                        setMaterialLink(
-                          e.target.value
-                        )
-                      }
-                      required
-                    />
-                  </>""", """                    <Input
-                      type=\"url\"
-                      placeholder=\"https://...\"
-                      value={materialLink}
-                      onChange={e => {
-                        setMaterialLink(e.target.value);
-                        resetLinkCheck();
-                      }}
-                      required
-                    />
-
-                    {linkCheck.status !== 'idle' && (
-                      <div
-                        className={`rounded-md border p-3 text-sm ${
-                          linkCheck.status === 'checking'
-                            ? 'border-border bg-muted/30'
-                            : linkCheck.status === 'safe'
-                              ? 'border-green-500/30 bg-green-500/10'
-                              : 'border-destructive/30 bg-destructive/10'
-                        }`}
-                      >
-                        {linkCheck.status === 'checking' ? (
-                          <span className=\"flex items-center gap-2\">
-                            <Loader2 className=\"size-4 animate-spin\" />
-                            Gemini is checking this link...
-                          </span>
-                        ) : (
-                          <span>
-                            <b>
-                              {linkCheck.status === 'safe'
-                                ? 'Link approved'
-                                : 'Link blocked'}
-                            </b>
-                            {linkCheck.reason && (
-                              <span className=\"ml-1\">
-                                — {linkCheck.reason}
-                              </span>
-                            )}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </>"""))
-
-          replacements.append(("""                  <Input
-                    type=\"url\"
-                    placeholder=\"Submission link\"
-                    value={submissionLink}
-                    onChange={e =>
-                      setSubmissionLink(
-                        e.target.value
-                      )
-                    }
-                    required
-                  />
-
-                  <div className=\"flex gap-2\">""", """                  <Input
-                    type=\"url\"
-                    placeholder=\"Submission link\"
-                    value={submissionLink}
-                    onChange={e => {
-                      setSubmissionLink(e.target.value);
-                      resetLinkCheck();
-                    }}
-                    required
-                  />
-
-                  {linkCheck.status !== 'idle' && (
-                    <div
-                      className={`rounded-md border p-3 text-sm ${
-                        linkCheck.status === 'checking'
-                          ? 'border-border bg-muted/30'
-                          : linkCheck.status === 'safe'
-                            ? 'border-green-500/30 bg-green-500/10'
-                            : 'border-destructive/30 bg-destructive/10'
-                      }`}
-                    >
-                      {linkCheck.status === 'checking' ? (
-                        <span className=\"flex items-center gap-2\">
-                          <Loader2 className=\"size-4 animate-spin\" />
-                          Gemini is checking this link...
-                        </span>
-                      ) : (
-                        <span>
-                          <b>
-                            {linkCheck.status === 'safe'
-                              ? 'Link approved'
-                              : 'Link blocked'}
-                          </b>
-                          {linkCheck.reason && (
-                            <span className=\"ml-1\">
-                              — {linkCheck.reason}
-                            </span>
-                          )}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className=\"flex gap-2\">"""))
-
-          replacements.append(("""disabled={busy}
-                  >
-                    {busy ? (
-                      <Loader2 className=\"size-4 animate-spin\" />
-                    ) : (
-                      'Submit'
-                    )}""", """disabled={busy || linkCheck.status === 'checking'}
-                  >
-                    {busy || linkCheck.status === 'checking' ? (
-                      <Loader2 className=\"size-4 animate-spin\" />
-                    ) : (
-                      'Submit'
-                    )}"""))
-
-          for old, new in replacements:
-              if old not in s:
-                  raise SystemExit('Expected code block not found; aborting without changes.')
-              s = s.replace(old, new, 1)
-
+        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });"""
+          if old in s: s=s.replace(old,new,1)
           p.write_text(s)
-          print('Patched class page with Gemini link safety checks.')
+
+          p=Path('app/dashboard/student/classes/[code]/components/types.ts')
+          s=p.read_text()
+          old="""  correct_answer: 'A' | 'B' | 'C' | 'D';
+  points: number;
+};"""
+          new="""  correct_answer: 'A' | 'B' | 'C' | 'D';
+  points: number;
+  image_url?: string | null;
+  answer_data?: Record<string, unknown> | null;
+};"""
+          if old in s: s=s.replace(old,new,1)
+          p.write_text(s)
+
+          p=Path('app/dashboard/student/classes/[code]/components/TestsSection.tsx')
+          s=p.read_text()
+          marker="""</div>{type==='multiple-choice'&&<div className=\"mt-2 grid gap-1 text-sm text-muted-foreground md:grid-cols-2\">"""
+          replacement="""</div>{(question.image_url || (question.answer_data as any)?.image_url) && <img src={String(question.image_url || (question.answer_data as any)?.image_url)} alt=\"Question illustration\" className=\"mt-3 max-h-64 max-w-full rounded-xl border object-contain\" />}{type==='multiple-choice'&&<div className=\"mt-2 grid gap-1 text-sm text-muted-foreground md:grid-cols-2\">"""
+          if marker in s: s=s.replace(marker,replacement,1)
+          p.write_text(s)
+
+          p=Path('app/dashboard/student/tests/[id]/page.tsx')
+          s=p.read_text()
+          old="""type Question={id:string;test_id:string;question_order:number;question:string;question_type?:string|null;option_a:string;option_b:string;option_c:string;option_d:string;correct_answer:string;points:number};"""
+          new="""type Question={id:string;test_id:string;question_order:number;question:string;question_type?:string|null;option_a:string;option_b:string;option_c:string;option_d:string;correct_answer:string;points:number;image_url?:string|null;answer_data?:Record<string,unknown>|null};"""
+          if old in s: s=s.replace(old,new,1)
+          old="""function publicDescription(d:string|null){return(d||'').replace(/^\\[\\[EQ_PASSWORD:[^\\]]+\\]\\]\\s*/,'');}"""
+          new="""function publicDescription(d:string|null){return(d||'').replace(/^\\[\\[EQ_PASSWORD:[^\\]]+\\]\\]\\s*/,'');}
+function questionImage(q:Question){return String(q.image_url||((q.answer_data as any)?.image_url)||'').trim();}"""
+          if old in s: s=s.replace(old,new,1)
+          marker="""<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle><p className={`text-sm font-medium ${isCorrect?'text-green-600':'text-red-600'}`}>"""
+          replacement="""<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle>{questionImage(q)&&<img src={questionImage(q)} alt=\"Question illustration\" className=\"mt-3 max-h-80 w-full rounded-xl border object-contain\" />}<p className={`text-sm font-medium ${isCorrect?'text-green-600':'text-red-600'}`}>"""
+          if marker in s: s=s.replace(marker,replacement,1)
+          marker="""<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle></CardHeader><CardContent className=\"space-y-3\">"""
+          replacement="""<CardTitle className=\"text-lg\">{i+1}. {q.question}</CardTitle>{questionImage(q)&&<img src={questionImage(q)} alt=\"Question illustration\" className=\"mt-3 max-h-80 w-full rounded-xl border object-contain\" />}</CardHeader><CardContent className=\"space-y-3\">"""
+          if marker in s: s=s.replace(marker,replacement,1)
+          p.write_text(s)
+
+          # The existing link-checker API/page are left intact; this workflow only
+          # handles the test-image persistence/display regression.
+          print('Applied test question image fix.')
           PY
 
-      - name: Commit patch
+      - name: Commit fixes and remove temporary image workflow
         run: |
+          rm -f .github/workflows/fix-test-question-images.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add 'app/dashboard/student/classes/[code]/page.tsx'
-          git commit -m 'fix: restore Gemini link safety checks' || exit 0
+          git add .
+          git commit -m 'fix: persist and display test question images' || exit 0
           git push
