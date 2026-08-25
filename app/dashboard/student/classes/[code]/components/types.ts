@@ -36,6 +36,8 @@ export type Test = {
   description?: string | null;
   due_date?: string | null;
   published: boolean;
+  max_attempts?: number | null;
+  allow_review?: boolean | null;
 };
 
 export type QuestionType =
