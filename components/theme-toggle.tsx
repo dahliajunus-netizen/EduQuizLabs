@@ -3,13 +3,12 @@
 import { Moon, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useEffect, useRef, useState } from 'react'
-
 import { Button } from '@/components/ui/button'
 
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
-  const [pop, setPop] = useState(false)
+  const [animating, setAnimating] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => setMounted(true), [])
@@ -18,17 +17,16 @@ export function ThemeToggle() {
 
   const toggleTheme = () => {
     const nextTheme = isDark ? 'light' : 'dark'
-    setPop(true)
-    window.setTimeout(() => setPop(false), 400)
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (prefersReducedMotion) {
+    if (reduced) {
       setTheme(nextTheme)
       return
     }
 
-    const button = buttonRef.current
-    const rect = button?.getBoundingClientRect()
+    setAnimating(true)
+
+    const rect = buttonRef.current?.getBoundingClientRect()
     const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
     const y = rect ? rect.top + rect.height / 2 : window.innerHeight / 2
     const radius = Math.max(
@@ -38,17 +36,39 @@ export function ThemeToggle() {
       Math.hypot(window.innerWidth - x, window.innerHeight - y),
     )
 
-    const circle = document.createElement('div')
-    circle.style.cssText = `position:fixed;left:${x - radius}px;top:${y - radius}px;width:${radius * 2}px;height:${radius * 2}px;border-radius:50%;pointer-events:none;z-index:2147483647;background:${nextTheme === 'dark' ? 'oklch(0.19 0.03 245)' : 'oklch(0.985 0.004 230)'};transform:scale(0);transform-origin:center;transition:transform 500ms cubic-bezier(0.4,0,0.2,1);`
-    document.body.appendChild(circle)
-    void circle.offsetWidth
+    // The new theme is revealed as a soft expanding circle from the toggle.
+    const reveal = document.createElement('div')
+    reveal.setAttribute('aria-hidden', 'true')
+    reveal.style.cssText = `
+      position:fixed;
+      left:${x - radius}px;
+      top:${y - radius}px;
+      width:${radius * 2}px;
+      height:${radius * 2}px;
+      border-radius:50%;
+      pointer-events:none;
+      z-index:2147483647;
+      background:${nextTheme === 'dark' ? 'oklch(0.19 0.03 245)' : 'oklch(0.985 0.004 230)'};
+      transform:scale(0);
+      transform-origin:center;
+      transition:transform 650ms cubic-bezier(0.22,1,0.36,1);
+      will-change:transform;
+    `
+
+    document.body.appendChild(reveal)
+    void reveal.offsetWidth
     setTheme(nextTheme)
 
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      circle.style.transform = 'scale(1)'
-    }))
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        reveal.style.transform = 'scale(1)'
+      })
+    })
 
-    window.setTimeout(() => circle.remove(), 550)
+    window.setTimeout(() => {
+      reveal.remove()
+      setAnimating(false)
+    }, 700)
   }
 
   return (
@@ -60,15 +80,25 @@ export function ThemeToggle() {
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       onClick={toggleTheme}
-      className="relative overflow-hidden rounded-xl border-border/70 bg-background/70 shadow-sm backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-primary/40"
+      disabled={animating}
+      className="group relative overflow-hidden rounded-xl border-border/70 bg-background/70 shadow-sm backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-default"
     >
+      <span className="absolute inset-0 rounded-xl bg-primary/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
       {mounted ? (
-        <>
-          <Sun className={`size-5 transition-all duration-500 ${isDark ? 'rotate-90 scale-0 opacity-0' : 'rotate-0 scale-100 opacity-100'} ${pop ? 'animate-[toggle-pop_0.4s_ease-out]' : ''}`} />
-          <Moon className={`absolute size-5 transition-all duration-500 ${isDark ? 'rotate-0 scale-100 opacity-100' : '-rotate-90 scale-0 opacity-0'} ${pop ? 'animate-[toggle-pop_0.4s_ease-out]' : ''}`} />
-        </>
+        <span className="relative flex size-5 items-center justify-center">
+          <Sun
+            className={`absolute size-5 transition-[transform,opacity] duration-500 ease-out ${
+              isDark ? 'rotate-[135deg] scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'
+            }`}
+          />
+          <Moon
+            className={`absolute size-5 transition-[transform,opacity] duration-500 ease-out ${
+              isDark ? 'rotate-0 scale-100 opacity-100' : 'rotate-[-135deg] scale-50 opacity-0'
+            }`}
+          />
+        </span>
       ) : (
-        <span className="size-5 rounded-full bg-muted animate-pulse" aria-hidden="true" />
+        <span className="relative size-5 rounded-full bg-muted animate-pulse" aria-hidden="true" />
       )}
     </Button>
   )
