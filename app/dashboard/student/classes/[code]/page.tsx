@@ -79,7 +79,7 @@ export default function ClassDetailsPage() {
   const dbDate = (value: string) => { const date = parseDate(value); if (!date) return null; return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; };
   const dbDateTime = (value: string) => { if (!value) return null; const date = new Date(value); return Number.isNaN(date.getTime()) ? null : date.toISOString(); };
   const displayDate = (value?: string | null) => { if (!value) return ''; if (value.includes('T') || value.includes(':')) { const date = new Date(value); if (!Number.isNaN(date.getTime())) return date.toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } return value.split('-').reverse().join('/'); };
-  const pointsFor = (count: number) => count > 0 ? 100 / count : 0;
+  const pointsFor = (count: number) => count > 0 ? Math.round(100 / count) : 0;
   const formatPoints = (count: number) => Number(pointsFor(count).toFixed(2));
   const questionTypeLabel = (type?: Question['question_type']) => ({ 'true-false': 'True / False', 'fill-blank': 'Fill in the Blank', matching: 'Matching', 'multiple-choice': 'Multiple Choice' }[type || 'multiple-choice'] || 'Multiple Choice');
 
