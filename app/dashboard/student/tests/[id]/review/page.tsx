@@ -45,6 +45,7 @@ export default function TestReviewPage() {
   const [test, setTest] = useState<Test | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [submission, setSubmission] = useState<Submission | null>(null);
+  const [attemptsUsed, setAttemptsUsed] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -54,7 +55,6 @@ export default function TestReviewPage() {
       try {
         const studentId = getStudentId();
         if (!studentId) throw new Error('Student UUID not found. Please sign in again.');
-
         const testResponse = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(id)}&published=eq.true&select=*`, { headers, cache: 'no-store' });
         const testRows = await testResponse.json();
         if (!testResponse.ok || !testRows[0]) throw new Error('Test not found or not published.');
@@ -62,19 +62,13 @@ export default function TestReviewPage() {
         setTest(loadedTest);
         if (loadedTest.allow_review === false) throw new Error('Review is not permitted for this test.');
 
-        // Do NOT order by created_at: this project does not have that column.
         const submissionResponse = await fetch(`${url}/rest/v1/test_submissions?test_id=eq.${encodeURIComponent(id)}&student_id=eq.${encodeURIComponent(studentId)}&select=*`, { headers, cache: 'no-store' });
         if (!submissionResponse.ok) throw new Error(await submissionResponse.text());
         const submissionRows = await submissionResponse.json();
         const rows = Array.isArray(submissionRows) ? submissionRows as Submission[] : [];
-        const maxAttempts = Math.max(1, Number(loadedTest.max_attempts) || 1);
-
-        if (rows.length < maxAttempts) {
-          router.replace(`/dashboard/student/tests/${encodeURIComponent(id)}`);
-          return;
-        }
+        setAttemptsUsed(rows.length);
         if (!rows[0]) throw new Error('No completed attempt was found.');
-        setSubmission(rows[0]);
+        setSubmission(rows[rows.length - 1]);
 
         const questionResponse = await fetch(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(id)}&select=*&order=question_order.asc,id.asc`, { headers, cache: 'no-store' });
         if (!questionResponse.ok) throw new Error(await questionResponse.text());
@@ -91,18 +85,15 @@ export default function TestReviewPage() {
 
   const answers = submission.answers || {};
   const maxAttempts = Math.max(1, Number(test.max_attempts) || 1);
+  const canRetry = attemptsUsed < maxAttempts;
 
   return <div className="min-h-screen bg-background"><main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
-    <div className="flex flex-wrap items-center justify-between gap-4"><div><h1 className="text-3xl font-bold">Review Test</h1><p className="mt-1 text-muted-foreground">{test.title}</p><p className="mt-2 text-sm font-medium">Score: {Number(submission.score).toFixed(2)}/100 · Attempts used: {maxAttempts}/{maxAttempts}</p></div><Button variant="outline" onClick={() => router.back()}>Back</Button></div>
-    <div className="space-y-4">{questions.map((question, index) => {
-      const correct = isCorrect(question, answers); const type = typeOf(question); const selected = answers[question.id] || '';
-      return <Card key={question.id} className={correct ? 'border-green-500' : 'border-red-500'}><CardHeader><div className="flex items-start justify-between gap-4"><CardTitle className="text-lg">{index + 1}. {question.question}</CardTitle><span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-semibold">{question.points} pts</span></div><p className={`flex items-center gap-2 text-sm font-semibold ${correct ? 'text-green-600' : 'text-red-600'}`}>{correct ? <Check className="size-4" /> : <X className="size-4" />}{correct ? 'Correct' : 'Incorrect'}</p></CardHeader>
-        <CardContent className="space-y-3">
-          {type === 'multiple-choice' && (['A','B','C','D'] as const).map(letter => { const text = question[`option_${letter.toLowerCase()}` as 'option_a'|'option_b'|'option_c'|'option_d']; const selectedAnswer = selected === letter; const correctAnswer = question.correct_answer === letter; return <div key={letter} className={`rounded-lg border p-3 ${correctAnswer ? 'border-green-500 bg-green-500/10' : selectedAnswer ? 'border-red-500 bg-red-500/10' : ''}`}><b>{letter}.</b> {text}{selectedAnswer && <span className="ml-2 text-xs font-semibold">Your answer</span>}{correctAnswer && <span className="ml-2 text-xs font-semibold text-green-600">Correct answer</span>}</div>; })}
-          {type === 'true-false' && <div className="rounded-lg border p-4"><span className="font-medium">Your answer:</span> {selected === 'A' ? 'True' : selected === 'B' ? 'False' : selected || 'No answer'}<div className="mt-2 text-sm text-green-600"><span className="font-medium">Correct answer:</span> {question.correct_answer === 'A' || normalize(question.correct_answer) === 'true' ? 'True' : 'False'}</div></div>}
-          {type === 'fill-blank' && <div className="space-y-2"><div className="rounded-lg border p-3"><span className="text-sm text-muted-foreground">Your answer</span><p>{selected || 'No answer'}</p></div><div className="rounded-lg border border-green-500 bg-green-500/10 p-3"><span className="text-sm text-muted-foreground">Correct answer</span><p>{question.option_a || question.correct_answer}</p></div></div>}
-          {type === 'matching' && <div className="rounded-lg border p-4 text-sm"><p className="font-medium">Your matching answer</p><pre className="mt-2 whitespace-pre-wrap break-words">{selected || 'No answer'}</pre></div>}
-        </CardContent></Card>;
-    })}</div>
+    <div className="flex flex-wrap items-center justify-between gap-4"><div><h1 className="text-3xl font-bold">Review Test</h1><p className="mt-1 text-muted-foreground">{test.title}</p><p className="mt-2 text-sm font-medium">Score: {Number(submission.score).toFixed(2)}/100 · Attempts used: {attemptsUsed}/{maxAttempts}</p></div><div className="flex gap-2"><Button variant="outline" onClick={() => router.push('/dashboard/student')}>Back</Button>{canRetry && <Button onClick={() => router.push(`/dashboard/student/tests/${encodeURIComponent(id)}`)}>Retry Assessment</Button>}</div></div>
+    <div className="space-y-4">{questions.map((question, index) => { const correct = isCorrect(question, answers); const type = typeOf(question); const selected = answers[question.id] || ''; return <Card key={question.id} className={correct ? 'border-green-500' : 'border-red-500'}><CardHeader><div className="flex items-start justify-between gap-4"><CardTitle className="text-lg">{index + 1}. {question.question}</CardTitle><span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-semibold">{question.points} pts</span></div><p className={`flex items-center gap-2 text-sm font-semibold ${correct ? 'text-green-600' : 'text-red-600'}`}>{correct ? <Check className="size-4" /> : <X className="size-4" />}{correct ? 'Correct' : 'Incorrect'}</p></CardHeader><CardContent className="space-y-3">
+      {type === 'multiple-choice' && (['A','B','C','D'] as const).map(letter => { const text = question[`option_${letter.toLowerCase()}` as 'option_a'|'option_b'|'option_c'|'option_d']; const selectedAnswer = selected === letter; const correctAnswer = question.correct_answer === letter; return <div key={letter} className={`rounded-lg border p-3 ${correctAnswer ? 'border-green-500 bg-green-500/10' : selectedAnswer ? 'border-red-500 bg-red-500/10' : ''}`}><b>{letter}.</b> {text}{selectedAnswer && <span className="ml-2 text-xs font-semibold">Your answer</span>}{correctAnswer && <span className="ml-2 text-xs font-semibold text-green-600">Correct answer</span>}</div>; })}
+      {type === 'true-false' && <div className="rounded-lg border p-4"><span className="font-medium">Your answer:</span> {selected === 'A' ? 'True' : selected === 'B' ? 'False' : selected || 'No answer'}<div className="mt-2 text-sm text-green-600"><span className="font-medium">Correct answer:</span> {question.correct_answer === 'A' || normalize(question.correct_answer) === 'true' ? 'True' : 'False'}</div></div>}
+      {type === 'fill-blank' && <div className="space-y-2"><div className="rounded-lg border p-3"><span className="text-sm text-muted-foreground">Your answer</span><p>{selected || 'No answer'}</p></div><div className="rounded-lg border border-green-500 bg-green-500/10 p-3"><span className="text-sm text-muted-foreground">Correct answer</span><p>{question.option_a || question.correct_answer}</p></div></div>}
+      {type === 'matching' && <div className="rounded-lg border p-4 text-sm"><p className="font-medium">Your matching answer</p><pre className="mt-2 whitespace-pre-wrap break-words">{selected || 'No answer'}</pre></div>}
+    </CardContent></Card>; })}</div>
   </main></div>;
 }
