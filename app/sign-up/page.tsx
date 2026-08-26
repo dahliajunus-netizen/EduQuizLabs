@@ -7,7 +7,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Eye, EyeOff, ChevronDown, X, Award, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, ChevronDown, X, Award, Loader2, Search } from 'lucide-react';
 
 const countryCodes = [
   'AF','AL','DZ','AD','AO','AG','AR','AM','AU','AT','AZ','BS','BH','BD','BB','BY','BE','BZ','BJ','BT','BO','BA','BW','BR','BN','BG','BF','BI','CV','KH','CM','CA','CF','TD','CL','CN','CO','KM','CG','CR','HR','CU','CY','CZ','DK','DJ','DM','DO','EC','EG','SV','GQ','ER','EE','SZ','ET','FJ','FI','FR','GA','GM','GE','DE','GH','GR','GD','GT','GN','GW','GY','HT','HN','HU','IS','IN','ID','IR','IQ','IE','IT','JM','JP','JO','KZ','KE','KI','KP','KR','XK','KW','KG','LA','LV','LB','LS','LR','LY','LI','LT','LU','MG','MW','MY','MV','ML','MT','MH','MR','MU','MX','FM','MD','MC','MN','ME','MA','MZ','MM','NA','NR','NP','NL','NZ','NI','NE','NG','MK','NO','OM','PK','PW','PS','PA','PG','PY','PE','PH','PL','PT','QA','RO','RU','RW','KN','LC','VC','WS','SM','ST','SA','SN','RS','SC','SL','SG','SK','SI','SB','SO','ZA','SS','ES','LK','SD','SR','SE','CH','SY','TW','TJ','TZ','TH','TL','TG','TO','TT','TN','TR','TM','TV','UG','UA','AE','GB','US','UY','UZ','VU','VA','VE','VN','YE','ZM','ZW'
@@ -39,11 +39,13 @@ export default function SignUpPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('');
   const [isCountryOpen, setIsCountryOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const monthRef = useRef<HTMLInputElement>(null);
   const yearRef = useRef<HTMLInputElement>(null);
   const countryDropdownRef = useRef<HTMLDivElement>(null);
+  const countrySearchRef = useRef<HTMLInputElement>(null);
 
   const countries = useMemo(() => {
     const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -52,6 +54,12 @@ export default function SignUpPage() {
       name: displayNames.of(code) || code,
     })).sort((a, b) => a.name.localeCompare(b.name));
   }, []);
+
+  const filteredCountries = useMemo(() => {
+    const query = countrySearch.trim().toLowerCase();
+    if (!query) return countries;
+    return countries.filter((country) => country.name.toLowerCase().startsWith(query));
+  }, [countries, countrySearch]);
 
   const selectedCountryObj = countries.find((c) => c.name === selectedCountry);
 
@@ -64,6 +72,17 @@ export default function SignUpPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (isCountryOpen) {
+      requestAnimationFrame(() => countrySearchRef.current?.focus());
+    }
+  }, [isCountryOpen]);
+
+  function openCountryPicker() {
+    setCountrySearch('');
+    setIsCountryOpen(true);
+  }
 
   function calculateExactAge(d: string, m: string, y: string): number | null {
     if (!d || !m || !y || y.length !== 4) return null;
@@ -78,10 +97,7 @@ export default function SignUpPage() {
   }
 
   function validateBirthday(d: string, m: string, y: string, currentRole = role) {
-    if (!d || !m || y.length !== 4) {
-      setAgeError(null);
-      return;
-    }
+    if (!d || !m || y.length !== 4) { setAgeError(null); return; }
     const age = calculateExactAge(d, m, y);
     if (age === null) setAgeError('Please enter a valid birthday date.');
     else if (currentRole === 'teacher' && age < 21) setAgeError('Teachers must be at least 21 years old.');
@@ -128,15 +144,10 @@ export default function SignUpPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setEmailError(null);
-    setPasswordError(null);
-    setLoading(true);
-
+    setError(null); setEmailError(null); setPasswordError(null); setLoading(true);
     const fullName = String(new FormData(e.currentTarget).get('fullName') ?? '').trim();
     const normalizedEmail = email.trim().toLowerCase();
     const age = calculateExactAge(day, month, year);
-
     if (!fullName) { setError('Please enter your full name.'); setLoading(false); return; }
     if (!selectedCountry) { setError('Please select your country.'); setLoading(false); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) { setEmailError('Please enter a valid email'); setLoading(false); return; }
@@ -144,37 +155,12 @@ export default function SignUpPage() {
     if (role === 'teacher' && age < 21) { setAgeError('Teachers must be at least 21 years old.'); setLoading(false); return; }
     if (password.length < 8) { setPasswordError('Password must be at least 8 characters long.'); setLoading(false); return; }
     if (password !== confirmPassword) { setError('Passwords do not match.'); setLoading(false); return; }
-
     try {
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          full_name: fullName,
-          email: normalizedEmail,
-          age,
-          birthday: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
-          country: selectedCountry,
-          role,
-          password,
-        }),
-        cache: 'no-store',
-      });
-
+      const response = await fetch('/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ full_name: fullName, email: normalizedEmail, age, birthday: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`, country: selectedCountry, role, password }), cache: 'no-store' });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data?.user?.id || !data?.access_token) {
-        throw new Error(String(data?.error || 'Unable to create account.'));
-      }
-
+      if (!response.ok || !data?.user?.id || !data?.access_token) throw new Error(String(data?.error || 'Unable to create account.'));
       localStorage.setItem('supabase_access_token', data.access_token);
-      localStorage.setItem('current_user', JSON.stringify({
-        id: data.user.id,
-        fullName,
-        email: normalizedEmail,
-        role,
-        accessToken: data.access_token,
-      }));
-
+      localStorage.setItem('current_user', JSON.stringify({ id: data.user.id, fullName, email: normalizedEmail, role, accessToken: data.access_token }));
       router.push(`/dashboard/${role}`);
     } catch (err) {
       console.error('[Signup] Error:', err);
@@ -228,20 +214,29 @@ export default function SignUpPage() {
 
           <div className="relative flex flex-col gap-2" ref={countryDropdownRef}>
             <Label>Country <span className="text-red-500">*</span></Label>
-            <button type="button" onClick={() => setIsCountryOpen((open) => !open)} className="flex h-11 w-full items-center justify-between rounded-md border border-input bg-card px-3 text-sm shadow-sm">
+            <button type="button" onClick={openCountryPicker} className="flex h-11 w-full items-center justify-between rounded-md border border-input bg-card px-3 text-sm shadow-sm">
               <span className="flex items-center gap-2 truncate">
                 {selectedCountryObj ? <><img src={`https://flagcdn.com/24x18/${selectedCountryObj.code}.png`} alt="" className="h-3.5 w-5 rounded-sm object-cover" /><span>{selectedCountryObj.name}</span></> : <span className="text-muted-foreground">Select your country</span>}
               </span>
               <ChevronDown size={16} className="text-muted-foreground" />
             </button>
             {isCountryOpen && (
-              <div className="absolute left-0 top-full z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg">
-                {countries.map((country) => (
-                  <button key={country.code} type="button" onClick={() => { setSelectedCountry(country.name); setIsCountryOpen(false); }} className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent ${selectedCountry === country.name ? 'bg-accent/50 font-medium' : ''}`}>
-                    <img src={`https://flagcdn.com/24x18/${country.code}.png`} alt="" className="h-3.5 w-5 rounded-sm object-cover" />
-                    <span className="truncate">{country.name}</span>
-                  </button>
-                ))}
+              <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-card shadow-lg">
+                <div className="border-b border-border bg-card p-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input ref={countrySearchRef} value={countrySearch} onChange={(e) => setCountrySearch(e.target.value)} placeholder="Search country..." className="h-10 bg-background pl-9 pr-9" aria-label="Search country" />
+                    {countrySearch && <button type="button" onClick={() => setCountrySearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Clear country search"><X size={15} /></button>}
+                  </div>
+                </div>
+                <div className="max-h-60 overflow-y-auto">
+                  {filteredCountries.length > 0 ? filteredCountries.map((country) => (
+                    <button key={country.code} type="button" onClick={() => { setSelectedCountry(country.name); setCountrySearch(''); setIsCountryOpen(false); }} className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent ${selectedCountry === country.name ? 'bg-accent/50 font-medium' : ''}`}>
+                      <img src={`https://flagcdn.com/24x18/${country.code}.png`} alt="" className="h-3.5 w-5 rounded-sm object-cover" />
+                      <span className="truncate">{country.name}</span>
+                    </button>
+                  )) : <div className="px-3 py-6 text-center text-sm text-muted-foreground">No countries found.</div>}
+                </div>
               </div>
             )}
           </div>
