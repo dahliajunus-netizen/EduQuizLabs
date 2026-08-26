@@ -103,7 +103,7 @@ export default function TeacherTestsPage() {
       if (type === 'true_false') return { ...cur, question_type: type, option_a: 'True', option_b: 'False', option_c: '', option_d: '', correct_answer: 'A' };
       if (type === 'fill_blank') return { ...cur, question_type: type, option_a: '', option_b: '', option_c: '', option_d: '', correct_answer: '' };
       if (type === 'matching') return { ...cur, question_type: type, option_a: '', option_b: '', option_c: '', option_d: '', correct_answer: '' };
-      return { ...cur, question_type: type, option_a: '', option_b: '', option_c: '', option_d: '', correct_answer: 'A' };
+      return { ...cur, question_type: 'multiple_choice', option_a: '', option_b: '', option_c: '', option_d: '', correct_answer: 'A' };
     });
   }
 
@@ -186,7 +186,7 @@ export default function TeacherTestsPage() {
                 {(questions[t.id] || []).map((x, i) => <div key={x.id || `${t.id}-${i}`} className="mt-3 flex items-start justify-between gap-3 border-t pt-3"><div className="min-w-0"><p className="font-medium">{i + 1}. {x.question}</p><p className="text-xs text-muted-foreground">{typeLabels[typeOf(x)]} · {Number(x.points || 0).toFixed(2)} pts · Correct: {typeOf(x) === 'multiple_choice' ? x.correct_answer : typeOf(x) === 'true_false' ? (x.correct_answer === 'A' ? 'True' : 'False') : typeOf(x) === 'fill_blank' ? x.correct_answer : 'Configured'}</p>{x.image_url && <img src={x.image_url} alt="Question" className="mt-2 max-h-40 max-w-full rounded-lg border object-contain" />}</div><Button variant="ghost" size="sm" onClick={() => x.id && void deleteQuestion(x.id, t.id)}><Trash2 className="size-4" /></Button></div>)}
 
                 {open === t.id && q && <div className="mt-4 space-y-5 rounded-xl border-2 border-primary/20 bg-background p-5 shadow-sm">
-                  <div className="flex items-center justify-between"><div><p className="text-lg font-bold">Question Maker</p><p className="text-sm text-muted-foreground">Choose the type, write the answers, then select the correct answer.</p></div><Button variant="ghost" size="icon" onClick={() => { setQ(null); setOpen(null); }}><X className="size-4" /></Button></div>
+                  <div className="flex items-center justify-between"><div><p className="text-lg font-bold">Question Maker</p><p className="text-sm text-muted-foreground">Choose the type, write the answers, then select the correct answer.</p></div><Button variant="ghost" size="icon" type="button" onClick={() => { setQ(null); setOpen(null); }}><X className="size-4" /></Button></div>
 
                   <div><p className="mb-2 text-sm font-bold">Question Type</p><div className="grid grid-cols-2 gap-2 md:grid-cols-4">{(['multiple_choice', 'true_false', 'fill_blank', 'matching'] as QuestionType[]).map(type => <Button key={type} type="button" variant={typeOf(q) === type ? 'default' : 'outline'} className="h-auto min-h-12 whitespace-normal" onClick={() => changeType(type)}>{typeLabels[type]}</Button>)}</div></div>
                   <div><label className="mb-2 block text-sm font-bold">Question</label><textarea value={q.question} onChange={e => setQ({ ...q, question: e.target.value })} placeholder="Write your question here..." className="min-h-28 w-full rounded-lg border bg-background p-3 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-primary" /></div>
@@ -195,23 +195,15 @@ export default function TeacherTestsPage() {
 
                   {typeOf(q) === 'multiple_choice' && <div className="space-y-4">
                     <div className="grid gap-3 md:grid-cols-2">{(['a', 'b', 'c', 'd'] as const).map(letter => <div key={letter}><label className="mb-1 block text-sm font-bold">Option {letter.toUpperCase()}</label><Input value={q[`option_${letter}`]} onChange={e => setQ({ ...q, [`option_${letter}`]: e.target.value })} placeholder={`Answer ${letter.toUpperCase()}`} /></div>)}</div>
-                    <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4">
-                      <label className="mb-2 block text-sm font-bold">Correct Answer</label>
-                      <p className="mb-3 text-xs text-muted-foreground">Choose the option that will be marked correct when the student submits the test.</p>
-                      <select
-                        value={q.correct_answer || 'A'}
-                        onChange={e => setQ({ ...q, correct_answer: e.target.value })}
-                        className="h-12 w-full rounded-lg border-2 border-primary/30 bg-background px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        <option value="A">A — {q.option_a || 'Option A'}</option>
-                        <option value="B">B — {q.option_b || 'Option B'}</option>
-                        <option value="C">C — {q.option_c || 'Option C'}</option>
-                        <option value="D">D — {q.option_d || 'Option D'}</option>
-                      </select>
-                      <p className="mt-3 flex items-center gap-2 text-sm font-medium">
-                        <Check className="size-4 text-primary" />
-                        Correct answer: <span className="font-bold">{q.correct_answer || 'A'}</span>
-                      </p>
+                    <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-5">
+                      <div className="mb-4"><p className="text-base font-bold">Correct Answer</p><p className="text-sm text-muted-foreground">Choose the one option that will receive credit.</p></div>
+                      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                        {(['A', 'B', 'C', 'D'] as const).map(letter => {
+                          const selected = q.correct_answer === letter;
+                          return <button key={letter} type="button" aria-pressed={selected} onClick={() => setQ(cur => cur ? { ...cur, correct_answer: letter } : cur)} className={`flex min-h-14 items-center justify-center gap-2 rounded-lg border-2 px-4 font-semibold transition ${selected ? 'border-primary bg-primary text-primary-foreground shadow-sm' : 'border-border bg-background hover:border-primary/50 hover:bg-primary/5'}`}><span className={`inline-flex size-7 items-center justify-center rounded-full border text-sm ${selected ? 'border-primary-foreground/50' : 'border-muted-foreground/40'}`}>{letter}</span><span>Option {letter}</span>{selected && <Check className="size-5" />}</button>;
+                        })}
+                      </div>
+                      <div className="mt-4 rounded-lg bg-background px-3 py-2 text-sm">Selected correct answer: <span className="font-bold text-primary">Option {q.correct_answer || 'None'}</span></div>
                     </div>
                   </div>}
 
