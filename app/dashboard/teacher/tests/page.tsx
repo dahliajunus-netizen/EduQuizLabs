@@ -30,7 +30,7 @@ function formatDueDate(value?: string | null) {
   if (!value) return 'No due date';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'No due date';
-  return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  return date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 export default function TeacherTestsPage() {
@@ -41,7 +41,9 @@ export default function TeacherTestsPage() {
   const [classCode, setClassCode] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [dueDate, setDueDate] = useState('');
+  const [dueDay, setDueDay] = useState('');
+  const [dueMonth, setDueMonth] = useState('');
+  const [dueYear, setDueYear] = useState('');
   const [testPassword, setTestPassword] = useState('');
   const [timeLimit, setTimeLimit] = useState('');
   const [open, setOpen] = useState<string | null>(null);
@@ -75,18 +77,30 @@ export default function TeacherTestsPage() {
     if (!url || !key || !classCode.trim() || !title.trim()) return;
     setBusy(true); setError('');
     try {
+      let dueDate: string | null = null;
+      if (dueDay || dueMonth || dueYear) {
+        if (!/^\d{1,2}$/.test(dueDay) || !/^\d{1,2}$/.test(dueMonth) || !/^\d{4}$/.test(dueYear)) {
+          throw new Error('Please enter the due date as DD/MM/YYYY.');
+        }
+        const d = Number(dueDay), m = Number(dueMonth), y = Number(dueYear);
+        const check = new Date(y, m - 1, d);
+        if (check.getFullYear() !== y || check.getMonth() !== m - 1 || check.getDate() !== d) {
+          throw new Error('Please enter a valid due date.');
+        }
+        dueDate = `${dueYear}-${dueMonth.padStart(2, '0')}-${dueDay.padStart(2, '0')}T23:59:59.000Z`;
+      }
       const payload = {
         class_code: classCode.trim().toUpperCase(),
         title: title.trim(),
         description: description.trim() || null,
-        due_date: dueDate ? new Date(dueDate).toISOString() : null,
+        due_date: dueDate,
         test_password: testPassword.trim() || null,
         time_limit_minutes: timeLimit ? Math.max(1, Number(timeLimit)) : null,
         published: false,
       };
       const r = await fetch(`${url}/rest/v1/tests`, { method: 'POST', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify(payload) });
       if (!r.ok) throw new Error(await r.text());
-      setClassCode(''); setTitle(''); setDescription(''); setDueDate(''); setTestPassword(''); setTimeLimit(''); await load();
+      setClassCode(''); setTitle(''); setDescription(''); setDueDay(''); setDueMonth(''); setDueYear(''); setTestPassword(''); setTimeLimit(''); await load();
     } catch (e) { setError(`Failed to create test: ${e instanceof Error ? e.message : 'Unknown error'}`); }
     finally { setBusy(false); }
   }
@@ -195,7 +209,7 @@ export default function TeacherTestsPage() {
           <Input name="test-class-code" autoComplete="off" value={classCode} onChange={e => setClassCode(e.target.value)} placeholder="Class code" className="uppercase" />
           <Input name="test-title" autoComplete="off" value={title} onChange={e => setTitle(e.target.value)} placeholder="Test title" />
           <Input name="test-description" autoComplete="off" value={description} onChange={e => setDescription(e.target.value)} placeholder="Description (optional)" />
-          <div className="space-y-1.5"><label className="text-sm font-medium">Due date</label><Input name="test-due-date" autoComplete="off" type="datetime-local" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
+          <div className="space-y-1.5"><label className="text-sm font-medium">Due date</label><div className="flex h-10 items-center rounded-md border border-input bg-background px-2"><input name="due-day" autoComplete="off" inputMode="numeric" aria-label="Due date day" placeholder="DD" maxLength={2} value={dueDay} onChange={e => setDueDay(e.target.value.replace(/\D/g, '').slice(0, 2))} className="w-10 bg-transparent text-center text-sm outline-none placeholder:text-muted-foreground" /><span className="text-muted-foreground">/</span><input name="due-month" autoComplete="off" inputMode="numeric" aria-label="Due date month" placeholder="MM" maxLength={2} value={dueMonth} onChange={e => setDueMonth(e.target.value.replace(/\D/g, '').slice(0, 2))} className="w-10 bg-transparent text-center text-sm outline-none placeholder:text-muted-foreground" /><span className="text-muted-foreground">/</span><input name="due-year" autoComplete="off" inputMode="numeric" aria-label="Due date year" placeholder="YYYY" maxLength={4} value={dueYear} onChange={e => setDueYear(e.target.value.replace(/\D/g, '').slice(0, 4))} className="w-16 bg-transparent text-center text-sm outline-none placeholder:text-muted-foreground" /></div><p className="text-xs text-muted-foreground">DD/MM/YYYY</p></div>
           <div className="space-y-1.5"><label className="text-sm font-medium">Test password</label><Input name="assessment-password" autoComplete="new-password" type="password" value={testPassword} onChange={e => setTestPassword(e.target.value)} placeholder="Optional" spellCheck={false} /></div>
           <div className="space-y-1.5"><label className="text-sm font-medium">Time limit (minutes)</label><Input name="test-time-limit" autoComplete="off" type="number" min="1" step="1" inputMode="numeric" value={timeLimit} onChange={e => setTimeLimit(e.target.value.replace(/\D/g, ''))} placeholder="Optional" /></div>
           <Button onClick={() => void createTest()} disabled={busy || !classCode.trim() || !title.trim()} className="lg:mt-6">{busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="mr-2 size-4" />}Create Test</Button>
