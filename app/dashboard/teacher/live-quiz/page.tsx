@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Play, Plus, Users, Trophy, Clock, MonitorPlay, Copy, Check, Radio, ChevronRight, Sparkles } from 'lucide-react';
+import { ArrowLeft, Play, Plus, Trash2, Users, Trophy, Clock, MonitorPlay, Copy, Check, Radio, ChevronRight, Sparkles } from 'lucide-react';
 
 const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -32,11 +32,7 @@ function teacherId() {
 }
 
 function gameCode() { return Math.random().toString(36).slice(2, 8).toUpperCase(); }
-
-function formatResponseTime(ms: number) {
-  if (!ms || ms < 0) return '—';
-  return `${(ms / 1000).toFixed(2)}s`;
-}
+function formatResponseTime(ms: number) { if (!ms || ms < 0) return '—'; return `${(ms / 1000).toFixed(2)}s`; }
 
 async function api(path: string, opts: RequestInit = {}) {
   const r = await fetch(`${url}/rest/v1/${path}`, { ...opts, headers: { ...headers, ...(opts.headers || {}) }, cache: 'no-store' });
@@ -45,10 +41,7 @@ async function api(path: string, opts: RequestInit = {}) {
   if (!text.trim()) return null;
   return JSON.parse(text);
 }
-
-async function rpc(name: string, body: Record<string, unknown>) {
-  return api(`rpc/${name}`, { method: 'POST', body: JSON.stringify(body) });
-}
+async function rpc(name: string, body: Record<string, unknown>) { return api(`rpc/${name}`, { method: 'POST', body: JSON.stringify(body) }); }
 
 export default function TeacherLiveQuiz() {
   const router = useRouter();
@@ -67,32 +60,28 @@ export default function TeacherLiveQuiz() {
   const [d, setD] = useState('');
   const [correct, setCorrect] = useState('A');
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [remaining, setRemaining] = useState(30);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [revealStep, setRevealStep] = useState(0);
   const [copied, setCopied] = useState(false);
   const autoAdvanceKey = useRef('');
-
   const current = quiz?.current_question ?? -1;
   const currentQ = questions[current];
 
   async function loadTemplates() {
     try {
-      const id = teacherId();
-      if (!id) return;
+      const id = teacherId(); if (!id) return;
       setTemplates((await api(`live_quizzes?teacher_id=eq.${encodeURIComponent(id)}&is_template=eq.true&status=eq.draft&select=id,title,class_code,game_code,status,current_question,is_template&order=created_at.desc`)) || []);
     } catch {}
   }
-
   async function loadClasses() {
     try {
-      const id = teacherId();
-      if (!id) return;
+      const id = teacherId(); if (!id) return;
       setClasses((await api(`teacher_classes?teacher_id=eq.${encodeURIComponent(id)}&select=id,class_name,school_name,code,teacher_id&order=class_name.asc`)) || []);
     } catch { setClasses([]); }
   }
-
   useEffect(() => { loadTemplates(); loadClasses(); }, []);
 
   async function createTemplate() {
@@ -105,20 +94,34 @@ export default function TeacherLiveQuiz() {
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not create quiz.'); }
     finally { setLoading(false); }
   }
-
   async function openTemplate(t: Quiz) {
     setSelected(t); setError('');
     try { setQuestions((await api(`live_quiz_questions?quiz_id=eq.${t.id}&select=*&order=question_order.asc`)) || []); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not load quiz.'); }
   }
-
   async function addQuestion() {
-    if (!selected || !q.trim() || ![a, b, c, d].every(x => x.trim())) { setError('Fill the question and all four answers.'); return; }
+    if (!selected || !q.trim() || ![a,b,c,d].every(x => x.trim())) { setError('Fill the question and all four answers.'); return; }
+    setError('');
     try {
       const rows = await api('live_quiz_questions', { method: 'POST', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify({ quiz_id: selected.id, question_order: questions.length, question: q.trim(), option_a: a.trim(), option_b: b.trim(), option_c: c.trim(), option_d: d.trim(), correct_answer: correct, time_limit_seconds: 30 }) });
       setQuestions(p => rows?.length ? [...p, ...rows] : p);
-      setQ(''); setA(''); setB(''); setC(''); setD('');
+      setQ(''); setA(''); setB(''); setC(''); setD(''); setCorrect('A');
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not add question.'); }
+  }
+
+  async function deleteQuestion(question: Q) {
+    if (!selected || deletingId) return;
+    if (!window.confirm(`Delete Question ${questions.indexOf(question) + 1}?\n\nThis cannot be undone.`)) return;
+    setDeletingId(question.id); setError('');
+    try {
+      await api(`live_quiz_questions?id=eq.${encodeURIComponent(question.id)}&quiz_id=eq.${encodeURIComponent(selected.id)}`, { method: 'DELETE' });
+      const remainingQuestions = questions.filter(item => item.id !== question.id).map((item, index) => ({ ...item, question_order: index }));
+      for (const item of remainingQuestions) {
+        await api(`live_quiz_questions?id=eq.${encodeURIComponent(item.id)}`, { method: 'PATCH', body: JSON.stringify({ question_order: item.question_order }) });
+      }
+      setQuestions(remainingQuestions);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not delete question.'); }
+    finally { setDeletingId(null); }
   }
 
   async function launchTemplate() {
@@ -129,198 +132,78 @@ export default function TeacherLiveQuiz() {
       if (!rows?.[0]) throw new Error('Could not create the live session.');
       const live = rows[0] as Quiz;
       const cloned = (await api(`live_quiz_questions?quiz_id=eq.${selected.id}&select=question_order,question,option_a,option_b,option_c,option_d,correct_answer,time_limit_seconds&order=question_order.asc`)) || [];
-
       const inserted: Q[] = [];
       for (const item of cloned) {
-        const created = await api('live_quiz_questions', {
-          method: 'POST',
-          headers: { ...headers, Prefer: 'return=representation' },
-          body: JSON.stringify({ ...item, quiz_id: live.id, time_limit_seconds: 30 }),
-        });
+        const created = await api('live_quiz_questions', { method: 'POST', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify({ ...item, quiz_id: live.id, time_limit_seconds: 30 }) });
         if (created?.[0]) inserted.push(created[0]);
       }
-
-      setQuiz(live);
-      setQuestions(inserted);
-      setAnsweredCount(0);
-      autoAdvanceKey.current = '';
-      setSelected(null);
+      setQuiz(live); setQuestions(inserted); setAnsweredCount(0); autoAdvanceKey.current = ''; setSelected(null);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not start live quiz.'); }
     finally { setLoading(false); }
   }
-
   async function beginReveal(index: number) {
     if (!quiz) return;
     try {
-      setAnsweredCount(0);
-      autoAdvanceKey.current = '';
+      setAnsweredCount(0); autoAdvanceKey.current = '';
       const result = await rpc('live_quiz_begin_reveal', { p_quiz_id: quiz.id, p_question_index: index });
-      setQuiz(result?.[0] || result || { ...quiz, status: 'question_reveal', current_question: index, question_started_at: new Date().toISOString() });
-      setRevealStep(0);
+      setQuiz(result?.[0] || result || { ...quiz, status: 'question_reveal', current_question: index, question_started_at: new Date().toISOString() }); setRevealStep(0);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not start question.'); }
   }
-
   async function beginAnswering() {
     if (!quiz) return;
     try {
       const result = await rpc('live_quiz_begin_answering', { p_quiz_id: quiz.id });
-      setQuiz(result?.[0] || result || { ...quiz, status: 'answering', question_started_at: new Date().toISOString() });
-      setRemaining(30);
-      setAnsweredCount(0);
+      setQuiz(result?.[0] || result || { ...quiz, status: 'answering', question_started_at: new Date().toISOString() }); setRemaining(30); setAnsweredCount(0);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not open answers.'); }
   }
-
   async function finishOrNext() {
     if (!quiz) return;
     const next = quiz.current_question + 1;
     if (next >= questions.length) {
       const rows = await api(`live_quizzes?id=eq.${quiz.id}`, { method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify({ status: 'finished', question_started_at: null }) });
-      setQuiz(rows?.[0] || { ...quiz, status: 'finished' });
-      setAnsweredCount(0);
-    } else {
-      await beginReveal(next);
-    }
+      setQuiz(rows?.[0] || { ...quiz, status: 'finished' }); setAnsweredCount(0);
+    } else await beginReveal(next);
   }
-
   async function loadLive() {
     if (!quiz) return;
     try {
       const livePlayers: Player[] = (await api(`live_quiz_players?quiz_id=eq.${quiz.id}&select=id,nickname,score,total_response_time_ms,correct_answers`)) || [];
       setPlayers(livePlayers);
-
-      const x = await api(`live_quizzes?id=eq.${quiz.id}&select=*`);
-      const liveQuiz = x?.[0] as Quiz | undefined;
-      if (liveQuiz) setQuiz(liveQuiz);
-
-      const activeQuiz = liveQuiz || quiz;
-      const questionId = questions[activeQuiz.current_question]?.id;
-
+      const x = await api(`live_quizzes?id=eq.${quiz.id}&select=*`); const liveQuiz = x?.[0] as Quiz | undefined; if (liveQuiz) setQuiz(liveQuiz);
+      const activeQuiz = liveQuiz || quiz; const questionId = questions[activeQuiz.current_question]?.id;
       if (questionId && activeQuiz.status === 'answering') {
-        const responseRows = await api(`live_quiz_answers?quiz_id=eq.${quiz.id}&question_id=eq.${encodeURIComponent(questionId)}&select=id`);
-        const count = Array.isArray(responseRows) ? responseRows.length : 0;
-        setAnsweredCount(count);
-
-        const playerCount = livePlayers.length;
-        const advanceKey = `${quiz.id}:${activeQuiz.current_question}`;
-        if (playerCount > 0 && count >= playerCount && autoAdvanceKey.current !== advanceKey) {
-          autoAdvanceKey.current = advanceKey;
-          await finishOrNext();
-        }
-      } else {
-        setAnsweredCount(0);
-      }
+        const responseRows = await api(`live_quiz_answers?quiz_id=eq.${quiz.id}&question_id=eq.${encodeURIComponent(questionId)}&select=id`); const count = Array.isArray(responseRows) ? responseRows.length : 0; setAnsweredCount(count);
+        const playerCount = livePlayers.length; const advanceKey = `${quiz.id}:${activeQuiz.current_question}`;
+        if (playerCount > 0 && count >= playerCount && autoAdvanceKey.current !== advanceKey) { autoAdvanceKey.current = advanceKey; await finishOrNext(); }
+      } else setAnsweredCount(0);
     } catch {}
   }
-
-  useEffect(() => {
-    if (!quiz) return;
-    loadLive();
-    const t = window.setInterval(loadLive, 700);
-    return () => window.clearInterval(t);
-  }, [quiz?.id, quiz?.current_question, quiz?.status, questions.length]);
-
+  useEffect(() => { if (!quiz) return; loadLive(); const t = window.setInterval(loadLive, 700); return () => window.clearInterval(t); }, [quiz?.id, quiz?.current_question, quiz?.status, questions.length]);
   useEffect(() => {
     if (!quiz || !currentQ) return;
-
     if (quiz.status === 'question_reveal') {
       const start = quiz.question_started_at ? new Date(quiz.question_started_at).getTime() : Date.now();
-      const timer = window.setInterval(() => {
-        const elapsed = Date.now() - start;
-        setRevealStep(Math.min(4, Math.floor(elapsed / 700)));
-        if (elapsed >= 5000) {
-          window.clearInterval(timer);
-          beginAnswering();
-        }
-      }, 100);
+      const timer = window.setInterval(() => { const elapsed = Date.now() - start; setRevealStep(Math.min(4, Math.floor(elapsed / 700))); if (elapsed >= 5000) { window.clearInterval(timer); beginAnswering(); } }, 100);
       return () => window.clearInterval(timer);
     }
-
     if (quiz.status === 'answering') {
       const start = quiz.question_started_at ? new Date(quiz.question_started_at).getTime() : Date.now();
-      const timer = window.setInterval(() => {
-        const left = Math.max(0, 30000 - (Date.now() - start));
-        setRemaining(Math.ceil(left / 1000));
-        if (left <= 0) {
-          window.clearInterval(timer);
-          const key = `${quiz.id}:${quiz.current_question}:timeout`;
-          if (autoAdvanceKey.current !== key) {
-            autoAdvanceKey.current = key;
-            finishOrNext();
-          }
-        }
-      }, 100);
+      const timer = window.setInterval(() => { const left = Math.max(0, 30000 - (Date.now() - start)); setRemaining(Math.ceil(left / 1000)); if (left <= 0) { window.clearInterval(timer); const timerKey = `${quiz.id}:${quiz.current_question}:timeout`; if (autoAdvanceKey.current !== timerKey) { autoAdvanceKey.current = timerKey; finishOrNext(); } } }, 100);
       return () => window.clearInterval(timer);
     }
   }, [quiz?.status, quiz?.current_question, quiz?.question_started_at, currentQ?.id]);
+  async function copyCode() { if (!quiz?.game_code) return; try { await navigator.clipboard.writeText(quiz.game_code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {} }
+  const connectedPlayers = [...players].sort((x,y) => x.nickname.localeCompare(y.nickname));
+  const rankedPlayers = [...players].sort((x,y) => y.score !== x.score ? y.score-x.score : x.total_response_time_ms !== y.total_response_time_ms ? x.total_response_time_ms-y.total_response_time_ms : y.correct_answers-x.correct_answers);
 
-  async function copyCode() {
-    if (!quiz?.game_code) return;
-    try { await navigator.clipboard.writeText(quiz.game_code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
-  }
-
-  const connectedPlayers = [...players].sort((x, y) => x.nickname.localeCompare(y.nickname));
-  const rankedPlayers = [...players].sort((x, y) => {
-    if (y.score !== x.score) return y.score - x.score;
-    if (x.total_response_time_ms !== y.total_response_time_ms) return x.total_response_time_ms - y.total_response_time_ms;
-    return y.correct_answers - x.correct_answers;
-  });
-
-  if (quiz) {
-    return <main className="min-h-screen bg-gradient-to-b from-background via-background to-primary/[0.04] px-4 py-6 sm:px-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border bg-card/90 p-5 shadow-sm backdrop-blur">
-          <div className="flex items-center gap-4"><div className="flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground"><Radio className="size-6" /></div><div><p className="text-xs font-bold uppercase tracking-wider text-primary">Teacher Host Screen</p><h1 className="text-xl font-black sm:text-2xl">{quiz.title}</h1></div></div>
-          <Button variant="outline" className="rounded-xl" onClick={() => router.push('/dashboard/teacher')}><ArrowLeft className="mr-2 size-4" />Back to Dashboard</Button>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-[1fr_260px]">
-          <Card className="overflow-hidden rounded-3xl border-0 bg-primary text-primary-foreground shadow-xl"><CardContent className="flex flex-col items-center justify-center py-8 text-center"><p className="text-xs font-bold uppercase tracking-[0.3em] opacity-80">Join Code</p><div className="mt-2 flex items-center gap-3"><span className="font-black tracking-[0.28em] text-5xl sm:text-6xl">{quiz.game_code}</span><Button size="icon" variant="secondary" className="rounded-xl" onClick={copyCode}>{copied ? <Check className="size-5" /> : <Copy className="size-5" />}</Button></div><p className="mt-3 text-sm opacity-80">Students enter this code to join.</p></CardContent></Card>
-          <Card className="rounded-3xl"><CardContent className="flex h-full items-center justify-center gap-4 py-7"><div className="flex size-12 items-center justify-center rounded-2xl bg-muted"><Users className="size-6" /></div><div><p className="text-3xl font-black">{players.length}</p><p className="text-sm text-muted-foreground">Players connected</p></div></CardContent></Card>
-        </div>
-
-        {error && <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm font-medium text-destructive">{error}</div>}
-
-        {quiz.status === 'lobby' && <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <Card className="rounded-3xl"><CardContent className="py-16 text-center"><MonitorPlay className="mx-auto size-14 text-primary" /><h2 className="mt-5 text-3xl font-black">Ready when your class is in</h2><p className="mx-auto mt-2 max-w-lg text-muted-foreground">Share this screen. Students will use their devices as answer controllers.</p><p className="mt-5 font-bold">{players.length} player{players.length === 1 ? '' : 's'} connected</p><Button size="lg" className="mt-6 rounded-xl px-8" disabled={!questions.length} onClick={() => beginReveal(0)}><Play className="mr-2 size-5" />Start Question 1</Button></CardContent></Card>
-          <Card className="rounded-3xl"><CardHeader className="pb-3"><CardTitle className="flex items-center justify-between gap-3"><span className="flex items-center gap-2"><Users className="size-5 text-primary" />Connected Players</span><span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-black text-primary">{connectedPlayers.length}</span></CardTitle></CardHeader><CardContent className="pt-0">{connectedPlayers.length === 0 ? <div className="rounded-2xl border border-dashed p-7 text-center"><Users className="mx-auto size-8 text-muted-foreground/50" /><p className="mt-3 text-sm font-bold">Waiting for players…</p><p className="mt-1 text-xs text-muted-foreground">Nicknames will appear here as students join.</p></div> : <div className="max-h-80 space-y-2 overflow-y-auto pr-1">{connectedPlayers.map(p => <div key={p.id} className="flex items-center gap-3 rounded-xl border bg-card p-3"><span className="size-2.5 shrink-0 rounded-full bg-emerald-500" /><span className="min-w-0 flex-1 truncate text-sm font-bold">{p.nickname}</span></div>)}</div>}</CardContent></Card>
-        </div>}
-
-        {(quiz.status === 'question_reveal' || quiz.status === 'answering') && currentQ && <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_360px]">
-          <Card className="overflow-hidden rounded-3xl border-0 shadow-xl">
-            <CardHeader className="border-b bg-muted/30 p-6 sm:p-8">
-              <div className="flex items-center justify-between"><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">QUESTION {current + 1} / {questions.length}</span>{quiz.status === 'answering' ? <span className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xl font-black ${remaining <= 5 ? 'bg-destructive/10 text-destructive animate-pulse' : 'bg-primary/10 text-primary'}`}><Clock className="size-5" />{remaining}s</span> : <span className="rounded-full bg-primary/10 px-4 py-2 text-sm font-black text-primary">GET READY</span>}</div>
-              {quiz.status === 'answering' && <>
-                <div className="mt-4 flex items-center justify-center rounded-xl border bg-card/70 px-4 py-2 text-sm font-black"><Users className="mr-2 size-4 text-primary" />Answered: <span className="mx-1 text-primary">{answeredCount}</span> / {players.length}</div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all duration-100" style={{ width: `${(remaining / 30) * 100}%` }} /></div>
-              </>}
-              <CardTitle className="mt-7 text-center text-3xl leading-tight sm:text-4xl">{currentQ.question}</CardTitle>
-              <p className="mt-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">{quiz.status === 'question_reveal' ? 'Watch the answers appear' : answeredCount >= players.length && players.length > 0 ? 'Everyone answered — moving on…' : 'Students can answer now'}</p>
-            </CardHeader>
-            <CardContent className="p-5 sm:p-7">
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">{answers.map((item, index) => { const visible = quiz.status === 'answering' || revealStep >= index + 1; return <div key={item.letter} className={`min-h-32 rounded-2xl p-5 text-white shadow-sm transition-all duration-500 sm:min-h-36 sm:p-6 ${item.className} ${visible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-4 scale-95 opacity-0'}`}><div className="flex items-center justify-between"><span className="text-4xl font-black">{item.label}</span><span className="rounded-lg bg-black/10 px-2 py-1 text-xs font-black">{item.letter}</span></div>{visible && <p className="mt-4 text-lg font-bold sm:text-xl">{currentQ[item.key]}</p>}</div>; })}</div>
-              {quiz.status === 'question_reveal' && <div className="mt-6 flex items-center justify-center gap-2 rounded-2xl border bg-muted/30 p-4 text-sm font-bold text-muted-foreground"><Sparkles className="size-4 text-primary" />Answers unlock one by one…</div>}
-              {quiz.status === 'answering' && <div className="mt-6 flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-bold text-muted-foreground">{answeredCount >= players.length && players.length > 0 ? 'All connected players have answered.' : 'Students are answering on their devices.'}</p><Button className="rounded-xl" onClick={finishOrNext}>{current + 1 >= questions.length ? 'Finish Quiz' : 'Next Question'}<ChevronRight className="ml-2 size-4" /></Button></div>}
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-3xl">
-            <CardHeader><CardTitle className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><Trophy className="size-5 text-primary" />Live Ranking</span><span className="text-xs font-bold text-muted-foreground">Score + speed</span></CardTitle></CardHeader>
-            <CardContent className="space-y-2">
-              {rankedPlayers.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Waiting for players…</p> : rankedPlayers.slice(0, 10).map((p, i) => <div key={p.id} className="rounded-xl border p-3"><div className="flex items-center gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-black">{i + 1}</span><span className="min-w-0 flex-1 truncate font-bold">{p.nickname}</span><span className="text-sm font-black">{p.score.toLocaleString()}</span></div><div className="mt-2 flex items-center justify-between pl-11 text-[11px] font-semibold text-muted-foreground"><span>{p.correct_answers} correct</span><span>{formatResponseTime(p.total_response_time_ms)} total response time</span></div></div>)}
-            </CardContent>
-          </Card>
-        </div>}
-
-        {quiz.status === 'finished' && <Card className="rounded-3xl"><CardContent className="py-16 text-center"><Trophy className="mx-auto size-16 text-primary" /><h2 className="mt-5 text-4xl font-black">Quiz Finished!</h2><p className="mt-2 text-muted-foreground">Final leaderboard — score first, then fastest total response time.</p><div className="mx-auto mt-7 max-w-xl space-y-2">{rankedPlayers.map((p, i) => <div key={p.id} className="flex items-center gap-3 rounded-2xl border p-4 text-left"><span className="flex size-8 items-center justify-center rounded-lg bg-muted text-xs font-black">#{i + 1}</span><span className="flex-1 font-bold">{p.nickname}</span><div className="text-right"><div className="font-black">{p.score.toLocaleString()} pts</div><div className="text-xs text-muted-foreground">{p.correct_answers} correct · {formatResponseTime(p.total_response_time_ms)}</div></div></div>)}</div></CardContent></Card>}
-      </div>
-    </main>;
-  }
-
-  return <main className="min-h-screen bg-gradient-to-b from-background to-primary/[0.04] px-4 py-8 sm:px-6"><div className="mx-auto max-w-5xl space-y-6">
-    <div className="flex items-center gap-4"><Button variant="outline" size="icon" className="rounded-xl" onClick={() => router.push('/dashboard/teacher')}><ArrowLeft className="size-5" /></Button><div><p className="text-xs font-bold uppercase tracking-wider text-primary">Live Quiz Studio</p><h1 className="text-3xl font-black">Create a Live Quiz</h1></div></div>
+  if (quiz) return <main className="min-h-screen bg-gradient-to-b from-background via-background to-primary/[0.04] px-4 py-6 sm:px-6"><div className="mx-auto max-w-7xl space-y-6">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border bg-card/90 p-5 shadow-sm"><div className="flex items-center gap-4"><div className="flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground"><Radio className="size-6" /></div><div><p className="text-xs font-bold uppercase tracking-wider text-primary">Teacher Host Screen</p><h1 className="text-xl font-black sm:text-2xl">{quiz.title}</h1></div></div><Button variant="outline" className="rounded-xl" onClick={() => router.push('/dashboard/teacher')}><ArrowLeft className="mr-2 size-4" />Back to Dashboard</Button></div>
+    <div className="grid gap-5 lg:grid-cols-[1fr_260px]"><Card className="overflow-hidden rounded-3xl border-0 bg-primary text-primary-foreground shadow-xl"><CardContent className="flex flex-col items-center justify-center py-8 text-center"><p className="text-xs font-bold uppercase tracking-[0.3em] opacity-80">Join Code</p><div className="mt-2 flex items-center gap-3"><span className="font-black tracking-[0.28em] text-5xl sm:text-6xl">{quiz.game_code}</span><Button size="icon" variant="secondary" className="rounded-xl" onClick={copyCode}>{copied ? <Check className="size-5" /> : <Copy className="size-5" />}</Button></div><p className="mt-3 text-sm opacity-80">Students enter this code to join.</p></CardContent></Card><Card className="rounded-3xl"><CardContent className="flex h-full items-center justify-center gap-4 py-7"><div className="flex size-12 items-center justify-center rounded-2xl bg-muted"><Users className="size-6" /></div><div><p className="text-3xl font-black">{players.length}</p><p className="text-sm text-muted-foreground">Players connected</p></div></CardContent></Card></div>
     {error && <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm font-medium text-destructive">{error}</div>}
-    <Card className="rounded-3xl"><CardHeader><CardTitle>New Quiz</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Quiz title" /><select className="h-10 rounded-xl border bg-background px-3 text-sm" value={classCode} onChange={e => setClassCode(e.target.value)}><option value="">Choose class</option>{classes.map(c => <option key={c.code} value={c.code}>{c.class_name} ({c.code})</option>)}</select><Button className="rounded-xl sm:col-span-2" disabled={loading} onClick={createTemplate}><Plus className="mr-2 size-4" />Create Quiz</Button></CardContent></Card>
-    {templates.length > 0 && <Card className="rounded-3xl"><CardHeader><CardTitle>Your Quiz Templates</CardTitle></CardHeader><CardContent className="space-y-2">{templates.map(t => <button key={t.id} onClick={() => openTemplate(t)} className="flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition hover:bg-muted/40"><div className="flex-1"><p className="font-bold">{t.title}</p><p className="text-xs text-muted-foreground">Class {t.class_code}</p></div><ChevronRight className="size-5" /></button>)}</CardContent></Card>}
-    {selected && <Card className="rounded-3xl"><CardHeader><CardTitle>Build: {selected.title}</CardTitle></CardHeader><CardContent className="space-y-4"><Input value={q} onChange={e => setQ(e.target.value)} placeholder="Question" /><div className="grid gap-3 sm:grid-cols-2"><Input value={a} onChange={e => setA(e.target.value)} placeholder="A — answer" /><Input value={b} onChange={e => setB(e.target.value)} placeholder="B — answer" /><Input value={c} onChange={e => setC(e.target.value)} placeholder="C — answer" /><Input value={d} onChange={e => setD(e.target.value)} placeholder="D — answer" /></div><select className="h-10 rounded-xl border bg-background px-3" value={correct} onChange={e => setCorrect(e.target.value)}><option value="A">Correct: A</option><option value="B">Correct: B</option><option value="C">Correct: C</option><option value="D">Correct: D</option></select><Button className="rounded-xl" onClick={addQuestion}><Plus className="mr-2 size-4" />Add Question</Button><div className="space-y-3">{questions.map((item, i) => <div key={item.id} className="rounded-2xl border bg-card p-4"><div className="flex items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-black text-primary">{i + 1}</span><div className="min-w-0 flex-1"><p className="font-bold leading-6">{item.question}</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{[{ letter: 'A', text: item.option_a }, { letter: 'B', text: item.option_b }, { letter: 'C', text: item.option_c }, { letter: 'D', text: item.option_d }].map(option => { const isCorrect = option.letter === item.correct_answer; return <div key={option.letter} className={`rounded-xl border p-3 ${isCorrect ? 'border-green-500/40 bg-green-500/10' : 'bg-muted/30'}`}><div className="flex items-start gap-2"><span className="font-black">{option.letter}</span><span className="flex-1 text-sm font-medium">{option.text}</span>{isCorrect && <span className="shrink-0 rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-black uppercase text-green-700 dark:text-green-300">Correct</span>}</div></div>; })}</div></div></div></div>)}</div><Button size="lg" className="w-full rounded-xl" disabled={!questions.length || loading} onClick={launchTemplate}><Play className="mr-2 size-5" />Launch Live Quiz</Button></CardContent></Card>}
+    {quiz.status === 'lobby' && <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]"><Card className="rounded-3xl"><CardContent className="py-16 text-center"><MonitorPlay className="mx-auto size-14 text-primary" /><h2 className="mt-5 text-3xl font-black">Ready when your class is in</h2><p className="mx-auto mt-2 max-w-lg text-muted-foreground">Share this screen. Students will use their devices as answer controllers.</p><p className="mt-5 font-bold">{players.length} player{players.length === 1 ? '' : 's'} connected</p><Button size="lg" className="mt-6 rounded-xl px-8" disabled={!questions.length} onClick={() => beginReveal(0)}><Play className="mr-2 size-5" />Start Question 1</Button></CardContent></Card><Card className="rounded-3xl"><CardHeader className="pb-3"><CardTitle className="flex items-center justify-between"><span className="flex items-center gap-2"><Users className="size-5 text-primary" />Connected Players</span><span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-black text-primary">{connectedPlayers.length}</span></CardTitle></CardHeader><CardContent className="pt-0">{connectedPlayers.length === 0 ? <div className="rounded-2xl border border-dashed p-7 text-center"><Users className="mx-auto size-8 text-muted-foreground/50" /><p className="mt-3 text-sm font-bold">Waiting for players…</p></div> : <div className="max-h-80 space-y-2 overflow-y-auto pr-1">{connectedPlayers.map(p => <div key={p.id} className="flex items-center gap-3 rounded-xl border bg-card p-3"><span className="size-2.5 shrink-0 rounded-full bg-emerald-500" /><span className="min-w-0 flex-1 truncate text-sm font-bold">{p.nickname}</span></div>)}</div>}</CardContent></Card></div>}
+    {(quiz.status === 'question_reveal' || quiz.status === 'answering') && currentQ && <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_360px]"><Card className="overflow-hidden rounded-3xl border-0 shadow-xl"><CardHeader className="border-b bg-muted/30 p-6 sm:p-8"><div className="flex items-center justify-between"><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">QUESTION {current + 1} / {questions.length}</span>{quiz.status === 'answering' ? <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-xl font-black text-primary"><Clock className="size-5" />{remaining}s</span> : <span className="rounded-full bg-primary/10 px-4 py-2 text-sm font-black text-primary">GET READY</span>}</div>{quiz.status === 'answering' && <><div className="mt-4 flex items-center justify-center rounded-xl border bg-card/70 px-4 py-2 text-sm font-black"><Users className="mr-2 size-4 text-primary" />Answered: <span className="mx-1 text-primary">{answeredCount}</span> / {players.length}</div><div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all duration-100" style={{width:`${(remaining/30)*100}%`}} /></div></>}<CardTitle className="mt-7 text-center text-3xl leading-tight sm:text-4xl">{currentQ.question}</CardTitle><p className="mt-3 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">{quiz.status === 'question_reveal' ? 'Watch the answers appear' : 'Students can answer now'}</p></CardHeader><CardContent className="p-5 sm:p-7"><div className="grid grid-cols-2 gap-3 sm:gap-4">{answers.map((item,index) => { const visible = quiz.status === 'answering' || revealStep >= index+1; return <div key={item.letter} className={`min-h-32 rounded-2xl p-5 text-white shadow-sm transition-all duration-500 ${item.className} ${visible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-4 scale-95 opacity-0'}`}><div className="flex items-center justify-between"><span className="text-4xl font-black">{item.label}</span><span className="rounded-lg bg-black/10 px-2 py-1 text-xs font-black">{item.letter}</span></div>{visible && <p className="mt-4 text-lg font-bold">{currentQ[item.key]}</p>}</div>})}</div>{quiz.status === 'question_reveal' && <div className="mt-6 flex items-center justify-center gap-2 rounded-2xl border bg-muted/30 p-4 text-sm font-bold text-muted-foreground"><Sparkles className="size-4 text-primary" />Answers unlock one by one…</div>}{quiz.status === 'answering' && <div className="mt-6 flex items-center justify-between gap-3"><p className="text-sm font-bold text-muted-foreground">Students are answering on their devices.</p><Button className="rounded-xl" onClick={finishOrNext}>{current + 1 >= questions.length ? 'Finish Quiz' : 'Next Question'}<ChevronRight className="ml-2 size-4" /></Button></div>}</CardContent></Card><Card className="rounded-3xl"><CardHeader><CardTitle className="flex items-center gap-2"><Trophy className="size-5 text-primary" />Live Ranking</CardTitle></CardHeader><CardContent className="space-y-2">{rankedPlayers.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Waiting for players…</p> : rankedPlayers.slice(0,10).map((p,i) => <div key={p.id} className="rounded-xl border p-3"><div className="flex items-center gap-3"><span className="flex size-8 items-center justify-center rounded-lg bg-muted text-xs font-black">{i+1}</span><span className="min-w-0 flex-1 truncate font-bold">{p.nickname}</span><span className="text-sm font-black">{p.score.toLocaleString()}</span></div><div className="mt-2 flex items-center justify-between pl-11 text-[11px] font-semibold text-muted-foreground"><span>{p.correct_answers} correct</span><span>{formatResponseTime(p.total_response_time_ms)}</span></div></div>)}</CardContent></Card></div>}
+    {quiz.status === 'finished' && <Card className="rounded-3xl"><CardContent className="py-16 text-center"><Trophy className="mx-auto size-16 text-primary" /><h2 className="mt-5 text-4xl font-black">Quiz Finished!</h2><div className="mx-auto mt-7 max-w-xl space-y-2">{rankedPlayers.map((p,i) => <div key={p.id} className="flex items-center gap-3 rounded-2xl border p-4 text-left"><span className="flex size-8 items-center justify-center rounded-lg bg-muted text-xs font-black">#{i+1}</span><span className="flex-1 font-bold">{p.nickname}</span><span className="font-black">{p.score.toLocaleString()} pts</span></div>)}</div></CardContent></Card>}
   </div></main>;
+
+  return <main className="min-h-screen bg-gradient-to-b from-background to-primary/[0.04] px-4 py-8 sm:px-6"><div className="mx-auto max-w-5xl space-y-6"><div className="flex items-center gap-4"><Button variant="outline" size="icon" className="rounded-xl" onClick={() => router.push('/dashboard/teacher')}><ArrowLeft className="size-5" /></Button><div><p className="text-xs font-bold uppercase tracking-wider text-primary">Live Quiz Studio</p><h1 className="text-3xl font-black">Create a Live Quiz</h1></div></div>{error && <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm font-medium text-destructive">{error}</div>}<Card className="rounded-3xl"><CardHeader><CardTitle>New Quiz</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><Input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Quiz title" /><select className="h-10 rounded-xl border bg-background px-3 text-sm" value={classCode} onChange={e=>setClassCode(e.target.value)}><option value="">Choose class</option>{classes.map(c=><option key={c.code} value={c.code}>{c.class_name} ({c.code})</option>)}</select><Button className="rounded-xl sm:col-span-2" disabled={loading} onClick={createTemplate}><Plus className="mr-2 size-4" />Create Quiz</Button></CardContent></Card>{templates.length>0 && <Card className="rounded-3xl"><CardHeader><CardTitle>Your Quiz Templates</CardTitle></CardHeader><CardContent className="space-y-2">{templates.map(t=><button key={t.id} onClick={()=>openTemplate(t)} className="flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition hover:bg-muted/40"><div className="flex-1"><p className="font-bold">{t.title}</p><p className="text-xs text-muted-foreground">Class {t.class_code}</p></div><ChevronRight className="size-5" /></button>)}</CardContent></Card>}{selected && <Card className="rounded-3xl"><CardHeader><CardTitle>Build: {selected.title}</CardTitle></CardHeader><CardContent className="space-y-4"><Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Question" /><div className="grid gap-3 sm:grid-cols-2"><Input value={a} onChange={e=>setA(e.target.value)} placeholder="A — answer" /><Input value={b} onChange={e=>setB(e.target.value)} placeholder="B — answer" /><Input value={c} onChange={e=>setC(e.target.value)} placeholder="C — answer" /><Input value={d} onChange={e=>setD(e.target.value)} placeholder="D — answer" /></div><select className="h-10 rounded-xl border bg-background px-3" value={correct} onChange={e=>setCorrect(e.target.value)}><option value="A">Correct: A</option><option value="B">Correct: B</option><option value="C">Correct: C</option><option value="D">Correct: D</option></select><Button className="rounded-xl" onClick={addQuestion}><Plus className="mr-2 size-4" />Add Question</Button><div className="space-y-3">{questions.map((item,i)=><div key={item.id} className="rounded-2xl border bg-card p-4"><div className="flex items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-black text-primary">{i+1}</span><div className="min-w-0 flex-1"><div className="flex items-start gap-3"><p className="flex-1 font-bold leading-6">{item.question}</p><Button type="button" variant="outline" size="icon" title="Delete question" aria-label={`Delete question ${i+1}`} disabled={deletingId === item.id} onClick={()=>deleteQuestion(item)} className="shrink-0 rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive">{deletingId === item.id ? <span className="text-xs font-bold">…</span> : <Trash2 className="size-4" />}</Button></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{[{letter:'A',text:item.option_a},{letter:'B',text:item.option_b},{letter:'C',text:item.option_c},{letter:'D',text:item.option_d}].map(option=>{const isCorrect=option.letter===item.correct_answer;return <div key={option.letter} className={`rounded-xl border p-3 ${isCorrect?'border-green-500/40 bg-green-500/10':'bg-muted/30'}`}><div className="flex items-start gap-2"><span className="font-black">{option.letter}</span><span className="flex-1 text-sm font-medium">{option.text}</span>{isCorrect&&<span className="shrink-0 rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-black uppercase text-green-700 dark:text-green-300">Correct</span>}</div></div>})}</div></div></div></div>)}</div><Button size="lg" className="w-full rounded-xl" disabled={!questions.length||loading} onClick={launchTemplate}><Play className="mr-2 size-5" />Launch Live Quiz</Button></CardContent></Card>}</div></main>;
 }
