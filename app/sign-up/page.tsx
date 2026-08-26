@@ -146,48 +146,36 @@ export default function SignUpPage() {
     if (password !== confirmPassword) { setError('Passwords do not match.'); setLoading(false); return; }
 
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!supabaseUrl || !supabaseAnonKey) throw new Error('Supabase environment variables are missing.');
-
-      const authResponse = await fetch(`${supabaseUrl}/auth/v1/signup`, {
+      const response = await fetch('/api/auth/signup', {
         method: 'POST',
-        headers: { apikey: supabaseAnonKey, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          full_name: fullName,
           email: normalizedEmail,
+          age,
+          birthday: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
+          country: selectedCountry,
+          role,
           password,
-          data: {
-            full_name: fullName,
-            age,
-            birthday: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
-            country: selectedCountry,
-            role,
-          },
         }),
         cache: 'no-store',
       });
 
-      const authData = await authResponse.json().catch(() => ({}));
-      if (!authResponse.ok || !authData.user?.id) {
-        throw new Error(authData.msg || authData.message || authData.error_description || 'Unable to create account.');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.user?.id || !data?.access_token) {
+        throw new Error(String(data?.error || 'Unable to create account.'));
       }
 
-      // The database trigger copies Auth metadata into public.users.
-      // If email confirmation is disabled, keep the session so the user can continue immediately.
-      if (authData.access_token) {
-        localStorage.setItem('supabase_access_token', authData.access_token);
-        localStorage.setItem('current_user', JSON.stringify({
-          id: authData.user.id,
-          fullName,
-          email: normalizedEmail,
-          role,
-          accessToken: authData.access_token,
-        }));
-        router.push(`/dashboard/${role}`);
-      } else {
-        setLoading(false);
-        setError('Account created. Please check your email to confirm your account, then sign in.');
-      }
+      localStorage.setItem('supabase_access_token', data.access_token);
+      localStorage.setItem('current_user', JSON.stringify({
+        id: data.user.id,
+        fullName,
+        email: normalizedEmail,
+        role,
+        accessToken: data.access_token,
+      }));
+
+      router.push(`/dashboard/${role}`);
     } catch (err) {
       console.error('[Signup] Error:', err);
       setError(err instanceof Error ? err.message : 'Unable to connect to cloud database.');
