@@ -195,7 +195,24 @@ export default function TeacherTestsPage() {
 
                   {typeOf(q) === 'multiple_choice' && <div className="space-y-4">
                     <div className="grid gap-3 md:grid-cols-2">{(['a', 'b', 'c', 'd'] as const).map(letter => <div key={letter}><label className="mb-1 block text-sm font-bold">Option {letter.toUpperCase()}</label><Input value={q[`option_${letter}`]} onChange={e => setQ({ ...q, [`option_${letter}`]: e.target.value })} placeholder={`Answer ${letter.toUpperCase()}`} /></div>)}</div>
-                    <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4"><p className="mb-3 text-sm font-bold">Correct Answer</p><p className="mb-3 text-xs text-muted-foreground">Select which option students must choose to receive credit.</p><div className="grid grid-cols-2 gap-2 md:grid-cols-4">{(['A', 'B', 'C', 'D'] as const).map(letter => <Button key={letter} type="button" variant={q.correct_answer === letter ? 'default' : 'outline'} className="h-12" onClick={() => setQ({ ...q, correct_answer: letter })}><span className="mr-2 inline-flex size-6 items-center justify-center rounded-full border">{letter}</span>{q.correct_answer === letter && <Check className="ml-auto size-4" />}</Button>)}</div><p className="mt-3 text-sm font-medium">Selected: <span className="font-bold">{q.correct_answer || 'None'}</span></p></div>
+                    <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4">
+                      <label className="mb-2 block text-sm font-bold">Correct Answer</label>
+                      <p className="mb-3 text-xs text-muted-foreground">Choose the option that will be marked correct when the student submits the test.</p>
+                      <select
+                        value={q.correct_answer || 'A'}
+                        onChange={e => setQ({ ...q, correct_answer: e.target.value })}
+                        className="h-12 w-full rounded-lg border-2 border-primary/30 bg-background px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value="A">A — {q.option_a || 'Option A'}</option>
+                        <option value="B">B — {q.option_b || 'Option B'}</option>
+                        <option value="C">C — {q.option_c || 'Option C'}</option>
+                        <option value="D">D — {q.option_d || 'Option D'}</option>
+                      </select>
+                      <p className="mt-3 flex items-center gap-2 text-sm font-medium">
+                        <Check className="size-4 text-primary" />
+                        Correct answer: <span className="font-bold">{q.correct_answer || 'A'}</span>
+                      </p>
+                    </div>
                   </div>}
 
                   {typeOf(q) === 'true_false' && <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4"><p className="mb-3 text-sm font-bold">Correct Answer</p><div className="grid grid-cols-2 gap-3"><Button type="button" variant={q.correct_answer === 'A' ? 'default' : 'outline'} className="h-14" onClick={() => setQ({ ...q, correct_answer: 'A' })}>True {q.correct_answer === 'A' && <Check className="ml-2 size-4" />}</Button><Button type="button" variant={q.correct_answer === 'B' ? 'default' : 'outline'} className="h-14" onClick={() => setQ({ ...q, correct_answer: 'B' })}>False {q.correct_answer === 'B' && <Check className="ml-2 size-4" />}</Button></div></div>}
