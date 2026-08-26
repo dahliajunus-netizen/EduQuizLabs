@@ -15,6 +15,37 @@ async function createSession(email: string, password: string) {
   return { response, data };
 }
 
+async function updateAuthUser(userId: string, payload: Record<string, unknown>) {
+  return fetch(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    headers: {
+      apikey: supabaseAdminKey!,
+      Authorization: `Bearer ${supabaseAdminKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+}
+
+async function findExistingUser(email: string) {
+  const response = await fetch(`${supabaseUrl}/auth/v1/admin/users?page=1&per_page=1000`, {
+    method: 'GET',
+    headers: {
+      apikey: supabaseAdminKey!,
+      Authorization: `Bearer ${supabaseAdminKey}`,
+    },
+    cache: 'no-store',
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) return null;
+
+  return Array.isArray(data?.users)
+    ? data.users.find((user: any) => String(user?.email || '').trim().toLowerCase() === email)
+    : null;
+}
+
 export async function POST(request: Request) {
   try {
     if (!supabaseUrl || !supabaseAnonKey) {
@@ -48,8 +79,6 @@ export async function POST(request: Request) {
 
     const metadata = { full_name: fullName, age, birthday, country, role };
 
-    // Admin-created users are confirmed immediately, so normal signup does not
-    // depend on confirmation emails or Supabase's email signup rate limit.
     const createResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
       method: 'POST',
       headers: {
@@ -57,12 +86,7 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${supabaseAdminKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: metadata,
-      }),
+      body: JSON.stringify({ email, password, email_confirm: true, user_metadata: metadata }),
       cache: 'no-store',
     });
 
@@ -72,49 +96,32 @@ export async function POST(request: Request) {
       const message = String(createData?.msg || createData?.message || createData?.error_description || '').trim();
       const lower = message.toLowerCase();
 
-      // An older account may have been created before this endpoint started
-      // confirming users automatically. If the person knows the password for
-      // that existing account, confirm it and continue the normal login flow.
       if (createResponse.status === 422 || lower.includes('already') || lower.includes('registered') || lower.includes('exists')) {
-        const usersResponse = await fetch(
-          `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}`,
-          {
-            method: 'GET',
-            headers: {
-              apikey: supabaseAdminKey,
-              Authorization: `Bearer ${supabaseAdminKey}`,
-            },
-            cache: 'no-store',
-          }
-        );
-        const usersData = await usersResponse.json().catch(() => ({}));
-        const existingUser = Array.isArray(usersData?.users)
-          ? usersData.users.find((user: any) => String(user?.email || '').toLowerCase() === email)
-          : null;
+        const existingUser = await findExistingUser(email);
 
         if (existingUser?.id) {
-          // First verify that the submitted password belongs to the existing account.
+          const wasConfirmed = Boolean(existingUser.email_confirmed_at);
+
+          // Password login is blocked while email confirmation is missing.
+          // Temporarily confirm only to verify the submitted password.
+          if (!wasConfirmed) {
+            const confirmResponse = await updateAuthUser(existingUser.id, { email_confirm: true });
+            if (!confirmResponse.ok) {
+              console.error('[Signup API] Could not temporarily confirm existing user:', await confirmResponse.text());
+              return NextResponse.json({ error: 'The existing account could not be verified. Please use Sign in or Forgot password.' }, { status: 409 });
+            }
+          }
+
           const session = await createSession(email, password);
 
           if (session.response.ok && session.data?.access_token && session.data?.user?.id) {
-            // The password is correct, so this is the user's existing account.
-            // Confirm it and refresh its profile metadata without creating a duplicate.
-            const updateResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users/${existingUser.id}`, {
-              method: 'PUT',
-              headers: {
-                apikey: supabaseAdminKey,
-                Authorization: `Bearer ${supabaseAdminKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                email_confirm: true,
-                user_metadata: metadata,
-              }),
-              cache: 'no-store',
+            const updateResponse = await updateAuthUser(existingUser.id, {
+              email_confirm: true,
+              user_metadata: metadata,
             });
 
             if (!updateResponse.ok) {
-              console.error('[Signup API] Existing user confirmation/update failed:', await updateResponse.text());
+              console.error('[Signup API] Existing user metadata update failed:', await updateResponse.text());
             }
 
             return NextResponse.json({
@@ -123,6 +130,13 @@ export async function POST(request: Request) {
               user: session.data.user,
               existing_account: true,
             });
+          }
+
+          if (!wasConfirmed) {
+            const restoreResponse = await updateAuthUser(existingUser.id, { email_confirm: false });
+            if (!restoreResponse.ok) {
+              console.error('[Signup API] Failed to restore unconfirmed state:', await restoreResponse.text());
+            }
           }
 
           return NextResponse.json({
