@@ -32,10 +32,19 @@ export type QuestionFormState = {
   correctAnswer: CorrectAnswer;
 };
 
+// IMPORTANT: these are the values accepted by the Supabase test_questions
+// question_type CHECK constraint. The UI keeps using the friendly names above.
+const toDatabaseQuestionType: Record<QuestionType, string> = {
+  'multiple-choice': 'multiple_choice',
+  'true-false': 'true_false',
+  'fill-blank': 'fill_in_blank',
+  matching: 'matching',
+};
+
 const fromDatabaseQuestionType = (value: string): QuestionType => ({
   'multiple-choice': 'multiple-choice', multiple_choice: 'multiple-choice',
   'true-false': 'true-false', true_false: 'true-false',
-  'fill-blank': 'fill-blank', fill_blank: 'fill-blank',
+  'fill-blank': 'fill-blank', fill_blank: 'fill-blank', fill_in_blank: 'fill-blank',
   matching: 'matching',
 }[value] || 'multiple-choice');
 
@@ -99,16 +108,58 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     if (!open) return;
     setImageError(false);
     setImageMessage('');
-    const existing = String((form as QuestionFormState & { imageUrl?: string }).imageUrl || '');
-    setImageUrl(existing.startsWith('data:image/') ? '' : existing);
-    setImageDataUrl(existing.startsWith('data:image/') ? existing : '');
-  }, [open, form]);
+    const savedUrl = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_url') : '';
+    const savedFile = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_file') : '';
+    setImageUrl(savedUrl || '');
+    setImageDataUrl(savedFile || '');
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const normalized = fromDatabaseQuestionType(String(form.questionType));
     if (normalized !== form.questionType) setForm(prev => ({ ...prev, questionType: normalized }));
   }, [open, form.questionType, setForm]);
+
+  // The parent page builds the test_questions payload. Normalize the value at
+  // the network boundary so fill-blank can never reach Supabase as "fill-blank".
+  useEffect(() => {
+    if (!open || typeof window === 'undefined') return;
+
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const requestUrl = typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+      const isQuestionRequest = requestUrl.includes('/rest/v1/test_questions');
+      if (!isQuestionRequest || !init?.body || typeof init.body !== 'string') {
+        return originalFetch(input, init);
+      }
+
+      try {
+        const parsed = JSON.parse(init.body) as Record<string, unknown>;
+        if (typeof parsed.question_type === 'string') {
+          parsed.question_type = toDatabaseQuestionType[
+            fromDatabaseQuestionType(parsed.question_type)
+          ];
+        }
+
+        return originalFetch(input, {
+          ...init,
+          body: JSON.stringify(parsed),
+        });
+      } catch {
+        return originalFetch(input, init);
+      }
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, [open]);
 
   const matchingAnswers = useMemo(() => pairs.map(p => p.right.trim()).filter(Boolean), [pairs]);
   if (!open) return null;
@@ -154,7 +205,11 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     setImageDataUrl('');
     setImageError(false);
     setImageMessage('');
-    setForm(prev => ({ ...prev, imageUrl: value.trim() } as QuestionFormState));
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem('eduquiz_question_image_file');
+      if (value.trim()) window.sessionStorage.setItem('eduquiz_question_image_url', value.trim());
+      else window.sessionStorage.removeItem('eduquiz_question_image_url');
+    }
   };
 
   const handleImageFile = async (file?: File) => {
@@ -166,23 +221,34 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
       const dataUrl = await fileToDataUrl(file);
       setImageDataUrl(dataUrl);
       setImageUrl('');
-      setForm(prev => ({ ...prev, imageUrl: dataUrl } as QuestionFormState));
+      if (typeof window !== 'undefined') window.sessionStorage.removeItem('eduquiz_question_image_url');
     } catch (e) {
       setImageDataUrl('');
       setImageMessage(e instanceof Error ? e.message : 'Could not use that image.');
-      setForm(prev => ({ ...prev, imageUrl: '' } as QuestionFormState));
+      if (typeof window !== 'undefined') window.sessionStorage.removeItem('eduquiz_question_image_file');
     } finally {
       setImageBusy(false);
     }
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    const currentImage = imageDataUrl || imageUrl.trim();
-    setForm(prev => ({ ...prev, imageUrl: currentImage } as QuestionFormState));
+    if (typeof window !== 'undefined' && imageUrl.trim()) {
+      window.sessionStorage.setItem('eduquiz_question_image_url', imageUrl.trim());
+    }
     onSubmit(e);
+    window.setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem('eduquiz_question_image_url');
+        window.sessionStorage.removeItem('eduquiz_question_image_file');
+      }
+    }, 1000);
   };
 
   const close = () => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem('eduquiz_question_image_url');
+      window.sessionStorage.removeItem('eduquiz_question_image_file');
+    }
     setImageUrl('');
     setImageDataUrl('');
     onClose();
