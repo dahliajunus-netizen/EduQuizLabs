@@ -22,14 +22,14 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-foreground: var(--foreground);
@@ -170,6 +170,67 @@ body {
   .edu-card { @apply rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow duration-200 hover:shadow-md; }
   .edu-glass { @apply border border-white/20 bg-background/75 shadow-lg backdrop-blur-xl; }
   .edu-interactive { @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0; }
+}
+
+/* Mobile usability: keep content inside the viewport, make controls finger-friendly,
+   prevent iOS input zoom, and keep overlays usable on small screens. */
+@media (max-width: 640px) {
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  button,
+  [role='button'] {
+    min-height: 44px;
+  }
+
+  input,
+  select,
+  textarea {
+    max-width: 100%;
+    font-size: 16px !important;
+  }
+
+  img,
+  video,
+  iframe {
+    max-width: 100%;
+  }
+
+  table {
+    max-width: 100%;
+  }
+
+  /* Fixed modal/overlay content should scroll instead of being cut off by the viewport. */
+  .fixed.inset-0 > * {
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* Give bottom-fixed controls enough room around phone safe areas. */
+  footer.fixed.bottom-0 {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Avoid accidental horizontal overflow from long URLs/codes. */
+  p,
+  h1,
+  h2,
+  h3,
+  h4,
+  span,
+  a,
+  code {
+    overflow-wrap: anywhere;
+  }
 }
 
 @keyframes toggle-pop {
