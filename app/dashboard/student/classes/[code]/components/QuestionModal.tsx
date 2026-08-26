@@ -32,13 +32,6 @@ export type QuestionFormState = {
   correctAnswer: CorrectAnswer;
 };
 
-const toDatabaseQuestionType: Record<QuestionType, string> = {
-  'multiple-choice': 'multiple_choice',
-  'true-false': 'true_false',
-  'fill-blank': 'fill_blank',
-  matching: 'matching',
-};
-
 const fromDatabaseQuestionType = (value: string): QuestionType => ({
   'multiple-choice': 'multiple-choice', multiple_choice: 'multiple-choice',
   'true-false': 'true-false', true_false: 'true-false',
@@ -57,13 +50,6 @@ function readPairs(value: string): MatchPair[] {
   } catch {}
   return [{ left: value, right: '' }];
 }
-
-const clearStoredImage = () => {
-  if (typeof window !== 'undefined') {
-    window.sessionStorage.removeItem('eduquiz_question_image_url');
-    window.sessionStorage.removeItem('eduquiz_question_image_file');
-  }
-};
 
 async function fileToDataUrl(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) throw new Error('Please choose an image file.');
@@ -113,59 +99,16 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     if (!open) return;
     setImageError(false);
     setImageMessage('');
-    const savedUrl = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_url') : '';
-    const savedFile = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_file') : '';
-    setImageUrl(savedUrl || '');
-    setImageDataUrl(savedFile || '');
-  }, [open]);
+    const existing = String((form as QuestionFormState & { imageUrl?: string }).imageUrl || '');
+    setImageUrl(existing.startsWith('data:image/') ? '' : existing);
+    setImageDataUrl(existing.startsWith('data:image/') ? existing : '');
+  }, [open, form]);
 
   useEffect(() => {
     if (!open) return;
     const normalized = fromDatabaseQuestionType(String(form.questionType));
     if (normalized !== form.questionType) setForm(prev => ({ ...prev, questionType: normalized }));
   }, [open, form.questionType, setForm]);
-
-  // Important: use the current React image state directly when the question is saved.
-  // The old implementation depended on sessionStorage, which could fail for larger images
-  // because browsers impose small storage quotas. This interceptor injects the current image
-  // into the actual test_questions request body instead.
-  useEffect(() => {
-    const originalFetch = window.fetch.bind(window);
-    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-      if (!requestUrl.includes('/rest/v1/test_questions') || !init?.body || typeof init.body !== 'string') {
-        return originalFetch(input, init);
-      }
-      try {
-        const parsed = JSON.parse(init.body) as Record<string, unknown>;
-        if (typeof parsed.question_type === 'string') {
-          parsed.question_type = toDatabaseQuestionType[fromDatabaseQuestionType(parsed.question_type)];
-        }
-
-        const currentImage = imageDataUrl.trim() || imageUrl.trim();
-        if (currentImage) {
-          const existingAnswerData = parsed.answer_data && typeof parsed.answer_data === 'object' && !Array.isArray(parsed.answer_data)
-            ? parsed.answer_data as Record<string, unknown>
-            : {};
-          parsed.answer_data = { ...existingAnswerData, image_url: currentImage };
-        } else if (parsed.answer_data && typeof parsed.answer_data === 'object' && !Array.isArray(parsed.answer_data)) {
-          const existingAnswerData = parsed.answer_data as Record<string, unknown>;
-          const nextAnswerData = { ...existingAnswerData };
-          delete nextAnswerData.image_url;
-          parsed.answer_data = nextAnswerData;
-        }
-        delete parsed.image_url;
-
-        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });
-      } catch {
-        return originalFetch(input, init);
-      }
-    };
-
-    return () => {
-      window.fetch = originalFetch;
-    };
-  }, [imageDataUrl, imageUrl]);
 
   const matchingAnswers = useMemo(() => pairs.map(p => p.right.trim()).filter(Boolean), [pairs]);
   if (!open) return null;
@@ -211,11 +154,7 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     setImageDataUrl('');
     setImageError(false);
     setImageMessage('');
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.removeItem('eduquiz_question_image_file');
-      if (value.trim()) window.sessionStorage.setItem('eduquiz_question_image_url', value.trim());
-      else window.sessionStorage.removeItem('eduquiz_question_image_url');
-    }
+    setForm(prev => ({ ...prev, imageUrl: value.trim() } as QuestionFormState));
   };
 
   const handleImageFile = async (file?: File) => {
@@ -227,31 +166,23 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
       const dataUrl = await fileToDataUrl(file);
       setImageDataUrl(dataUrl);
       setImageUrl('');
-      // Do not store the image itself in sessionStorage. Large data URLs can exceed
-      // browser storage limits. React state is enough because the save interceptor above
-      // uses the current imageDataUrl directly.
-      if (typeof window !== 'undefined') window.sessionStorage.removeItem('eduquiz_question_image_url');
+      setForm(prev => ({ ...prev, imageUrl: dataUrl } as QuestionFormState));
     } catch (e) {
       setImageDataUrl('');
       setImageMessage(e instanceof Error ? e.message : 'Could not use that image.');
-      if (typeof window !== 'undefined') window.sessionStorage.removeItem('eduquiz_question_image_file');
+      setForm(prev => ({ ...prev, imageUrl: '' } as QuestionFormState));
     } finally {
       setImageBusy(false);
     }
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    // Keep the URL fallback for compatibility, but the uploaded file is now sent
-    // directly from imageDataUrl by the fetch interceptor above.
-    if (typeof window !== 'undefined' && imageUrl.trim()) {
-      window.sessionStorage.setItem('eduquiz_question_image_url', imageUrl.trim());
-    }
+    const currentImage = imageDataUrl || imageUrl.trim();
+    setForm(prev => ({ ...prev, imageUrl: currentImage } as QuestionFormState));
     onSubmit(e);
-    window.setTimeout(clearStoredImage, 1000);
   };
 
   const close = () => {
-    clearStoredImage();
     setImageUrl('');
     setImageDataUrl('');
     onClose();
