@@ -32,8 +32,6 @@
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
@@ -45,8 +43,6 @@
   --radius-2xl: calc(var(--radius) * 1.7);
   --radius-3xl: calc(var(--radius) * 2.1);
   --radius-4xl: calc(var(--radius) * 2.5);
-
-  /* Keep legacy blue utilities visually consistent with the site's primary blue. */
   --color-blue-50: color-mix(in oklch, var(--primary) 6%, white);
   --color-blue-100: color-mix(in oklch, var(--primary) 12%, white);
   --color-blue-200: color-mix(in oklch, var(--primary) 24%, white);
@@ -109,7 +105,7 @@
   --secondary: oklch(0.26 0.03 245);
   --secondary-foreground: oklch(0.95 0.01 235);
   --muted: oklch(0.255 0.025 245);
-  --muted-foreground: oklch(0.7 0.03 235);
+  --muted-foreground: oklch(0.7 0.03 245);
   --accent: oklch(0.28 0.055 235);
   --accent-foreground: oklch(0.96 0.01 235);
   --destructive: oklch(0.68 0.19 22);
@@ -141,6 +137,30 @@
   }
   ::selection { background: color-mix(in oklch, var(--primary) 22%, transparent); color: var(--foreground); }
   button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+}
+
+/* Keep Google's translation engine working, but hide its injected top bar and popups. */
+.goog-te-banner-frame.skiptranslate,
+iframe.goog-te-banner-frame,
+body > .skiptranslate {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+}
+
+#goog-gt-tt,
+.goog-tooltip,
+.goog-tooltip:hover,
+.goog-te-balloon-frame,
+.goog-te-spinner-pos {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+html,
+body {
+  top: 0 !important;
+  margin-top: 0 !important;
 }
 
 @layer utilities {
