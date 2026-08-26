@@ -143,8 +143,18 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
         }
 
         const currentImage = imageDataUrl.trim() || imageUrl.trim();
-        if (currentImage) parsed.image_url = currentImage;
-        else delete parsed.image_url;
+        if (currentImage) {
+          const existingAnswerData = parsed.answer_data && typeof parsed.answer_data === 'object' && !Array.isArray(parsed.answer_data)
+            ? parsed.answer_data as Record<string, unknown>
+            : {};
+          parsed.answer_data = { ...existingAnswerData, image_url: currentImage };
+        } else if (parsed.answer_data && typeof parsed.answer_data === 'object' && !Array.isArray(parsed.answer_data)) {
+          const existingAnswerData = parsed.answer_data as Record<string, unknown>;
+          const nextAnswerData = { ...existingAnswerData };
+          delete nextAnswerData.image_url;
+          parsed.answer_data = nextAnswerData;
+        }
+        delete parsed.image_url;
 
         return originalFetch(input, { ...init, body: JSON.stringify(parsed) });
       } catch {
