@@ -47,30 +47,58 @@ export function LoginForm() {
 
       const authResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
         method: 'POST',
-        headers: { apikey: supabaseAnonKey, 'Content-Type': 'application/json' },
+        headers: {
+          apikey: supabaseAnonKey,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ email, password }),
         cache: 'no-store',
       });
+
       const authData = await authResponse.json().catch(() => ({}));
 
       if (!authResponse.ok || !authData.access_token || !authData.user?.id) {
-        setError(authData.error_description === 'Email not confirmed' ? 'Please confirm your email before signing in.' : 'Invalid email or password.');
+        const authMessage = String(
+          authData.error_description || authData.message || authData.msg || authData.error || ''
+        ).trim();
+        const lowerMessage = authMessage.toLowerCase();
+
+        if (lowerMessage.includes('email not confirmed') || lowerMessage.includes('confirm your email') || lowerMessage.includes('email_confirmed')) {
+          setError('Please confirm your email before signing in. Check your inbox and spam folder.');
+        } else if (lowerMessage.includes('invalid login credentials') || lowerMessage.includes('invalid email or password')) {
+          setError('Invalid email or password. Make sure you are using the same email and password you used when creating the account.');
+        } else if (authMessage) {
+          console.error('[Login] Supabase Auth error:', authData);
+          setError(`Sign in failed: ${authMessage}`);
+        } else {
+          console.error('[Login] Supabase Auth error:', authResponse.status, authData);
+          setError('Sign in failed. Please check your email and password, then try again.');
+        }
+
         setSubmitting(false);
         return;
       }
 
       const userId = String(authData.user.id);
-      const profileResponse = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${encodeURIComponent(userId)}&select=id,full_name,email,role`, {
-        method: 'GET',
-        headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${authData.access_token}`, 'Content-Type': 'application/json' },
-        cache: 'no-store',
-      });
+      const profileResponse = await fetch(
+        `${supabaseUrl}/rest/v1/users?id=eq.${encodeURIComponent(userId)}&select=id,full_name,email,role`,
+        {
+          method: 'GET',
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${authData.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          cache: 'no-store',
+        }
+      );
+
       const profiles = await profileResponse.json().catch(() => []);
       const profile = Array.isArray(profiles) ? profiles[0] : null;
 
       if (!profileResponse.ok || !profile) {
         console.error('[Login] Auth succeeded but profile was not found:', profiles);
-        setError('Your account is missing its profile. Please contact the administrator.');
+        setError('Your account was authenticated, but its profile was not found. Please run the profile trigger SQL or contact the administrator.');
         setSubmitting(false);
         return;
       }
