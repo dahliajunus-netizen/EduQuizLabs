@@ -33,10 +33,12 @@ export type QuestionFormState = {
   imageUrl?: string;
 };
 
+// IMPORTANT: these values must match the test_questions.question_type
+// CHECK constraint used by the current EduQuizLabs database.
 const toDatabaseQuestionType: Record<QuestionType, string> = {
   'multiple-choice': 'multiple_choice',
   'true-false': 'true_false',
-  'fill-blank': 'fill_in_blank',
+  'fill-blank': 'fill_blank',
   matching: 'matching',
 };
 
@@ -198,10 +200,6 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     setImageError(false);
     try {
       const dataUrl = await fileToDataUrl(file);
-      // The old implementation only kept the selected file in component state.
-      // The parent never received it, so saving the question discarded the image.
-      // Put the processed image directly into the shared form state so saveQuestion
-      // persists it in test_questions.answer_data.image_url.
       setImageDataUrl(dataUrl);
       setImageUrl('');
       setForm(prev => ({ ...prev, imageUrl: dataUrl }));
@@ -241,43 +239,5 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     onClose();
   };
 
-  const displayedImage = imageDataUrl || imageUrl.trim() || String(form.imageUrl || '').trim();
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-      <Card className="max-h-[90vh] w-full max-w-3xl overflow-y-auto">
-        <CardHeader className="flex flex-row items-start justify-between border-b">
-          <div><CardTitle>{editing ? 'Edit Question' : 'Add Question'}</CardTitle><p className="mt-1 text-sm text-muted-foreground">Choose a question type and build it below.</p></div>
-          <Button type="button" variant="ghost" size="sm" onClick={close} disabled={busy}><X /></Button>
-        </CardHeader>
-        <CardContent className="pt-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div><label className="text-sm font-semibold">Question type</label><div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">{([['multiple-choice','Multiple Choice'],['true-false','True / False'],['fill-blank','Fill in the Blank'],['matching','Matching']] as const).map(([value,label]) => <button key={value} type="button" disabled={busy} onClick={() => setType(value)} className={`rounded-lg border p-3 text-sm font-medium transition ${form.questionType === value ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-accent'}`}>{label}</button>)}</div></div>
-            <div><label className="text-sm font-semibold">Question</label><textarea className="mt-2 min-h-24 w-full rounded-lg border bg-background p-3 outline-none focus:ring-2 focus:ring-primary" placeholder="Write your question..." rows={3} value={form.questionText} onChange={e => setForm(prev => ({ ...prev, questionText: e.target.value }))} required disabled={busy}/></div>
-
-            <section className="rounded-xl border bg-muted/20 p-4">
-              <div className="flex items-center gap-2"><ImageIcon className="size-5 text-primary"/><div><h3 className="font-semibold">Question image</h3><p className="text-xs text-muted-foreground">Optional — paste an image URL or drop an image file here.</p></div></div>
-              <div className={`mt-3 rounded-xl border-2 border-dashed p-5 text-center transition ${draggingImage ? 'border-primary bg-primary/10' : 'border-muted-foreground/25 bg-background hover:border-primary/50'}`} onDragOver={e => { e.preventDefault(); if (!busy && !imageBusy) setDraggingImage(true); }} onDragLeave={() => setDraggingImage(false)} onDrop={e => { e.preventDefault(); setDraggingImage(false); if (!busy && !imageBusy) void handleImageFile(e.dataTransfer.files?.[0]); }}>
-                <input id="question-image-file" type="file" accept="image/*" className="hidden" disabled={busy || imageBusy} onChange={e => { void handleImageFile(e.target.files?.[0]); e.currentTarget.value = ''; }} />
-                {imageBusy ? <><Loader2 className="mx-auto size-8 animate-spin text-primary"/><p className="mt-2 text-sm font-semibold">Processing image…</p></> : <><Upload className="mx-auto size-8 text-primary"/><p className="mt-2 text-sm font-semibold">Drag & drop an image here</p><p className="mt-1 text-xs text-muted-foreground">or</p><label htmlFor="question-image-file" className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border bg-background px-4 py-2 text-sm font-semibold hover:bg-accent"><FileImage className="size-4"/>Choose image file</label><p className="mt-2 text-[11px] text-muted-foreground">PNG, JPG, GIF, WebP • maximum 8 MB</p></>}
-              </div>
-              <div className="my-3 flex items-center gap-3"><div className="h-px flex-1 bg-border"/><span className="text-xs font-medium text-muted-foreground">OR IMAGE URL</span><div className="h-px flex-1 bg-border"/></div>
-              <Input type="url" value={imageUrl} onChange={e => handleImageUrlChange(e.target.value)} placeholder="https://example.com/question-image.jpg" disabled={busy || imageBusy}/>
-              {imageMessage && <p className="mt-2 text-sm text-destructive">{imageMessage}</p>}
-              {displayedImage && !imageError && <div className="mt-3 overflow-hidden rounded-lg border bg-background p-2"><img src={displayedImage} alt="Question preview" className="max-h-64 max-w-full rounded object-contain" onError={() => setImageError(true)}/><p className="mt-2 text-xs text-muted-foreground">Preview</p></div>}
-              {displayedImage && imageError && <p className="mt-2 text-sm text-destructive">That image could not be loaded. Check the file or URL and try again.</p>}
-            </section>
-
-            {form.questionType === 'multiple-choice' && <section className="space-y-3"><label className="text-sm font-semibold">Answer choices</label>{(['A','B','C','D'] as const).map(letter => <div key={letter} className="flex items-center gap-2"><span className="flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold">{letter}</span><Input value={form[`option${letter}` as 'optionA'|'optionB'|'optionC'|'optionD']} onChange={e => setForm(prev => ({ ...prev, [`option${letter}`]: e.target.value }))} placeholder={`Option ${letter}`} required disabled={busy}/></div>)}</section>}
-            {form.questionType === 'true-false' && <section className="space-y-3"><label className="text-sm font-semibold">Correct answer</label><div className="grid grid-cols-2 gap-3"><button type="button" className={`rounded-lg border p-3 ${form.correctAnswer === 'A' ? 'border-primary bg-primary/10 text-primary' : ''}`} onClick={() => setCorrect('A')}>True</button><button type="button" className={`rounded-lg border p-3 ${form.correctAnswer === 'B' ? 'border-primary bg-primary/10 text-primary' : ''}`} onClick={() => setCorrect('B')}>False</button></div></section>}
-            {form.questionType === 'fill-blank' && <section className="space-y-2"><label className="text-sm font-semibold">Correct answer</label><Input value={form.optionA} onChange={e => setForm(prev => ({ ...prev, optionA: e.target.value }))} placeholder="Enter the correct answer" required disabled={busy}/></section>}
-            {form.questionType === 'matching' && <section className="space-y-3"><div className="flex items-center justify-between"><label className="text-sm font-semibold">Matching pairs</label><Button type="button" variant="outline" size="sm" onClick={addPair}><Plus className="mr-1 size-4"/>Add pair</Button></div>{pairs.map((pair,index) => <div key={index} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]"><Input value={pair.left} onChange={e => updatePair(index,'left',e.target.value)} placeholder="Left side"/><Input value={pair.right} onChange={e => updatePair(index,'right',e.target.value)} placeholder="Right side"/><Button type="button" variant="ghost" size="icon" onClick={() => removePair(index)}><Trash2 className="size-4"/></Button></div>)}</section>}
-
-            {message && <p className="text-sm text-destructive">{message}</p>}
-            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={close} disabled={busy}>Cancel</Button><Button type="submit" disabled={busy || imageBusy}>{busy ? <Loader2 className="mr-2 size-4 animate-spin"/> : null}{editing ? 'Save Changes' : 'Add Question'}</Button></div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4"><div className="mx-auto my-6 w-full max-w-3xl"><Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle>{editing ? 'Edit Question' : 'Add Question'}</CardTitle><Button type="button" variant="ghost" size="icon" onClick={close}><X className="size-4"/></Button></CardHeader><CardContent><form onSubmit={handleSubmit} className="space-y-5"><div><label className="mb-2 block text-sm font-medium">Question type</label><div className="grid grid-cols-2 gap-2 md:grid-cols-4">{(['multiple-choice','true-false','fill-blank','matching'] as QuestionType[]).map(type=><Button key={type} type="button" variant={form.questionType===type?'default':'outline'} onClick={()=>setType(type)}>{type==='multiple-choice'?'Multiple Choice':type==='true-false'?'True / False':type==='fill-blank'?'Fill in the Blank':'Matching'}</Button>)}</div></div><div><label className="mb-2 block text-sm font-medium">Question</label><textarea className="min-h-28 w-full rounded border bg-background p-3" value={form.questionText} onChange={e=>setForm(prev=>({...prev,questionText:e.target.value}))} placeholder="Write the question..." required/></div><div className="rounded-lg border p-4"><div className="mb-3 flex items-center gap-2"><ImageIcon className="size-4"/><span className="font-medium">Question image</span></div><Input value={imageUrl} onChange={e=>handleImageUrlChange(e.target.value)} placeholder="Paste image URL (optional)"/><div className="mt-2 flex items-center gap-2"><label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm"><Upload className="size-4"/>Upload image<input type="file" accept="image/*" className="hidden" onChange={e=>void handleImageFile(e.target.files?.[0])}/></label>{imageBusy&&<Loader2 className="size-4 animate-spin"/>}{imageDataUrl&&<FileImage className="size-4 text-green-600"/>}</div>{imageMessage&&<p className="mt-2 text-sm text-destructive">{imageMessage}</p>}{(imageDataUrl||imageUrl)&&<img src={imageDataUrl||imageUrl} alt="Question preview" className="mt-3 max-h-64 max-w-full rounded border object-contain" onError={()=>setImageError(true)}/>} {imageError&&<p className="mt-2 text-sm text-destructive">Image could not be loaded.</p>}</div>{form.questionType==='multiple-choice'&&<div className="grid gap-3 md:grid-cols-2">{(['A','B','C','D'] as const).map(letter=><div key={letter}><label className="mb-1 block text-sm font-medium">Option {letter}</label><Input value={form[`option${letter}`]} onChange={e=>setForm(prev=>({...prev,[`option${letter}`]:e.target.value}))} required placeholder={`Option ${letter}`}/></div>)}</div>}{form.questionType==='true-false'&&<div><p className="mb-2 text-sm font-medium">Correct answer</p><div className="flex gap-2"><Button type="button" variant={form.correctAnswer==='A'?'default':'outline'} onClick={()=>setCorrect('A')}>True</Button><Button type="button" variant={form.correctAnswer==='B'?'default':'outline'} onClick={()=>setCorrect('B')}>False</Button></div></div>}{form.questionType==='fill-blank'&&<div><label className="mb-2 block text-sm font-medium">Correct answer</label><Input value={form.optionA} onChange={e=>setForm(prev=>({...prev,optionA:e.target.value,correctAnswer:'A'}))} placeholder="The answer students should enter" required/></div>}{form.questionType==='matching'&&<div className="space-y-3"><p className="text-sm font-medium">Matching pairs</p>{pairs.map((pair,index)=><div key={index} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]"><Input value={pair.left} onChange={e=>updatePair(index,'left',e.target.value)} placeholder={`Left ${index+1}`}/><Input value={pair.right} onChange={e=>updatePair(index,'right',e.target.value)} placeholder={`Match ${index+1}`}/><Button type="button" variant="ghost" size="icon" onClick={()=>removePair(index)}><Trash2 className="size-4"/></Button></div>)}<Button type="button" variant="outline" onClick={addPair}><Plus className="mr-2 size-4"/>Add pair</Button></div>} {message&&<p className="text-sm text-destructive">{message}</p>}<div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={close}>Cancel</Button><Button type="submit" disabled={busy||imageBusy}>{busy?<Loader2 className="mr-2 size-4 animate-spin"/>:'Save Question'}</Button></div></form></CardContent></Card></div></div>;
 }
