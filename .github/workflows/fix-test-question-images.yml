@@ -14,94 +14,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Apply image persistence and display fixes
+      - name: Remove Gemini moderation and nickname checker
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          # Save uploaded/URL images inside answer_data so this works even when
-          # the database table does not have an image_url column.
+          # Remove the Gemini nickname moderation API.
+          nickname = Path('app/api/moderate-nickname/route.ts')
+          if nickname.exists():
+              nickname.unlink()
+
+          # Remove the remaining Gemini material-link checker from the class page.
+          p = Path('app/dashboard/student/classes/[code]/page.tsx')
+          s = p.read_text()
+          s = s.replace("  const [linkCheckStatus, setLinkCheckStatus] = useState<'idle' | 'checking' | 'safe' | 'unsafe' | 'error'>('idle');\n", '')
+          s = s.replace("  const [linkCheckReason, setLinkCheckReason] = useState('');\n", '')
+
+          start = "  async function checkMaterialLink(value: string) {"
+          if start in s:
+              a = s.index(start)
+              b = s.index("\n  async function addItem", a)
+              s = s[:a] + s[b:]
+
+          s = s.replace(" if (!(await checkMaterialLink(materialLink))) return;", '')
+          s = s.replace(" setLinkCheckStatus('idle'); setLinkCheckReason('');", '')
+          s = s.replace("setLinkCheckStatus('idle'); ", '')
+          s = s.replace("setLinkCheckReason(''); ", '')
+          s = s.replace("setLinkCheckStatus('idle')", '')
+          s = s.replace("setLinkCheckReason('')", '')
+
+          old_ui = '''{addType === 'material' ? <><Input placeholder=\"Material name\" value={materialName} onChange={e => { setMaterialName(e.target.value); setLinkCheckStatus('idle'); }} required /><Input type=\"url\" placeholder=\"https://...\" value={materialLink} onChange={e => { setMaterialLink(e.target.value); setLinkCheckStatus('idle'); setLinkCheckReason(''); }} required />{materialLink && validUrl(materialLink) && <div className=\"rounded-md border bg-muted/30 p-3 text-sm\">{linkCheckStatus === 'idle' && <span className=\"text-muted-foreground\">Gemini Link Safety will automatically check this link when you press Add.</span>}{linkCheckStatus === 'checking' && <span>Gemini is checking this link...</span>}{linkCheckStatus === 'safe' && <span className=\"text-green-600\">✓ {linkCheckReason}</span>}{(linkCheckStatus === 'unsafe' || linkCheckStatus === 'error') && <span className=\"text-red-600\">✕ {linkCheckReason}</span>}</div>}</> :'''
+          new_ui = '''{addType === 'material' ? <><Input placeholder=\"Material name\" value={materialName} onChange={e => setMaterialName(e.target.value)} required /><Input type=\"url\" placeholder=\"https://...\" value={materialLink} onChange={e => setMaterialLink(e.target.value)} required /> :'''
+          if old_ui in s:
+              s = s.replace(old_ui, new_ui, 1)
+          p.write_text(s)
+
+          # Keep the existing test-question image fixes.
           p = Path('app/dashboard/student/classes/[code]/components/QuestionModal.tsx')
           s = p.read_text()
-          old = '''        const currentImage = imageDataUrl.trim() || imageUrl.trim();
-        if (currentImage) parsed.image_url = currentImage;
-        else delete parsed.image_url;
-
-        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });'''
-          new = '''        const currentImage = imageDataUrl.trim() || imageUrl.trim();
-        if (currentImage) {
-          const existingAnswerData = parsed.answer_data && typeof parsed.answer_data === 'object' && !Array.isArray(parsed.answer_data)
-            ? parsed.answer_data as Record<string, unknown>
-            : {};
-          parsed.answer_data = { ...existingAnswerData, image_url: currentImage };
-        } else if (parsed.answer_data && typeof parsed.answer_data === 'object' && !Array.isArray(parsed.answer_data)) {
-          const existingAnswerData = parsed.answer_data as Record<string, unknown>;
-          const nextAnswerData = { ...existingAnswerData };
-          delete nextAnswerData.image_url;
-          parsed.answer_data = nextAnswerData;
-        }
-        delete parsed.image_url;
-
-        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });'''
+          old = '''        const currentImage = imageDataUrl.trim() || imageUrl.trim();\n        if (currentImage) parsed.image_url = currentImage;\n        else delete parsed.image_url;\n\n        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });'''
+          new = '''        const currentImage = imageDataUrl.trim() || imageUrl.trim();\n        if (currentImage) {\n          const existingAnswerData = parsed.answer_data && typeof parsed.answer_data === 'object' && !Array.isArray(parsed.answer_data)\n            ? parsed.answer_data as Record<string, unknown>\n            : {};\n          parsed.answer_data = { ...existingAnswerData, image_url: currentImage };\n        } else if (parsed.answer_data && typeof parsed.answer_data === 'object' && !Array.isArray(parsed.answer_data)) {\n          const existingAnswerData = parsed.answer_data as Record<string, unknown>;\n          const nextAnswerData = { ...existingAnswerData };\n          delete nextAnswerData.image_url;\n          parsed.answer_data = nextAnswerData;\n        }\n        delete parsed.image_url;\n\n        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });'''
           if old in s:
               s = s.replace(old, new, 1)
-          p.write_text(s)
-
-          # Expose image fields to the TypeScript question model.
-          p = Path('app/dashboard/student/classes/[code]/components/types.ts')
-          s = p.read_text()
-          old = '''  correct_answer: 'A' | 'B' | 'C' | 'D';
-  points: number;
-};'''
-          new = '''  correct_answer: 'A' | 'B' | 'C' | 'D';
-  points: number;
-  image_url?: string | null;
-  answer_data?: Record<string, unknown> | null;
-};'''
-          if old in s:
-              s = s.replace(old, new, 1)
-          p.write_text(s)
-
-          # Show saved images in the teacher's question list.
-          p = Path('app/dashboard/student/classes/[code]/components/TestsSection.tsx')
-          s = p.read_text()
-          marker = '''</div>{type==='multiple-choice'&&<div className="mt-2 grid gap-1 text-sm text-muted-foreground md:grid-cols-2">'''
-          replacement = '''</div>{(question.image_url || (question.answer_data as any)?.image_url) && <img src={String(question.image_url || (question.answer_data as any)?.image_url)} alt="Question illustration" className="mt-3 max-h-64 max-w-full rounded-xl border object-contain" />}{type==='multiple-choice'&&<div className="mt-2 grid gap-1 text-sm text-muted-foreground md:grid-cols-2">'''
-          if marker in s:
-              s = s.replace(marker, replacement, 1)
-          p.write_text(s)
-
-          # Show saved images while taking and reviewing a test.
-          p = Path('app/dashboard/student/tests/[id]/page.tsx')
-          s = p.read_text()
-          old = '''type Question={id:string;test_id:string;question_order:number;question:string;question_type?:string|null;option_a:string;option_b:string;option_c:string;option_d:string;correct_answer:string;points:number};'''
-          new = '''type Question={id:string;test_id:string;question_order:number;question:string;question_type?:string|null;option_a:string;option_b:string;option_c:string;option_d:string;correct_answer:string;points:number;image_url?:string|null;answer_data?:Record<string,unknown>|null};'''
-          if old in s:
-              s = s.replace(old, new, 1)
-          old = '''function publicDescription(d:string|null){return(d||'').replace(/^\\[\\[EQ_PASSWORD:[^\\]]+\\]\\]\\s*/,'');}'''
-          new = '''function publicDescription(d:string|null){return(d||'').replace(/^\\[\\[EQ_PASSWORD:[^\\]]+\\]\\]\\s*/,'');}
-function questionImage(q:Question){return String(q.image_url||((q.answer_data as any)?.image_url)||'').trim();}'''
-          if old in s:
-              s = s.replace(old, new, 1)
-          marker = '''<CardTitle className="text-lg">{i+1}. {q.question}</CardTitle><p className={`text-sm font-medium ${isCorrect?'text-green-600':'text-red-600'}`}>'''
-          replacement = '''<CardTitle className="text-lg">{i+1}. {q.question}</CardTitle>{questionImage(q)&&<img src={questionImage(q)} alt="Question illustration" className="mt-3 max-h-80 w-full rounded-xl border object-contain" />}<p className={`text-sm font-medium ${isCorrect?'text-green-600':'text-red-600'}`}>'''
-          if marker in s:
-              s = s.replace(marker, replacement, 1)
-          marker = '''<CardTitle className="text-lg">{i+1}. {q.question}</CardTitle></CardHeader><CardContent className="space-y-3">'''
-          replacement = '''<CardTitle className="text-lg">{i+1}. {q.question}</CardTitle>{questionImage(q)&&<img src={questionImage(q)} alt="Question illustration" className="mt-3 max-h-80 w-full rounded-xl border object-contain" />}</CardHeader><CardContent className="space-y-3">'''
-          if marker in s:
-              s = s.replace(marker, replacement, 1)
           p.write_text(s)
           PY
 
-      - name: Commit and remove temporary workflow
+      - name: Commit changes and remove temporary workflow
         shell: bash
         run: |
           rm -f .github/workflows/fix-test-question-images.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app/dashboard/student/classes/[code]/components/QuestionModal.tsx app/dashboard/student/classes/[code]/components/types.ts app/dashboard/student/classes/[code]/components/TestsSection.tsx app/dashboard/student/tests/[id]/page.tsx .github/workflows/fix-test-question-images.yml
+          git add -A
           git diff --cached --quiet && exit 0
-          git commit -m 'fix: persist and display test question images'
+          git commit -m 'remove Gemini moderation features'
           git push
