@@ -30,10 +30,9 @@ export type QuestionFormState = {
   optionD: string;
   questionType: QuestionType;
   correctAnswer: CorrectAnswer;
+  imageUrl?: string;
 };
 
-// IMPORTANT: these are the values accepted by the Supabase test_questions
-// question_type CHECK constraint. The UI keeps using the friendly names above.
 const toDatabaseQuestionType: Record<QuestionType, string> = {
   'multiple-choice': 'multiple_choice',
   'true-false': 'true_false',
@@ -108,10 +107,12 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     if (!open) return;
     setImageError(false);
     setImageMessage('');
+    const formImage = typeof form.imageUrl === 'string' ? form.imageUrl : '';
     const savedUrl = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_url') : '';
     const savedFile = typeof window !== 'undefined' ? window.sessionStorage.getItem('eduquiz_question_image_file') : '';
-    setImageUrl(savedUrl || '');
-    setImageDataUrl(savedFile || '');
+    const restored = formImage || savedUrl || savedFile || '';
+    setImageUrl(restored.startsWith('data:') ? '' : restored);
+    setImageDataUrl(restored.startsWith('data:') ? restored : '');
   }, [open]);
 
   useEffect(() => {
@@ -120,45 +121,22 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     if (normalized !== form.questionType) setForm(prev => ({ ...prev, questionType: normalized }));
   }, [open, form.questionType, setForm]);
 
-  // The parent page builds the test_questions payload. Normalize the value at
-  // the network boundary so fill-blank can never reach Supabase as "fill-blank".
   useEffect(() => {
     if (!open || typeof window === 'undefined') return;
-
     const originalFetch = window.fetch.bind(window);
-
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const requestUrl = typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
-
+      const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
       const isQuestionRequest = requestUrl.includes('/rest/v1/test_questions');
-      if (!isQuestionRequest || !init?.body || typeof init.body !== 'string') {
-        return originalFetch(input, init);
-      }
-
+      if (!isQuestionRequest || !init?.body || typeof init.body !== 'string') return originalFetch(input, init);
       try {
         const parsed = JSON.parse(init.body) as Record<string, unknown>;
-        if (typeof parsed.question_type === 'string') {
-          parsed.question_type = toDatabaseQuestionType[
-            fromDatabaseQuestionType(parsed.question_type)
-          ];
-        }
-
-        return originalFetch(input, {
-          ...init,
-          body: JSON.stringify(parsed),
-        });
+        if (typeof parsed.question_type === 'string') parsed.question_type = toDatabaseQuestionType[fromDatabaseQuestionType(parsed.question_type)];
+        return originalFetch(input, { ...init, body: JSON.stringify(parsed) });
       } catch {
         return originalFetch(input, init);
       }
     };
-
-    return () => {
-      window.fetch = originalFetch;
-    };
+    return () => { window.fetch = originalFetch; };
   }, [open]);
 
   const matchingAnswers = useMemo(() => pairs.map(p => p.right.trim()).filter(Boolean), [pairs]);
@@ -205,6 +183,7 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     setImageDataUrl('');
     setImageError(false);
     setImageMessage('');
+    setForm(prev => ({ ...prev, imageUrl: value.trim() }));
     if (typeof window !== 'undefined') {
       window.sessionStorage.removeItem('eduquiz_question_image_file');
       if (value.trim()) window.sessionStorage.setItem('eduquiz_question_image_url', value.trim());
@@ -219,11 +198,20 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     setImageError(false);
     try {
       const dataUrl = await fileToDataUrl(file);
+      // The old implementation only kept the selected file in component state.
+      // The parent never received it, so saving the question discarded the image.
+      // Put the processed image directly into the shared form state so saveQuestion
+      // persists it in test_questions.answer_data.image_url.
       setImageDataUrl(dataUrl);
       setImageUrl('');
-      if (typeof window !== 'undefined') window.sessionStorage.removeItem('eduquiz_question_image_url');
+      setForm(prev => ({ ...prev, imageUrl: dataUrl }));
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem('eduquiz_question_image_file', dataUrl);
+        window.sessionStorage.removeItem('eduquiz_question_image_url');
+      }
     } catch (e) {
       setImageDataUrl('');
+      setForm(prev => ({ ...prev, imageUrl: '' }));
       setImageMessage(e instanceof Error ? e.message : 'Could not use that image.');
       if (typeof window !== 'undefined') window.sessionStorage.removeItem('eduquiz_question_image_file');
     } finally {
@@ -232,16 +220,14 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    if (typeof window !== 'undefined' && imageUrl.trim()) {
-      window.sessionStorage.setItem('eduquiz_question_image_url', imageUrl.trim());
+    e.preventDefault();
+    const image = imageDataUrl || imageUrl.trim() || String(form.imageUrl || '').trim();
+    setForm(prev => ({ ...prev, imageUrl: image }));
+    if (typeof window !== 'undefined') {
+      if (image.startsWith('data:')) window.sessionStorage.setItem('eduquiz_question_image_file', image);
+      else if (image) window.sessionStorage.setItem('eduquiz_question_image_url', image);
     }
     onSubmit(e);
-    window.setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.removeItem('eduquiz_question_image_url');
-        window.sessionStorage.removeItem('eduquiz_question_image_file');
-      }
-    }, 1000);
   };
 
   const close = () => {
@@ -251,36 +237,23 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     }
     setImageUrl('');
     setImageDataUrl('');
+    setForm(prev => ({ ...prev, imageUrl: '' }));
     onClose();
   };
 
-  const displayedImage = imageDataUrl || imageUrl.trim();
+  const displayedImage = imageDataUrl || imageUrl.trim() || String(form.imageUrl || '').trim();
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
       <Card className="max-h-[90vh] w-full max-w-3xl overflow-y-auto">
         <CardHeader className="flex flex-row items-start justify-between border-b">
-          <div>
-            <CardTitle>{editing ? 'Edit Question' : 'Add Question'}</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">Choose a question type and build it below.</p>
-          </div>
+          <div><CardTitle>{editing ? 'Edit Question' : 'Add Question'}</CardTitle><p className="mt-1 text-sm text-muted-foreground">Choose a question type and build it below.</p></div>
           <Button type="button" variant="ghost" size="sm" onClick={close} disabled={busy}><X /></Button>
         </CardHeader>
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="text-sm font-semibold">Question type</label>
-              <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
-                {([['multiple-choice','Multiple Choice'],['true-false','True / False'],['fill-blank','Fill in the Blank'],['matching','Matching']] as const).map(([value,label]) => (
-                  <button key={value} type="button" disabled={busy} onClick={() => setType(value)} className={`rounded-lg border p-3 text-sm font-medium transition ${form.questionType === value ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-accent'}`}>{label}</button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold">Question</label>
-              <textarea className="mt-2 min-h-24 w-full rounded-lg border bg-background p-3 outline-none focus:ring-2 focus:ring-primary" placeholder="Write your question..." rows={3} value={form.questionText} onChange={e => setForm(prev => ({ ...prev, questionText: e.target.value }))} required disabled={busy}/>
-            </div>
+            <div><label className="text-sm font-semibold">Question type</label><div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">{([['multiple-choice','Multiple Choice'],['true-false','True / False'],['fill-blank','Fill in the Blank'],['matching','Matching']] as const).map(([value,label]) => <button key={value} type="button" disabled={busy} onClick={() => setType(value)} className={`rounded-lg border p-3 text-sm font-medium transition ${form.questionType === value ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-accent'}`}>{label}</button>)}</div></div>
+            <div><label className="text-sm font-semibold">Question</label><textarea className="mt-2 min-h-24 w-full rounded-lg border bg-background p-3 outline-none focus:ring-2 focus:ring-primary" placeholder="Write your question..." rows={3} value={form.questionText} onChange={e => setForm(prev => ({ ...prev, questionText: e.target.value }))} required disabled={busy}/></div>
 
             <section className="rounded-xl border bg-muted/20 p-4">
               <div className="flex items-center gap-2"><ImageIcon className="size-5 text-primary"/><div><h3 className="font-semibold">Question image</h3><p className="text-xs text-muted-foreground">Optional — paste an image URL or drop an image file here.</p></div></div>
@@ -295,17 +268,13 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
               {displayedImage && imageError && <p className="mt-2 text-sm text-destructive">That image could not be loaded. Check the file or URL and try again.</p>}
             </section>
 
-            {form.questionType === 'multiple-choice' && <section className="rounded-xl border bg-muted/20 p-4"><h3 className="font-semibold">Answer choices</h3><div className="mt-3 grid gap-3 md:grid-cols-2">{(['A','B','C','D'] as const).map(letter => <div key={letter}><label className="text-sm font-medium">Option {letter}</label><Input className="mt-1" value={form[`option${letter}` as 'optionA'|'optionB'|'optionC'|'optionD']} onChange={e => setForm(prev => ({ ...prev, [`option${letter}`]: e.target.value }))} required disabled={busy}/></div>)}</div><div className="mt-4"><label className="text-sm font-semibold">Correct answer</label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={form.correctAnswer} onChange={e => setCorrect(e.target.value as CorrectAnswer)} disabled={busy}>{(['A','B','C','D'] as const).map(x => <option key={x} value={x}>Option {x}</option>)}</select></div></section>}
+            {form.questionType === 'multiple-choice' && <section className="space-y-3"><label className="text-sm font-semibold">Answer choices</label>{(['A','B','C','D'] as const).map(letter => <div key={letter} className="flex items-center gap-2"><span className="flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold">{letter}</span><Input value={form[`option${letter}` as 'optionA'|'optionB'|'optionC'|'optionD']} onChange={e => setForm(prev => ({ ...prev, [`option${letter}`]: e.target.value }))} placeholder={`Option ${letter}`} required disabled={busy}/></div>)}</section>}
+            {form.questionType === 'true-false' && <section className="space-y-3"><label className="text-sm font-semibold">Correct answer</label><div className="grid grid-cols-2 gap-3"><button type="button" className={`rounded-lg border p-3 ${form.correctAnswer === 'A' ? 'border-primary bg-primary/10 text-primary' : ''}`} onClick={() => setCorrect('A')}>True</button><button type="button" className={`rounded-lg border p-3 ${form.correctAnswer === 'B' ? 'border-primary bg-primary/10 text-primary' : ''}`} onClick={() => setCorrect('B')}>False</button></div></section>}
+            {form.questionType === 'fill-blank' && <section className="space-y-2"><label className="text-sm font-semibold">Correct answer</label><Input value={form.optionA} onChange={e => setForm(prev => ({ ...prev, optionA: e.target.value }))} placeholder="Enter the correct answer" required disabled={busy}/></section>}
+            {form.questionType === 'matching' && <section className="space-y-3"><div className="flex items-center justify-between"><label className="text-sm font-semibold">Matching pairs</label><Button type="button" variant="outline" size="sm" onClick={addPair}><Plus className="mr-1 size-4"/>Add pair</Button></div>{pairs.map((pair,index) => <div key={index} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]"><Input value={pair.left} onChange={e => updatePair(index,'left',e.target.value)} placeholder="Left side"/><Input value={pair.right} onChange={e => updatePair(index,'right',e.target.value)} placeholder="Right side"/><Button type="button" variant="ghost" size="icon" onClick={() => removePair(index)}><Trash2 className="size-4"/></Button></div>)}</section>}
 
-            {form.questionType === 'true-false' && <section className="rounded-xl border bg-muted/20 p-4"><h3 className="font-semibold">Choose the correct answer</h3><div className="mt-3 grid grid-cols-2 gap-3">{(['A','B'] as const).map(value => { const selected = form.correctAnswer === value; return <button key={value} type="button" disabled={busy} onClick={() => setCorrect(value)} className={`rounded-xl border-2 p-5 text-lg font-semibold transition ${selected ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-accent'}`}>{value === 'A' ? '✓ True' : '✕ False'}</button>; })}</div><p className="mt-2 text-xs text-muted-foreground">Students will see two clear True / False choices.</p></section>}
-
-            {form.questionType === 'fill-blank' && <section className="rounded-xl border bg-muted/20 p-4"><h3 className="font-semibold">Correct answer</h3><p className="mt-1 text-sm text-muted-foreground">Students will type their answer into an input box.</p><Input className="mt-3 h-12 text-base" value={form.optionA} onChange={e => setForm(prev => ({ ...prev, optionA: e.target.value }))} placeholder="Type the correct answer" required disabled={busy}/></section>}
-
-            {form.questionType === 'matching' && <section className="rounded-xl border bg-muted/20 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">Matching pairs</h3><p className="mt-1 text-sm text-muted-foreground">Add as many pairs as you need. Each row is one match.</p></div><Button type="button" variant="outline" size="sm" onClick={addPair} disabled={busy}><Plus className="mr-1 size-4"/>Add Match</Button></div><div className="mt-4 space-y-3">{pairs.map((pair,index) => <div key={index} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 rounded-lg border bg-background p-3"><div><label className="text-xs font-medium text-muted-foreground">Item {index + 1}</label><Input className="mt-1" value={pair.left} onChange={e => updatePair(index,'left',e.target.value)} placeholder="e.g. France" required disabled={busy}/></div><span className="pt-5 text-muted-foreground">↔</span><div><label className="text-xs font-medium text-muted-foreground">Matches with</label><Input className="mt-1" value={pair.right} onChange={e => updatePair(index,'right',e.target.value)} placeholder="e.g. Paris" required disabled={busy}/></div><Button type="button" variant="ghost" size="icon" className="mt-5" onClick={() => removePair(index)} disabled={busy || pairs.length === 1} title="Remove match"><Trash2 className="size-4"/></Button></div>)}</div>{matchingAnswers.length > 0 && <p className="mt-3 text-xs text-muted-foreground">{matchingAnswers.length} match{matchingAnswers.length === 1 ? '' : 'es'} added.</p>}</section>}
-
-            <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">No points are entered manually. The test remains worth 100 points total and points are recalculated automatically.</div>
             {message && <p className="text-sm text-destructive">{message}</p>}
-            <div className="flex gap-2"><Button type="button" variant="outline" className="w-1/2" onClick={close} disabled={busy}>Cancel</Button><Button type="submit" className="w-1/2" disabled={busy || imageBusy}>{busy ? <Loader2 className="size-4 animate-spin"/> : editing ? 'Save Changes' : 'Add Question'}</Button></div>
+            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={close} disabled={busy}>Cancel</Button><Button type="submit" disabled={busy || imageBusy}>{busy ? <Loader2 className="mr-2 size-4 animate-spin"/> : null}{editing ? 'Save Changes' : 'Add Question'}</Button></div>
           </form>
         </CardContent>
       </Card>
