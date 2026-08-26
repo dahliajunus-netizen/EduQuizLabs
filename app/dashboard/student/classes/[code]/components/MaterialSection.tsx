@@ -9,7 +9,7 @@ type Props = { materials: MaterialItem[]; teacher: boolean; onDelete: (id: strin
 
 export default function MaterialSection({ materials, teacher, onDelete }: Props) {
   return (
-    <section className="space-y-4">
+    <section className="space-y-4 pt-4 sm:pt-5">
       <div className="flex items-end justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-lg font-black tracking-tight"><span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><FileText className="size-4.5" /></span>Materials</h3>
