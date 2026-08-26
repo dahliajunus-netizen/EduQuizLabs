@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ChevronUp, Eye, EyeOff, Pencil, PlusCircle, Trash2, FlaskConical, CheckCircle2, Clock3, Users } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, EyeOff, Pencil, PlusCircle, Trash2, FlaskConical, Clock3, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Question, Test } from './types';
 
@@ -42,6 +42,11 @@ type Submission = {
   student_id: string;
   answers?: Record<string, string> | null;
   score?: number | null;
+};
+
+type UserRecord = {
+  id: string;
+  full_name?: string | null;
 };
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -101,6 +106,7 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
   const [studentId, setStudentId] = useState('');
   const [attempts, setAttempts] = useState<Record<string, Attempt[]>>({});
   const [submissions, setSubmissions] = useState<Record<string, Submission[]>>({});
+  const [studentNames, setStudentNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!teacher) setStudentId(getStudentId());
@@ -110,6 +116,7 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
     if (!teacher || !tests.length) {
       setAttempts({});
       setSubmissions({});
+      setStudentNames({});
       return;
     }
 
@@ -144,9 +151,41 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
         }
       }));
 
+      // Resolve the UUIDs from test_attempts/test_submissions to users.full_name.
+      const ids = Array.from(new Set([
+        ...Object.values(nextAttempts).flat().map(attempt => String(attempt.student_id || '').trim()),
+        ...Object.values(nextSubmissions).flat().map(submission => String(submission.student_id || '').trim()),
+      ].filter(Boolean)));
+
+      const nextStudentNames: Record<string, string> = {};
+
+      if (ids.length) {
+        try {
+          const userResponse = await fetch(
+            `${supabaseUrl}/rest/v1/users?id=in.(${ids.join(',')})&select=id,full_name`,
+            { headers, cache: 'no-store' }
+          );
+
+          if (userResponse.ok) {
+            const users = await userResponse.json();
+            if (Array.isArray(users)) {
+              users.forEach((user: UserRecord) => {
+                const name = String(user.full_name || '').trim();
+                if (user.id && name) nextStudentNames[String(user.id)] = name;
+              });
+            }
+          } else {
+            console.error('Failed to load student names:', await userResponse.text());
+          }
+        } catch (error) {
+          console.error('Failed to load student names:', error);
+        }
+      }
+
       if (!cancelled) {
         setAttempts(nextAttempts);
         setSubmissions(nextSubmissions);
+        setStudentNames(nextStudentNames);
       }
     };
 
@@ -160,7 +199,6 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
 
   useEffect(() => {
     if (teacher || !studentId || !tests.length) return;
-    // Keep the existing student attempt counter behavior.
   }, [teacher, studentId, tests.length]);
 
   return (
@@ -234,7 +272,7 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
                         const doing = Boolean(attempt) && !finished && !stale;
                         const answeredCount = attempt?.answered_questions ?? qs.filter(q => Boolean(answers[q.id || ''])).length;
                         const progress = finished ? 'Done' : doing ? 'Currently doing' : 'Not active';
-                        const studentName = attempt?.student_name || `Student ${studentId.slice(0, 6)}`;
+                        const studentName = studentNames[studentId] || attempt?.student_name || `Student ${studentId.slice(0, 6)}`;
                         const grade = submission?.score == null ? '—' : Number(submission.score).toFixed(2);
                         return <tr key={studentId}>
                           <td className="px-4 py-3 font-semibold">{studentName}</td>
