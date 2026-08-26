@@ -58,6 +58,10 @@ export type Question = {
   option_d: string;
   correct_answer: 'A' | 'B' | 'C' | 'D';
   points: number;
+  answer_data?: {
+    image_url?: string | null;
+    [key: string]: unknown;
+  } | null;
 };
 
 export type AddType = 'material' | 'assignment';
