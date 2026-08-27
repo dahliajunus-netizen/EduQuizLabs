@@ -9,6 +9,8 @@ alter table public.tests
 create index if not exists tests_course_id_idx
   on public.tests(course_id);
 
+-- Every question contributes equally to the final 100-point score.
+-- The points column is retained for compatibility but is not used for grading.
 create or replace function public.submit_test(
   p_test_id uuid,
   p_student_id uuid,
@@ -20,8 +22,8 @@ security definer
 set search_path = public
 as $$
 declare
-  total_points numeric := 0;
-  earned_points numeric := 0;
+  total_questions integer := 0;
+  correct_questions integer := 0;
   q record;
   calculated_score numeric;
   new_submission public.test_submissions;
@@ -45,23 +47,24 @@ begin
   end if;
 
   for q in
-    select tq.id, tq.correct_answer, tq.points
+    select tq.id, tq.correct_answer
     from public.test_questions tq
     where tq.test_id = p_test_id
+    order by tq.question_order asc, tq.id asc
   loop
-    total_points := total_points + greatest(coalesce(q.points, 0), 0);
+    total_questions := total_questions + 1;
 
-    if upper(coalesce(p_answers ->> q.id::text, '')) = upper(q.correct_answer) then
-      earned_points := earned_points + greatest(coalesce(q.points, 0), 0);
+    if upper(trim(coalesce(p_answers ->> q.id::text, ''))) = upper(trim(coalesce(q.correct_answer, ''))) then
+      correct_questions := correct_questions + 1;
     end if;
   end loop;
 
-  if total_points <= 0 then
+  if total_questions <= 0 then
     calculated_score := 0;
   else
-    calculated_score := least(
-      100,
-      round((earned_points / total_points) * 100, 2)
+    calculated_score := round(
+      (correct_questions::numeric / total_questions::numeric) * 100,
+      2
     );
   end if;
 
