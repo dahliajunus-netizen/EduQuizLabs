@@ -59,7 +59,7 @@ export default function TeacherLiveQuiz() {
       if (!Array.isArray(deleted) || deleted.length === 0) throw new Error('Question could not be deleted. It may not exist or you may not have permission to delete it.');
       const remainingQuestions = questions.filter(item => item.id !== question.id).map((item, index) => ({ ...item, question_order: index }));
       for (const item of remainingQuestions) {
-        await api(`live_quiz_questions?id=eq.${encodeURIComponent(item.id)}&quiz_id=eq.${encodeURIComponent(selected.id)}`, { method: 'PATCH', body: JSON.stringify({ question_order: item.question_order } });
+        await api(`live_quiz_questions?id=eq.${encodeURIComponent(item.id)}&quiz_id=eq.${encodeURIComponent(selected.id)}`, { method: 'PATCH', body: JSON.stringify({ question_order: item.question_order }) });
       }
       setQuestions(remainingQuestions);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not delete question.'); }
