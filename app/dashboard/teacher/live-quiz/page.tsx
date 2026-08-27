@@ -39,7 +39,7 @@ export default function TeacherLiveQuiz() {
   const router = useRouter();
   const [templates, setTemplates] = useState<Quiz[]>([]); const [selected, setSelected] = useState<Quiz | null>(null); const [quiz, setQuiz] = useState<Quiz | null>(null); const [questions, setQuestions] = useState<Q[]>([]); const [players, setPlayers] = useState<Player[]>([]); const [classes, setClasses] = useState<TeacherClass[]>([]);
   const [title, setTitle] = useState('My Live Quiz'); const [classCode, setClassCode] = useState(''); const [q, setQ] = useState(''); const [a, setA] = useState(''); const [b, setB] = useState(''); const [c, setC] = useState(''); const [d, setD] = useState(''); const [correct, setCorrect] = useState('A');
-  const [loading, setLoading] = useState(false); const [deletingId, setDeletingId] = useState<string | null>(null); const [error, setError] = useState(''); const [remaining, setRemaining] = useState(30); const [answeredCount, setAnsweredCount] = useState(0); const [revealStep, setRevealStep] = useState(0); const [copied, setCopied] = useState(false); const autoAdvanceKey = useRef('');
+  const [loading, setLoading] = useState(false); const [deletingId, setDeletingId] = useState<string | null>(null); const [error, setError] = useState(''); const [remaining, setRemaining] = useState(30); const [answeredCount, setAnsweredCount] = useState(0); const [revealStep, setRevealStep] = useState(0); const [copied, setCopied] = useState(false); const autoAdvanceKey = useRef(''); const pollInFlight = useRef(false);
   const current = quiz?.current_question ?? -1; const currentQ = questions[current];
 
   async function loadTemplates() { try { const id = teacherId(); if (!id) return; setTemplates((await api(`live_quizzes?teacher_id=eq.${encodeURIComponent(id)}&is_template=eq.true&status=eq.draft&select=id,title,class_code,game_code,status,current_question,is_template&order=created_at.desc`)) || []); } catch {} }
@@ -59,7 +59,7 @@ export default function TeacherLiveQuiz() {
       if (!Array.isArray(deleted) || deleted.length === 0) throw new Error('Question could not be deleted. It may not exist or you may not have permission to delete it.');
       const remainingQuestions = questions.filter(item => item.id !== question.id).map((item, index) => ({ ...item, question_order: index }));
       for (const item of remainingQuestions) {
-        await api(`live_quiz_questions?id=eq.${encodeURIComponent(item.id)}&quiz_id=eq.${encodeURIComponent(selected.id)}`, { method: 'PATCH', body: JSON.stringify({ question_order: item.question_order }) });
+        await api(`live_quiz_questions?id=eq.${encodeURIComponent(item.id)}&quiz_id=eq.${encodeURIComponent(selected.id)}`, { method: 'PATCH', body: JSON.stringify({ question_order: item.question_order } });
       }
       setQuestions(remainingQuestions);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not delete question.'); }
@@ -70,8 +70,36 @@ export default function TeacherLiveQuiz() {
   async function beginReveal(index: number) { if (!quiz) return; try { setAnsweredCount(0); autoAdvanceKey.current = ''; const result = await rpc('live_quiz_begin_reveal', { p_quiz_id: quiz.id, p_question_index: index }); setQuiz(result?.[0] || result || { ...quiz, status: 'question_reveal', current_question: index, question_started_at: new Date().toISOString() }); setRevealStep(0); } catch (e) { setError(e instanceof Error ? e.message : 'Could not start question.'); } }
   async function beginAnswering() { if (!quiz) return; try { const result = await rpc('live_quiz_begin_answering', { p_quiz_id: quiz.id }); setQuiz(result?.[0] || result || { ...quiz, status: 'answering', question_started_at: new Date().toISOString() }); setRemaining(30); setAnsweredCount(0); } catch (e) { setError(e instanceof Error ? e.message : 'Could not open answers.'); } }
   async function finishOrNext() { if (!quiz) return; const next = quiz.current_question + 1; if (next >= questions.length) { const rows = await api(`live_quizzes?id=eq.${quiz.id}`, { method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify({ status: 'finished', question_started_at: null }) }); setQuiz(rows?.[0] || { ...quiz, status: 'finished' }); setAnsweredCount(0); } else await beginReveal(next); }
-  async function loadLive() { if (!quiz) return; try { const livePlayers: Player[] = (await api(`live_quiz_players?quiz_id=eq.${quiz.id}&select=id,nickname,score,total_response_time_ms,correct_answers`)) || []; setPlayers(livePlayers); const x = await api(`live_quizzes?id=eq.${quiz.id}&select=*`); const liveQuiz = x?.[0] as Quiz | undefined; if (liveQuiz) setQuiz(liveQuiz); const activeQuiz = liveQuiz || quiz; const questionId = questions[activeQuiz.current_question]?.id; if (questionId && activeQuiz.status === 'answering') { const responseRows = await api(`live_quiz_answers?quiz_id=eq.${quiz.id}&question_id=eq.${encodeURIComponent(questionId)}&select=id`); const count = Array.isArray(responseRows) ? responseRows.length : 0; setAnsweredCount(count); const playerCount = livePlayers.length; const advanceKey = `${quiz.id}:${activeQuiz.current_question}`; if (playerCount > 0 && count >= playerCount && autoAdvanceKey.current !== advanceKey) { autoAdvanceKey.current = advanceKey; await finishOrNext(); } } else setAnsweredCount(0); } catch {} }
-  useEffect(() => { if (!quiz) return; loadLive(); const t = window.setInterval(loadLive, 700); return () => window.clearInterval(t); }, [quiz?.id, quiz?.current_question, quiz?.status, questions.length]);
+  async function loadLive() {
+    if (!quiz || pollInFlight.current) return;
+    pollInFlight.current = true;
+    try {
+      const [livePlayers, quizRows] = await Promise.all([
+        api(`live_quiz_players?quiz_id=eq.${encodeURIComponent(quiz.id)}&select=id,nickname,score,total_response_time_ms,correct_answers`),
+        api(`live_quizzes?id=eq.${encodeURIComponent(quiz.id)}&select=id,title,class_code,game_code,status,current_question,is_template,question_started_at`),
+      ]);
+      const nextPlayers: Player[] = Array.isArray(livePlayers) ? livePlayers : [];
+      setPlayers(nextPlayers);
+      const liveQuiz = Array.isArray(quizRows) ? quizRows[0] as Quiz | undefined : undefined;
+      if (liveQuiz) setQuiz(liveQuiz);
+      const activeQuiz = liveQuiz || quiz;
+      const questionId = questions[activeQuiz.current_question]?.id;
+      if (questionId && activeQuiz.status === 'answering') {
+        const responseRows = await api(`live_quiz_answers?quiz_id=eq.${encodeURIComponent(quiz.id)}&question_id=eq.${encodeURIComponent(questionId)}&select=id`);
+        const count = Array.isArray(responseRows) ? responseRows.length : 0;
+        setAnsweredCount(count);
+        const playerCount = nextPlayers.length;
+        const advanceKey = `${quiz.id}:${activeQuiz.current_question}`;
+        if (playerCount > 0 && count >= playerCount && autoAdvanceKey.current !== advanceKey) {
+          autoAdvanceKey.current = advanceKey;
+          await finishOrNext();
+        }
+      } else setAnsweredCount(0);
+    } catch {} finally {
+      pollInFlight.current = false;
+    }
+  }
+  useEffect(() => { if (!quiz) return; void loadLive(); const t = window.setInterval(() => void loadLive(), 2000); return () => window.clearInterval(t); }, [quiz?.id, quiz?.current_question, quiz?.status, quiz?.question_started_at, questions.length]);
   useEffect(() => { if (!quiz || !currentQ) return; if (quiz.status === 'question_reveal') { const start = quiz.question_started_at ? new Date(quiz.question_started_at).getTime() : Date.now(); const timer = window.setInterval(() => { const elapsed = Date.now() - start; setRevealStep(Math.min(4, Math.floor(elapsed / 700))); if (elapsed >= 5000) { window.clearInterval(timer); beginAnswering(); } }, 100); return () => window.clearInterval(timer); } if (quiz.status === 'answering') { const start = quiz.question_started_at ? new Date(quiz.question_started_at).getTime() : Date.now(); const timer = window.setInterval(() => { const left = Math.max(0, 30000 - (Date.now() - start)); setRemaining(Math.ceil(left / 1000)); if (left <= 0) { window.clearInterval(timer); const timerKey = `${quiz.id}:${quiz.current_question}:timeout`; if (autoAdvanceKey.current !== timerKey) { autoAdvanceKey.current = timerKey; finishOrNext(); } } }, 100); return () => window.clearInterval(timer); } }, [quiz?.status, quiz?.current_question, quiz?.question_started_at, currentQ?.id]);
   async function copyCode() { if (!quiz?.game_code) return; try { await navigator.clipboard.writeText(quiz.game_code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {} }
   const connectedPlayers = [...players].sort((x,y) => x.nickname.localeCompare(y.nickname)); const rankedPlayers = [...players].sort((x,y) => y.score !== x.score ? y.score-x.score : x.total_response_time_ms !== y.total_response_time_ms ? x.total_response_time_ms-y.total_response_time_ms : y.correct_answers-x.correct_answers);
