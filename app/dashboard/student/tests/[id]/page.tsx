@@ -113,9 +113,11 @@ export default function TakeTestPage(){
    setError('');
    try{
      const a={...answersRef.current};
-     const total=questions.reduce((sum,q)=>sum+Math.max(0,Number(q.points)||0),0);
-     const earned=questions.reduce((sum,q)=>sum+(isCorrect(q,a)?Math.max(0,Number(q.points)||0):0),0);
-     const score=total?Math.min(100,Math.round((earned/total)*10000)/100):0;
+     // Every question is worth the same amount. The test score is always
+     // based on the percentage of questions answered correctly, regardless
+     // of any legacy/inconsistent points values stored on individual questions.
+     const correctCount=questions.reduce((count,q)=>count+(isCorrect(q,a)?1:0),0);
+     const score=questions.length?Math.min(100,Math.round((correctCount/questions.length)*10000)/100):0;
      await save(a);
      const r=await fetch(`${url}/rest/v1/test_submissions`,{method:'POST',headers:{...headers,Prefer:'return=representation'},body:JSON.stringify({test_id:id,student_id:sid,answers:a,score})});
      if(!r.ok)throw new Error(await r.text());
