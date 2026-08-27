@@ -54,8 +54,7 @@ export function LoginForm() {
 
     setSubmitting(true);
     try {
-      // Supabase's password grant is the official email/password authentication endpoint.
-      // Only the API key is sent here; do not send the publishable/anon key as a Bearer token.
+      // Supabase password grant is the official email/password authentication endpoint.
       const authResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
         method: 'POST',
         headers: {
@@ -109,10 +108,13 @@ export function LoginForm() {
         'Content-Type': 'application/json',
       };
 
+      // Profile lookup used to retry 5 times with a 400ms delay, adding up to 2 seconds
+      // to every successful login. One immediate lookup is enough; a single short retry
+      // handles a profile trigger that has just completed without making sign-in feel slow.
       let profile: any = null;
       let lastProfileError = '';
 
-      for (let attempt = 0; attempt < 5 && !profile; attempt++) {
+      for (let attempt = 0; attempt < 2 && !profile; attempt++) {
         const profileResponse = await fetch(
           `${supabaseUrl}/rest/v1/users?id=eq.${encodeURIComponent(userId)}&select=id,full_name,email,role`,
           { method: 'GET', headers: authHeaders, cache: 'no-store' }
@@ -129,7 +131,7 @@ export function LoginForm() {
           break;
         }
         lastProfileError = profileText || `HTTP ${profileResponse.status}`;
-        if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 400));
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 150));
       }
 
       if (!profile) {
