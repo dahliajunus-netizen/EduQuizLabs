@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -35,5 +36,33 @@ export default function JoinLiveQuiz(){
     router.push(`/dashboard/student/live-quiz/${encodeURIComponent(c)}?name=${encodeURIComponent(n)}`);
   }
 
-  return <main className="flex min-h-screen items-center justify-center px-6"><Card className="w-full max-w-md"><CardHeader className="text-center"><CardTitle className="text-3xl">🟢 Join Live Quiz</CardTitle><p className="text-muted-foreground">Enter the code shown by your teacher.</p></CardHeader><CardContent className="space-y-4"><Input value={code} maxLength={6} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="GAME CODE"/><div className="space-y-1"><Input value={nickname} maxLength={15} onChange={e=>{setNickname(e.target.value.slice(0,15));setError('');}} placeholder="Nickname"/><div className="flex justify-between px-1 text-xs text-muted-foreground"><span>Nickname</span><span>{nickname.length}/15</span></div></div>{error&&<p className="text-sm text-destructive">{error}</p>}<Button className="w-full" onClick={join}>Join Quiz</Button></CardContent></Card></main>
+  return (
+    <main className="relative flex min-h-screen items-center justify-center px-6">
+      <Button
+        type="button"
+        variant="ghost"
+        className="absolute left-6 top-6 gap-2"
+        onClick={() => router.push('/dashboard/student')}
+      >
+        <ArrowLeft className="size-4" />
+        Back to Dashboard
+      </Button>
+
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-3xl">🟢 Join Live Quiz</CardTitle>
+          <p className="text-muted-foreground">Enter the code shown by your teacher.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Input value={code} maxLength={6} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="GAME CODE"/>
+          <div className="space-y-1">
+            <Input value={nickname} maxLength={15} onChange={e=>{setNickname(e.target.value.slice(0,15));setError('');}} placeholder="Nickname"/>
+            <div className="flex justify-between px-1 text-xs text-muted-foreground"><span>Nickname</span><span>{nickname.length}/15</span></div>
+          </div>
+          {error&&<p className="text-sm text-destructive">{error}</p>}
+          <Button className="w-full" onClick={join}>Join Quiz</Button>
+        </CardContent>
+      </Card>
+    </main>
+  );
 }
