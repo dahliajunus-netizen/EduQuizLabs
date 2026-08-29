@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import { Instrument_Serif, Inter } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
 import { LanguageProvider } from '@/components/language-provider'
+import { SupabaseAuthFetch } from '@/components/supabase-auth-fetch'
 import './globals.css'
 
 const inter = Inter({
@@ -58,6 +59,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <LanguageProvider>
+            <SupabaseAuthFetch />
             {children}
           </LanguageProvider>
 
