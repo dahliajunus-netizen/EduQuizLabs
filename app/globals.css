@@ -14,7 +14,6 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
@@ -31,6 +30,7 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
   --color-primary: var(--primary);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -141,7 +141,6 @@
   button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 }
 
-/* Keep Google's translation engine working, but hide its injected top bar and popups. */
 .goog-te-banner-frame.skiptranslate,
 iframe.goog-te-banner-frame,
 body > .skiptranslate {
@@ -174,8 +173,6 @@ body {
   .edu-interactive { @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0; }
 }
 
-/* Mobile usability: keep content inside the viewport, make controls finger-friendly,
-   prevent iOS input zoom, and keep overlays usable on small screens. */
 @media (max-width: 640px) {
   html,
   body {
@@ -220,6 +217,8 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
   }
 
+  /* Break long strings only when they cannot fit; do not split normal words
+     character-by-character. This keeps titles, badges, and numeric scores readable. */
   p,
   h1,
   h2,
@@ -228,7 +227,16 @@ body {
   span,
   a,
   code {
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+
+  /* Scores/status values should always remain a single visual unit. */
+  [data-score],
+  .score,
+  .grade,
+  .status-badge {
+    white-space: nowrap;
   }
 }
 
