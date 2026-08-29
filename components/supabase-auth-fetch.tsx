@@ -1,66 +1,42 @@
 'use client'
 
 let installed = false
+let refreshPromise: Promise<string | null> | null = null
 
-function getAccessToken() {
-  try {
-    const token = localStorage.getItem('supabase_access_token')
-    return token?.trim() || null
-  } catch {
-    return null
-  }
+function getAccessToken() { try { return localStorage.getItem('supabase_access_token')?.trim() || null } catch { return null } }
+function getRefreshToken() { try { return localStorage.getItem('supabase_refresh_token')?.trim() || null } catch { return null } }
+function setTokens(accessToken: string, refreshToken?: string) { try { localStorage.setItem('supabase_access_token', accessToken); if (refreshToken) localStorage.setItem('supabase_refresh_token', refreshToken); const raw=localStorage.getItem('current_user'); if(raw){const user=JSON.parse(raw);user.accessToken=accessToken;localStorage.setItem('current_user',JSON.stringify(user))} } catch {} }
+function hasExplicitAuthorization(init?: RequestInit,input?: RequestInfo|URL){ if(init?.headers&&new Headers(init.headers).has('Authorization')) return true; if(input instanceof Request) return input.headers.has('Authorization'); return false }
+
+async function refreshAccessToken(): Promise<string|null> {
+  if (refreshPromise) return refreshPromise
+  const base=process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/,'')
+  const key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
+  const refreshToken=getRefreshToken()
+  if(!base||!key||!refreshToken) return null
+  refreshPromise=(async()=>{ try { const r=await fetch(`${base}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:refreshToken}),cache:'no-store'}); const data=await r.json().catch(()=>null); if(!r.ok||!data?.access_token) return null; setTokens(String(data.access_token),data.refresh_token?String(data.refresh_token):undefined); return String(data.access_token) } catch { return null } finally { refreshPromise=null } })()
+  return refreshPromise
 }
 
-function hasExplicitAuthorization(init?: RequestInit, input?: RequestInfo | URL) {
-  if (init?.headers) {
-    const headers = new Headers(init.headers)
-    if (headers.has('Authorization')) return true
-  }
-  if (input instanceof Request) return input.headers.has('Authorization')
-  return false
-}
-
-function installAuthenticatedFetch() {
-  if (installed || typeof window === 'undefined') return
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '')
-  if (!supabaseUrl) return
-
-  installed = true
-  const originalFetch = window.fetch.bind(window)
-
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const requestUrl = typeof input === 'string'
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : input.url
-
-    if (!requestUrl.startsWith(`${supabaseUrl}/rest/v1/`)) {
-      return originalFetch(input, init)
-    }
-
-    // Preserve freshly-issued Supabase tokens supplied explicitly by login.
-    // Otherwise a stale localStorage token can overwrite them and cause 401/JWT expired.
-    if (hasExplicitAuthorization(init, input)) {
-      return originalFetch(input, init)
-    }
-
-    const token = getAccessToken()
-    if (!token) return originalFetch(input, init)
-
-    const headers = new Headers(
-      init?.headers || (input instanceof Request ? input.headers : undefined),
-    )
-    headers.set('Authorization', `Bearer ${token}`)
-
-    return originalFetch(input, { ...init, headers })
+function installAuthenticatedFetch(){
+  if(installed||typeof window==='undefined') return
+  const supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/,''); if(!supabaseUrl) return
+  installed=true
+  const originalFetch=window.fetch.bind(window)
+  window.fetch=async(input:RequestInfo|URL,init?:RequestInit)=>{
+    const requestUrl=typeof input==='string'?input:input instanceof URL?input.toString():input.url
+    if(!requestUrl.startsWith(`${supabaseUrl}/rest/v1/`)) return originalFetch(input,init)
+    if(hasExplicitAuthorization(init,input)) return originalFetch(input,init)
+    let token=getAccessToken()
+    if(!token) return originalFetch(input,init)
+    const headers=new Headers(init?.headers||(input instanceof Request?input.headers:undefined));headers.set('Authorization',`Bearer ${token}`)
+    const response=await originalFetch(input,{...init,headers})
+    if(response.status!==401) return response
+    const fresh=await refreshAccessToken()
+    if(!fresh) return response
+    const retryHeaders=new Headers(init?.headers||(input instanceof Request?input.headers:undefined));retryHeaders.set('Authorization',`Bearer ${fresh}`)
+    return originalFetch(input,{...init,headers:retryHeaders})
   }
 }
-
-// Install immediately so dashboard requests cannot race the wrapper setup.
 installAuthenticatedFetch()
-
-export function SupabaseAuthFetch() {
-  return null
-}
+export function SupabaseAuthFetch(){return null}
