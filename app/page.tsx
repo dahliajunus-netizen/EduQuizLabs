@@ -7,7 +7,7 @@ const highlights = ['Create quizzes and tests', 'Track student grades', 'Share w
 export default function Page() {
   return (
     <main className="min-h-screen bg-background lg:grid lg:grid-cols-2">
-      <section className="relative flex min-h-[520px] flex-col overflow-hidden bg-primary px-6 py-8 text-primary-foreground sm:px-10 lg:min-h-screen lg:px-14 lg:py-10">
+      <section className="relative flex min-h-[520px] flex-col overflow-hidden bg-primary px-6 py-8 text-primary-foreground sm:px-10 lg:min-h-screen lg:px-16 lg:py-10">
         <div aria-hidden="true" className="pointer-events-none absolute -right-40 -top-40 size-[30rem] rounded-full bg-primary-foreground/10 blur-3xl" />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-48 -left-40 size-[32rem] rounded-full bg-primary-foreground/10 blur-3xl" />
 
@@ -18,18 +18,18 @@ export default function Page() {
           <span className="text-lg font-bold tracking-tight">EduQuizLabs</span>
         </div>
 
-        <div className="relative z-10 flex flex-1 items-center py-14 lg:py-20">
+        <div className="relative z-10 flex flex-1 items-center py-12 lg:py-16">
           <div className="w-full max-w-2xl">
             <h1 className="text-balance text-5xl font-normal italic leading-[1.08] tracking-tight sm:text-6xl lg:text-7xl" style={{ fontFamily: 'Georgia, serif' }}>
               Where curiosity becomes knowledge
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-primary-foreground/75 sm:text-lg">
+            <p className="mt-5 max-w-xl text-base leading-7 text-primary-foreground/75 sm:text-lg">
               Create, share, and manage quizzes, tests, and assignments in one place.
             </p>
 
-            <ul className="mt-10 grid gap-3 sm:grid-cols-3 lg:max-w-2xl">
+            <ul className="mt-8 grid gap-2.5 sm:grid-cols-3 lg:max-w-2xl">
               {highlights.map((item) => (
-                <li key={item} className="flex items-center gap-2.5 rounded-xl bg-primary-foreground/[0.07] px-4 py-3 text-sm font-medium ring-1 ring-primary-foreground/10">
+                <li key={item} className="flex items-center gap-2.5 rounded-xl bg-primary-foreground/[0.07] px-3.5 py-3 text-sm font-medium ring-1 ring-primary-foreground/10">
                   <CheckCircle2 className="size-4 shrink-0" />
                   <span>{item}</span>
                 </li>
@@ -44,13 +44,12 @@ export default function Page() {
           <ThemeToggle />
         </div>
 
-        <div className="w-full max-w-md pt-8 lg:pt-0">
-          <div className="mb-7">
+        <div className="w-full max-w-md">
+          <div className="mb-6">
             <div className="mb-4 flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10 lg:hidden">
               <GraduationCap className="size-5" />
             </div>
             <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Sign in</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Welcome back to EduQuizLabs.</p>
           </div>
 
           <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-7">
