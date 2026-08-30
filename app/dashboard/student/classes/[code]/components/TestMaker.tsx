@@ -24,6 +24,20 @@ function parseDueDate(value:string){
   return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
 }
 
+function normalizeBuilderDueDate(value:string){
+  if(!value)return '';
+  const raw=String(value).trim();
+  // Test due dates are date-only. Never carry a timezone/time portion into the maker.
+  const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|\s|$)/);
+  if(iso)return `${iso[3]} / ${iso[2]} / ${iso[1]}`;
+  const dmy=raw.match(/^(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{4})/);
+  if(dmy)return `${dmy[1]} / ${dmy[2]} / ${dmy[3]}`;
+  // Handles old values such as "08/30/2026, 07:00 AM" without preserving the time.
+  const slashDate=raw.match(/(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{4})/);
+  if(slashDate)return `${slashDate[1]} / ${slashDate[2]} / ${slashDate[3]}`;
+  return raw;
+}
+
 export default function TestMaker({title,setTitle,description,setDescription,dueDate,setDueDate,questions,busy,message,onSaveDetails,onAddQuestion,onEditQuestion,onDeleteQuestion,onClose,pointsFor,testId}:Props){
  const [password,setPassword]=useState('');
  const [showPassword,setShowPassword]=useState(false);
@@ -32,6 +46,7 @@ export default function TestMaker({title,setTitle,description,setDescription,due
  const [allowReview,setAllowReview]=useState(true);
  const [savingDetails,setSavingDetails]=useState(false);
  const [settingsMessage,setSettingsMessage]=useState('');
+ useEffect(()=>{const normalized=normalizeBuilderDueDate(dueDate);if(normalized!==dueDate)setDueDate(normalized);},[dueDate,setDueDate]);
  useEffect(()=>{if(!testId||!url||!key){setLoadedPassword(true);return;}let cancelled=false;setLoadedPassword(false);setSettingsMessage('');fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(testId)}&select=test_password,max_attempts,allow_review`,{headers:getHeaders(),cache:'no-store'}).then(async r=>{if(!r.ok)throw new Error(await r.text());return r.json();}).then(rows=>{if(!cancelled){const row=rows?.[0]||{};setPassword(String(row.test_password??''));setMaxAttempts(String(Math.max(1,Number(row.max_attempts)||1)));setAllowReview(row.allow_review!==false);}}).catch(()=>{if(!cancelled)setSettingsMessage('Could not load the current test settings.');}).finally(()=>{if(!cancelled)setLoadedPassword(true);});return()=>{cancelled=true;};},[testId]);
  const handleDueDateChange=(raw:string)=>{const digits=raw.replace(/\D/g,'').slice(0,8);let formatted=digits;if(digits.length>4)formatted=`${digits.slice(0,2)} / ${digits.slice(2,4)} / ${digits.slice(4)}`;else if(digits.length>2)formatted=`${digits.slice(0,2)} / ${digits.slice(2)}`;setDueDate(formatted);};
  const handleSaveDetails=async()=>{
