@@ -15,8 +15,44 @@ type Question = { id?: string; test_id: string; question_order: number; question
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const headers = { apikey: key || '', Authorization: `Bearer ${key || ''}`, 'Content-Type': 'application/json' };
+const baseHeaders = { apikey: key || '', 'Content-Type': 'application/json' };
 const typeLabels: Record<QuestionType, string> = { multiple_choice: 'Multiple Choice', true_false: 'True / False', fill_blank: 'Fill in the Blank', matching: 'Match' };
+
+function getAccessToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const candidates = ['supabase.auth.token', 'supabase_access_token', 'access_token'];
+    for (const storage of [window.localStorage, window.sessionStorage]) {
+      for (const name of candidates) {
+        const value = storage.getItem(name);
+        if (value) {
+          try {
+            const parsed = JSON.parse(value);
+            if (typeof parsed === 'string') return parsed;
+            if (parsed?.access_token) return parsed.access_token;
+            if (parsed?.currentSession?.access_token) return parsed.currentSession.access_token;
+          } catch {
+            return value;
+          }
+        }
+      }
+    }
+    const currentUser = window.localStorage.getItem('current_user');
+    if (currentUser) {
+      try {
+        const parsed = JSON.parse(currentUser);
+        if (parsed?.access_token) return parsed.access_token;
+        if (parsed?.session?.access_token) return parsed.session.access_token;
+      } catch { /* ignore malformed localStorage */ }
+    }
+  } catch { /* ignore storage access errors */ }
+  return null;
+}
+
+function authHeaders() {
+  const token = getAccessToken();
+  return { ...baseHeaders, Authorization: `Bearer ${token || key || ''}` };
+}
 
 function typeOf(q: Question): QuestionType {
   const x = String(q.question_type || 'multiple_choice').toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
@@ -55,13 +91,14 @@ export default function TeacherTestsPage() {
     setLoading(true);
     try {
       if (!url || !key) throw new Error('Supabase environment variables are missing.');
+      const headers = authHeaders();
       const r = await fetch(`${url}/rest/v1/tests?select=*&order=created_at.desc`, { headers, cache: 'no-store' });
       if (!r.ok) throw new Error(await r.text());
       const data: Test[] = await r.json();
       setTests(data);
       const map: Record<string, Question[]> = {};
       await Promise.all(data.map(async t => {
-        const x = await fetch(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(t.id)}&select=*&order=question_order.asc`, { headers, cache: 'no-store' });
+        const x = await fetch(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(t.id)}&select=*&order=question_order.asc`, { headers: authHeaders(), cache: 'no-store' });
         if (!x.ok) throw new Error(await x.text());
         map[t.id] = await x.json();
       }));
@@ -77,6 +114,8 @@ export default function TeacherTestsPage() {
     if (!url || !key || !classCode.trim() || !title.trim()) return;
     setBusy(true); setError('');
     try {
+      const token = getAccessToken();
+      if (!token) throw new Error('Your teacher session has expired. Please sign in again.');
       let dueDate: string | null = null;
       if (dueDay || dueMonth || dueYear) {
         if (!/^\d{1,2}$/.test(dueDay) || !/^\d{1,2}$/.test(dueMonth) || !/^\d{4}$/.test(dueYear)) {
@@ -98,7 +137,7 @@ export default function TeacherTestsPage() {
         time_limit_minutes: timeLimit ? Math.max(1, Number(timeLimit)) : null,
         published: false,
       };
-      const r = await fetch(`${url}/rest/v1/tests`, { method: 'POST', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify(payload) });
+      const r = await fetch(`${url}/rest/v1/tests`, { method: 'POST', headers: { ...authHeaders(), Prefer: 'return=representation' }, body: JSON.stringify(payload) });
       if (!r.ok) throw new Error(await r.text());
       setClassCode(''); setTitle(''); setDescription(''); setDueDay(''); setDueMonth(''); setDueYear(''); setTestPassword(''); setTimeLimit(''); await load();
     } catch (e) { setError(`Failed to create test: ${e instanceof Error ? e.message : 'Unknown error'}`); }
@@ -108,7 +147,7 @@ export default function TeacherTestsPage() {
   async function deleteTest(id: string) {
     if (!url || !confirm('Delete this test and all its questions/submissions?')) return;
     try {
-      const r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers });
+      const r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
       if (!r.ok) throw new Error(await r.text());
       await load();
     } catch (e) { setError(`Failed to delete test: ${e instanceof Error ? e.message : 'Unknown error'}`); }
@@ -117,7 +156,7 @@ export default function TeacherTestsPage() {
   async function togglePublished(t: Test) {
     if (!url) return;
     try {
-      const r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(t.id)}`, { method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' }, body: JSON.stringify({ published: !t.published }) });
+      const r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(t.id)}`, { method: 'PATCH', headers: { ...authHeaders(), Prefer: 'return=minimal' }, body: JSON.stringify({ published: !t.published }) });
       if (!r.ok) throw new Error(await r.text());
       setTests(p => p.map(x => x.id === t.id ? { ...x, published: !x.published } : x));
     } catch (e) { setError(`Failed to change publication status: ${e instanceof Error ? e.message : 'Unknown error'}`); }
@@ -142,12 +181,13 @@ export default function TeacherTestsPage() {
 
   async function recalculatePoints(testId: string) {
     if (!url) throw new Error('Supabase URL is missing.');
+    const headers = authHeaders();
     const r = await fetch(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(testId)}&select=id`, { headers, cache: 'no-store' });
     if (!r.ok) throw new Error(await r.text());
     const rows: { id: string }[] = await r.json();
     const points = rows.length ? 100 / rows.length : 0;
     for (const row of rows) {
-      const x = await fetch(`${url}/rest/v1/test_questions?id=eq.${encodeURIComponent(row.id)}`, { method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' }, body: JSON.stringify({ points }) });
+      const x = await fetch(`${url}/rest/v1/test_questions?id=eq.${encodeURIComponent(row.id)}`, { method: 'PATCH', headers: { ...authHeaders(), Prefer: 'return=minimal' }, body: JSON.stringify({ points }) });
       if (!x.ok) throw new Error(await x.text());
     }
   }
@@ -178,10 +218,12 @@ export default function TeacherTestsPage() {
     if (!url || !key) { setError('Supabase is not configured.'); return; }
     setBusy(true); setError('');
     try {
+      const token = getAccessToken();
+      if (!token) throw new Error('Your teacher session has expired. Please sign in again.');
       const testId = draft.test_id;
       const order = (questions[testId]?.length || 0) + 1;
       const payload = { test_id: testId, question_order: order, question: draft.question.trim(), image_url: draft.image_url?.trim() || null, option_a: draft.option_a.trim(), option_b: draft.option_b.trim(), option_c: draft.option_c.trim(), option_d: draft.option_d.trim(), correct_answer: draft.correct_answer, points: 100 / order, question_type: draft.question_type };
-      const r = await fetch(`${url}/rest/v1/test_questions`, { method: 'POST', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify(payload) });
+      const r = await fetch(`${url}/rest/v1/test_questions`, { method: 'POST', headers: { ...authHeaders(), Prefer: 'return=representation' }, body: JSON.stringify(payload) });
       if (!r.ok) throw new Error(await r.text());
       await recalculatePoints(testId);
       setQ(null); setOpen(null); await load();
@@ -192,7 +234,7 @@ export default function TeacherTestsPage() {
   async function deleteQuestion(id: string, testId: string) {
     if (!url || !confirm('Delete this question?')) return;
     try {
-      const r = await fetch(`${url}/rest/v1/test_questions?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers });
+      const r = await fetch(`${url}/rest/v1/test_questions?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
       if (!r.ok) throw new Error(await r.text());
       await recalculatePoints(testId); await load();
     } catch (e) { setError(`Failed to delete question: ${e instanceof Error ? e.message : 'Unknown error'}`); }
