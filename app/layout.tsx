@@ -1,6 +1,6 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Dancing_Script, Inter } from 'next/font/google'
+import { Instrument_Serif, Inter } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
 import { LanguageProvider } from '@/components/language-provider'
 import { SupabaseAuthFetch } from '@/components/supabase-auth-fetch'
@@ -12,10 +12,11 @@ const inter = Inter({
   display: 'swap',
 })
 
-const dancingScript = Dancing_Script({
+const instrumentSerif = Instrument_Serif({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-dancing-script',
+  weight: '400',
+  style: ['normal', 'italic'],
+  variable: '--font-instrument-serif',
   display: 'swap',
 })
 
@@ -46,7 +47,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${dancingScript.variable} bg-background`}
+      className={`${inter.variable} ${instrumentSerif.variable} bg-background`}
     >
       <body className="font-sans antialiased">
         <ThemeProvider
