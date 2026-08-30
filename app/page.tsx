@@ -2,44 +2,35 @@ import { GraduationCap, CheckCircle2 } from 'lucide-react'
 import { LoginForm } from '@/components/login-form'
 import { ThemeToggle } from '@/components/theme-toggle'
 
-const highlights = [
-  'Create quizzes and tests',
-  'Track student grades',
-  'Share with your class',
-]
+const highlights = ['Create quizzes and tests', 'Track student grades', 'Share with your class']
 
 export default function Page() {
   return (
-    <main className="min-h-screen bg-background lg:grid lg:grid-cols-[0.95fr_1.05fr]">
-      <section className="relative flex min-h-[430px] flex-col overflow-hidden bg-primary px-6 py-8 text-primary-foreground sm:px-10 lg:min-h-screen lg:px-14 lg:py-12">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-32 -top-32 size-96 rounded-full bg-primary-foreground/10 blur-3xl" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-32 size-[28rem] rounded-full bg-primary-foreground/10 blur-3xl" />
+    <main className="min-h-screen bg-background lg:grid lg:grid-cols-2">
+      <section className="relative flex min-h-[520px] flex-col overflow-hidden bg-primary px-6 py-8 text-primary-foreground sm:px-10 lg:min-h-screen lg:px-14 lg:py-10">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-40 -top-40 size-[30rem] rounded-full bg-primary-foreground/10 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-48 -left-40 size-[32rem] rounded-full bg-primary-foreground/10 blur-3xl" />
 
-        <div className="relative z-10 flex items-center justify-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-2xl bg-primary-foreground/15 ring-1 ring-primary-foreground/10">
+        <div className="relative z-10 flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-xl bg-primary-foreground/15 ring-1 ring-primary-foreground/10">
             <GraduationCap className="size-5" />
           </span>
-          <span className="text-lg font-extrabold tracking-tight">EduQuizLabs</span>
+          <span className="text-lg font-bold tracking-tight">EduQuizLabs</span>
         </div>
 
-        <div className="relative z-10 flex flex-1 items-center justify-center">
-          <div className="mx-auto w-full max-w-3xl text-center">
-            <h1
-              className="text-balance text-4xl font-normal italic leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl"
-              style={{ fontFamily: 'var(--font-instrument-serif)' }}
-            >
+        <div className="relative z-10 flex flex-1 items-center py-14 lg:py-20">
+          <div className="w-full max-w-xl">
+            <h1 className="text-balance text-5xl font-normal italic leading-[1.08] tracking-tight sm:text-6xl lg:text-7xl" style={{ fontFamily: 'Georgia, serif' }}>
               Where curiosity becomes knowledge
             </h1>
-            <p className="mx-auto mt-7 max-w-2xl text-lg leading-8 text-primary-foreground/75 sm:text-xl">
+            <p className="mt-6 max-w-lg text-base leading-7 text-primary-foreground/75 sm:text-lg">
               Create, share, and manage quizzes, tests, and assignments in one place.
             </p>
 
-            <ul className="mx-auto mt-12 grid w-full max-w-2xl gap-4 sm:grid-cols-3">
+            <ul className="mt-10 grid gap-3 sm:grid-cols-3 lg:max-w-xl">
               {highlights.map((item) => (
-                <li key={item} className="flex min-h-28 flex-col items-center justify-center gap-3 rounded-2xl bg-primary-foreground/[0.07] px-5 py-5 text-center text-base font-medium ring-1 ring-primary-foreground/10 sm:text-lg">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-foreground/10">
-                    <CheckCircle2 className="size-5" />
-                  </span>
+                <li key={item} className="flex items-center gap-2.5 rounded-xl bg-primary-foreground/[0.07] px-4 py-3 text-sm font-medium ring-1 ring-primary-foreground/10">
+                  <CheckCircle2 className="size-4 shrink-0" />
                   <span>{item}</span>
                 </li>
               ))}
@@ -48,20 +39,21 @@ export default function Page() {
         </div>
       </section>
 
-      <section className="relative flex min-h-[570px] items-center justify-center overflow-hidden px-5 py-12 sm:px-10 lg:min-h-screen lg:px-16">
+      <section className="relative flex min-h-[560px] items-center justify-center px-5 py-12 sm:px-10 lg:min-h-screen lg:px-16">
         <div className="absolute right-5 top-5 sm:right-8 sm:top-8">
           <ThemeToggle />
         </div>
 
-        <div className="relative w-full max-w-md">
-          <div className="mb-8">
-            <div className="mb-4 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10 lg:hidden">
+        <div className="w-full max-w-md pt-8 lg:pt-0">
+          <div className="mb-7">
+            <div className="mb-4 flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10 lg:hidden">
               <GraduationCap className="size-5" />
             </div>
-            <h2 className="text-3xl font-black tracking-tight text-foreground sm:text-4xl">Sign in to EduQuizLabs</h2>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Sign in</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Welcome back to EduQuizLabs.</p>
           </div>
 
-          <div className="rounded-3xl border border-border/70 bg-card/70 p-5 shadow-xl shadow-primary/5 backdrop-blur-sm sm:p-7">
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-7">
             <LoginForm />
           </div>
         </div>
