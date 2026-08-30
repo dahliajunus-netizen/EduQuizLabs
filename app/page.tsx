@@ -19,15 +19,15 @@ export default function Page() {
         </div>
 
         <div className="relative z-10 flex flex-1 items-center py-14 lg:py-20">
-          <div className="w-full max-w-xl">
+          <div className="w-full max-w-2xl">
             <h1 className="text-balance text-5xl font-normal italic leading-[1.08] tracking-tight sm:text-6xl lg:text-7xl" style={{ fontFamily: 'Georgia, serif' }}>
               Where curiosity becomes knowledge
             </h1>
-            <p className="mt-6 max-w-lg text-base leading-7 text-primary-foreground/75 sm:text-lg">
+            <p className="mt-6 max-w-xl text-base leading-7 text-primary-foreground/75 sm:text-lg">
               Create, share, and manage quizzes, tests, and assignments in one place.
             </p>
 
-            <ul className="mt-10 grid gap-3 sm:grid-cols-3 lg:max-w-xl">
+            <ul className="mt-10 grid gap-3 sm:grid-cols-3 lg:max-w-2xl">
               {highlights.map((item) => (
                 <li key={item} className="flex items-center gap-2.5 rounded-xl bg-primary-foreground/[0.07] px-4 py-3 text-sm font-medium ring-1 ring-primary-foreground/10">
                   <CheckCircle2 className="size-4 shrink-0" />
