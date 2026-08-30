@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Check, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Eye, EyeOff, FileText, Loader2, Lock } from 'lucide-react';
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, Clock3, FileText, Loader2, Lock } from 'lucide-react';
 
 type Test={id:string;class_code?:string;title:string;description:string|null;published:boolean;due_date?:string|null;test_password?:string|null;time_limit_minutes?:number|null;max_attempts?:number|null;allow_review?:boolean|null};
 type Question={id:string;test_id:string;question_order:number;question:string;question_type?:string|null;option_a?:string|null;option_b?:string|null;option_c?:string|null;option_d?:string|null;correct_answer?:string|null;points?:number|null;answer_data?:Record<string,unknown>|null};
@@ -13,11 +13,9 @@ type Pair={left:string;right:string};
 type QType='multiple-choice'|'true-false'|'fill-blank'|'matching';
 type Submission={id:string;test_id:string;student_id:string;answers:Record<string,string>|null;score:number};
 type Attempt={id:string;test_id:string;student_id:string;status?:string|null;answers?:Record<string,string>|null;started_at?:string|null;updated_at?:string|null;completed_at?:string|null};
-
 const url=process.env.NEXT_PUBLIC_SUPABASE_URL||'';
 const key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY||'';
 const headers={apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'};
-
 function studentId(){try{const u=JSON.parse(localStorage.getItem('current_user')||'{}');return String(u.student_id??u.id??u.user_id??u.uid??'').trim()||null}catch{return null}}
 function typeOf(q:Question):QType{const r=String(q.question_type||'multiple-choice').trim().toLowerCase().replace(/_/g,'-').replace(/\s+/g,'-');if(['true-false','truefalse','boolean'].includes(r))return'true-false';if(['fill-blank','fill-in-blank','fill-in-the-blank','fillintheblank','fill-blank-question'].includes(r))return'fill-blank';if(['matching','match'].includes(r))return'matching';return'multiple-choice'}
 function pairs(q:Question):Pair[]{try{const p=JSON.parse(String(q.option_a||'[]'));if(Array.isArray(p))return p.map((x:any)=>({left:String(x?.left??''),right:String(x?.right??'')})).filter((x:Pair)=>x.left&&x.right)}catch{}return q.option_a&&q.option_b?[{left:String(q.option_a),right:String(q.option_b)}]:[]}
@@ -27,245 +25,33 @@ function desc(v:string|null){return(v||'').replace(/^\[\[EQ_PASSWORD:[^\]]+\]\]\
 function imageOf(q:Question){const a=q.answer_data;return a&&typeof a==='object'&&typeof a.image_url==='string'?a.image_url:''}
 function fillAnswer(q:Question){return String(q.option_a??'').trim()||String(q.correct_answer??'').trim()}
 function acceptedFill(q:Question){return fillAnswer(q).split(/\s*(?:\|\||;|,)\s*/).map(norm).filter(Boolean)}
-
-export default function TakeTestPage(){
- const {id:raw}=useParams<{id:string}>();
- const id=String(raw||'');
- const router=useRouter();
- const sp=useSearchParams();
- const reviewLatest=sp.get('review')==='latest';
- const[test,setTest]=useState<Test|null>(null);
- const[questions,setQuestions]=useState<Question[]>([]);
- const[answers,setAnswers]=useState<Record<string,string>>({});
- const[subs,setSubs]=useState<Submission[]>([]);
- const[reviewing,setReviewing]=useState<Submission|null>(null);
- const[loading,setLoading]=useState(true);
- const[submitting,setSubmitting]=useState(false);
- const[password,setPassword]=useState('');
- const[entered,setEntered]=useState('');
- const[showPassword,setShowPassword]=useState(false);
- const[unlocked,setUnlocked]=useState(false);
- const[confirm,setConfirm]=useState(false);
- const[error,setError]=useState('');
- const[started,setStarted]=useState<number|null>(null);
- const[remaining,setRemaining]=useState<number|null>(null);
- const[sid,setSid]=useState<string|null>(null);
- const[submissionComplete,setSubmissionComplete]=useState(false);
- const[current,setCurrent]=useState(0);
- const attemptRef=useRef<Attempt|null>(null);
- const answersRef=useRef<Record<string,string>>({});
- const savingRef=useRef(false);
- const submittingRef=useRef(false);
- const autoSubmittedRef=useRef(false);
- const deadlineRef=useRef<number|null>(null);
-
- useEffect(()=>{answersRef.current=answers},[answers]);
-
- const max=Math.max(1,Number(test?.max_attempts)||1);
- const used=subs.length;
- const left=Math.max(0,max-used);
-
- const save=useCallback(async(a=answersRef.current)=>{
-   const attempt=attemptRef.current;
-   if(!attempt?.id||savingRef.current)return;
-   savingRef.current=true;
-   try{await fetch(`${url}/rest/v1/test_attempts?id=eq.${encodeURIComponent(attempt.id)}`,{method:'PATCH',headers:{...headers,Prefer:'return=minimal'},body:JSON.stringify({answers:a,status:'in_progress',updated_at:new Date().toISOString()})})}finally{savingRef.current=false}
- },[]);
-
- const finishAttempt=useCallback(async(a:Record<string,string>)=>{
-   const attempt=attemptRef.current;
-   if(!attempt?.id)return;
-   const now=new Date().toISOString();
-   await fetch(`${url}/rest/v1/test_attempts?id=eq.${encodeURIComponent(attempt.id)}`,{method:'PATCH',headers:{...headers,Prefer:'return=minimal'},body:JSON.stringify({answers:a,status:'completed',updated_at:now,completed_at:now})});
-   attemptRef.current=null;
- },[]);
-
- const createAttempt=useCallback(async(s:string)=>{
-   const now=new Date().toISOString();
-   const r=await fetch(`${url}/rest/v1/test_attempts`,{method:'POST',headers:{...headers,Prefer:'return=representation'},body:JSON.stringify({test_id:id,student_id:s,status:'in_progress',answers:{},started_at:now,updated_at:now})});
-   if(!r.ok)throw new Error(await r.text());
-   const d=await r.json();
-   const attempt=(Array.isArray(d)?d[0]:d) as Attempt;
-   if(!attempt?.id)throw new Error('Could not create test attempt.');
-   attemptRef.current=attempt;
-   return attempt;
- },[id]);
-
- const findAttempt=useCallback(async(s:string)=>{
-   const r=await fetch(`${url}/rest/v1/test_attempts?test_id=eq.${encodeURIComponent(id)}&student_id=eq.${encodeURIComponent(s)}&status=eq.in_progress&select=*&order=started_at.desc&limit=1`,{headers,cache:'no-store'});
-   if(!r.ok)return null;
-   const d=await r.json();
-   if(!Array.isArray(d)||!d[0])return null;
-   const attempt=d[0] as Attempt;
-   attemptRef.current=attempt;
-   if(attempt.answers){answersRef.current=attempt.answers;setAnswers(attempt.answers)}
-   return attempt;
- },[id]);
-
- const submitTest=useCallback(async(auto=false)=>{
-   if(!test||!sid||submittingRef.current||reviewing||left<=0)return;
-   if(auto&&autoSubmittedRef.current)return;
-   if(!auto&&questions.some(q=>!answeredQuestion(q,answersRef.current))){setError('Please answer every question before submitting.');return}
-   if(!auto&&!confirm){setConfirm(true);return}
-   if(auto)autoSubmittedRef.current=true;
-   submittingRef.current=true;
-   setSubmitting(true);
-   setError('');
-   try{
-     const a={...answersRef.current};
-     const correctCount=questions.reduce((count,q)=>count+(isCorrect(q,a)?1:0),0);
-     const score=questions.length?Math.min(100,Math.round((correctCount/questions.length)*10000)/100):0;
-     await save(a);
-     const r=await fetch(`${url}/rest/v1/test_submissions`,{method:'POST',headers:{...headers,Prefer:'return=representation'},body:JSON.stringify({test_id:id,student_id:sid,answers:a,score})});
-     if(!r.ok)throw new Error(await r.text());
-     const d=await r.json();
-     const row=(Array.isArray(d)?d[0]:d) as Submission;
-     if(!row?.id)throw new Error('Submission was not saved.');
-     await finishAttempt(a);
-     setSubs(x=>[{...row,answers:a,score},...x]);
-     setStarted(null);setRemaining(null);deadlineRef.current=null;
-     setAnswers({});answersRef.current={};setConfirm(false);setSubmissionComplete(true);
-   }catch(e){
-     if(auto)autoSubmittedRef.current=false;
-     setError(e instanceof Error?e.message:'Failed to submit assessment.');
-   }finally{submittingRef.current=false;setSubmitting(false)}
- },[test,sid,reviewing,left,questions,confirm,id,save,finishAttempt]);
-
- useEffect(()=>{
-   if(!id)return;
-   let cancelled=false;
-   (async()=>{
-     try{
-       const s=studentId();
-       if(!s)throw new Error('Student UUID not found. Please sign in again.');
-       setSid(s);
-       // Fetch by ID only. The student tests list already filters to published tests,
-       // and this avoids the direct-page lookup failing because of a combined
-       // `id + published` PostgREST/RLS filter.
-       const tr=await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(id)}&select=*`,{headers,cache:'no-store'});
-       if(!tr.ok){const body=await tr.text();throw new Error(body||'Could not load test.');}
-       const td=await tr.json();
-       if(!Array.isArray(td)||!td[0])throw new Error('Test not found.');
-       const t=td[0] as Test;
-       if(t.published===false)throw new Error('This test is not published yet.');
-       const p=String(t.test_password||'').trim();
-       setTest(t);
-       setPassword(p);setUnlocked(!p);
-       const qr=await fetch(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(id)}&select=*&order=question_order.asc,id.asc`,{headers,cache:'no-store'});
-       if(!qr.ok)throw new Error(await qr.text());
-       const qs=await qr.json();
-       setQuestions(Array.isArray(qs)?qs:[]);
-       const sr=await fetch(`${url}/rest/v1/test_submissions?test_id=eq.${encodeURIComponent(id)}&student_id=eq.${encodeURIComponent(s)}&select=*&order=id.desc`,{headers,cache:'no-store'});
-       const rows=sr.ok?await sr.json():[];
-       const list:Array<Submission>=Array.isArray(rows)?rows:[];
-       setSubs(list);
-       if(reviewLatest&&t.allow_review!==false&&list[0]){setReviewing(list[0]);return}
-       if(list.length>=Math.max(1,Number(t.max_attempts)||1))return;
-       const attempt=await findAttempt(s);
-       if(cancelled)return;
-       if(attempt){
-         setUnlocked(true);
-         const st=attempt.started_at?new Date(attempt.started_at).getTime():Date.now();
-         setStarted(st);
-         if(t.time_limit_minutes){
-           const deadline=st+Number(t.time_limit_minutes)*60000;
-           deadlineRef.current=deadline;
-           const seconds=Math.max(0,Math.ceil((deadline-Date.now())/1000));
-           setRemaining(seconds);
-         }else setRemaining(null);
-       }else if(!p){
-         const fresh=await createAttempt(s);
-         if(cancelled)return;
-         const st=fresh.started_at?new Date(fresh.started_at).getTime():Date.now();
-         setStarted(st);setUnlocked(true);
-         if(t.time_limit_minutes){
-           const deadline=st+Number(t.time_limit_minutes)*60000;
-           deadlineRef.current=deadline;
-           setRemaining(Math.max(0,Math.ceil((deadline-Date.now())/1000)));
-         }
-       }
-     }catch(e){if(!cancelled)setError(e instanceof Error?e.message:'Failed to load test.')}finally{if(!cancelled)setLoading(false)}
-   })();
-   return()=>{cancelled=true};
- },[id,reviewLatest,findAttempt,createAttempt]);
-
- useEffect(()=>{
-   if(!started||reviewing||!attemptRef.current||submissionComplete||left<=0)return;
-   const i=window.setInterval(()=>void save(),5000);
-   return()=>window.clearInterval(i);
- },[started,reviewing,submissionComplete,left,save]);
-
- useEffect(()=>{
-   if(!started||reviewing||!attemptRef.current||submissionComplete)return;
-   const f=()=>void save();
-   window.addEventListener('pagehide',f);
-   return()=>window.removeEventListener('pagehide',f);
- },[started,reviewing,submissionComplete,save]);
-
- useEffect(()=>{
-   if(!started||!test?.time_limit_minutes||reviewing||submissionComplete||left<=0)return;
-   const deadline=deadlineRef.current??(started+Number(test.time_limit_minutes)*60000);
-   deadlineRef.current=deadline;
-   const tick=()=>{
-     const seconds=Math.max(0,Math.ceil((deadline-Date.now())/1000));
-     setRemaining(seconds);
-     if(seconds<=0&&!submittingRef.current)void submitTest(true);
-   };
-   tick();
-   const i=window.setInterval(tick,250);
-   return()=>window.clearInterval(i);
- },[started,test?.time_limit_minutes,reviewing,submissionComplete,left,submitTest]);
-
- const start=async()=>{
-   if(!sid||left<=0)return;
-   try{
-     setError('');
-     const existing=await findAttempt(sid);
-     const attempt=existing||await createAttempt(sid);
-     const st=attempt.started_at?new Date(attempt.started_at).getTime():Date.now();
-     setStarted(st);setUnlocked(true);
-     autoSubmittedRef.current=false;
-     if(test?.time_limit_minutes){
-       const deadline=st+Number(test.time_limit_minutes)*60000;
-       deadlineRef.current=deadline;
-       setRemaining(Math.max(0,Math.ceil((deadline-Date.now())/1000)));
-       if(deadline<=Date.now())void submitTest(true);
-     }else{deadlineRef.current=null;setRemaining(null)}
-   }catch(e){setError(e instanceof Error?e.message:'Could not start assessment.');setUnlocked(false)}
- };
-
- const enter=()=>{if(entered===password)void start();else setError('Incorrect assessment password.')};
- const retryAssessment=async()=>{
-   if(left<=0){setError('You have used all available attempts.');return}
-   setError('');setReviewing(null);setCurrent(0);setAnswers({});answersRef.current={};setConfirm(false);setSubmissionComplete(false);autoSubmittedRef.current=false;attemptRef.current=null;deadlineRef.current=null;
-   if(password){setEntered('');setShowPassword(false);setUnlocked(false);return}
-   await start();
- };
- const setAnswer=(qid:string,v:string)=>{const next={...answersRef.current,[qid]:v};answersRef.current=next;setAnswers(next);void save(next)};
- const matchingOptions=useMemo(()=>Array.from(new Set(questions.filter(q=>typeOf(q)==='matching').flatMap(q=>pairs(q).map(p=>p.right)))),[questions]);
- const progress=questions.length?Math.round((questions.filter(q=>answeredQuestion(q,answers)).length/questions.length)*100):0;
- const time=remaining===null?null:`${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`;
-
- if(loading)return <div className="min-h-screen bg-blue-50 flex items-center justify-center"><Loader2 className="size-8 animate-spin text-blue-600"/></div>;
- if(!test)return <main className="min-h-screen bg-blue-50 flex items-center justify-center p-6"><Card className="w-full max-w-md"><CardContent className="p-8 text-center"><p className="text-destructive">{error||'Unable to load assessment.'}</p><Button className="mt-5" onClick={()=>router.push('/dashboard/student')}>Back to Dashboard</Button></CardContent></Card></main>;
- if(!unlocked&&left>0)return <main className="min-h-screen bg-blue-50 flex items-center justify-center p-6"><Card className="w-full max-w-md border-blue-100 shadow-xl"><CardHeader className="border-b bg-white p-7 text-center"><div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-xl bg-blue-600 text-white"><Lock className="size-5"/></div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Assessment Access</p><CardTitle className="mt-1 text-2xl">{test.title}</CardTitle><p className="mt-2 text-sm text-slate-500">Enter the assessment password to begin.</p></CardHeader><CardContent className="space-y-4 p-7"><label className="text-sm font-semibold text-slate-800">Assessment password<Input className="mt-2 h-11" type={showPassword?'text':'password'} value={entered} onChange={e=>setEntered(e.target.value)} onKeyDown={e=>e.key==='Enter'&&enter()}/></label>{error&&<p className="text-sm text-destructive">{error}</p>}<div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-700">Attempt {used+1} of {max}</div><Button className="h-11 w-full bg-blue-600 hover:bg-blue-700" onClick={enter}>Begin Assessment</Button><Button variant="ghost" className="w-full" onClick={()=>router.push('/dashboard/student')}>Cancel</Button></CardContent></Card></main>;
- if(reviewing)return <main className="min-h-screen bg-blue-50 py-8"><div className="mx-auto max-w-4xl px-5"><div className="mb-7 flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Assessment Review</p><h1 className="mt-1 text-2xl font-bold text-slate-900">{test.title}</h1><p className="mt-1 text-slate-600">Final score <strong>{Number(reviewing.score).toFixed(2)}/100</strong></p></div><Button variant="outline" onClick={()=>setReviewing(null)}>Back</Button></div><div className="space-y-4">{questions.map((q,i)=>{const ok=isCorrect(q,reviewing.answers||{});const a=(reviewing.answers||{})[q.id]||'';return <Card key={q.id} className={`overflow-hidden border ${ok?'border-emerald-200':'border-rose-200'}`}><CardHeader className="bg-white"><div className="flex justify-between gap-4"><CardTitle className="text-base">Question {i+1}</CardTitle><span className={`text-sm font-semibold ${ok?'text-emerald-700':'text-rose-700'}`}>{ok?'Correct':'Incorrect'}</span></div><p className="leading-7 text-slate-800">{q.question}</p>{imageOf(q)&&<img src={imageOf(q)} alt="Question" className="mt-2 max-h-72 rounded-lg border object-contain"/>}</CardHeader><CardContent><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Your answer</p><p className="mt-1 rounded-lg border bg-blue-50 p-3">{typeOf(q)==='matching'?Object.entries(parseMatching(a)).map(([k,v])=>`${k} → ${v}`).join(' • '):a||'No answer'}</p>{!ok&&<><p className="mt-4 text-xs font-semibold uppercase tracking-wider text-emerald-700">Correct answer</p><p className="mt-1 rounded-lg border border-emerald-200 bg-emerald-50 p-3">{typeOf(q)==='fill-blank'?fillAnswer(q):typeOf(q)==='true-false'?(tf(q.correct_answer)==='A'?'True':'False'):typeOf(q)==='matching'?pairs(q).map(p=>`${p.left} → ${p.right}`).join(' • '):(q.correct_answer||'')}</p></>}</CardContent></Card>})}</div></div></main>;
- if(!started||left<=0||submissionComplete)return <main className="min-h-screen bg-blue-50 flex items-center justify-center p-6"><Card className="w-full max-w-xl border-blue-100 shadow-lg"><CardContent className="p-10 text-center"><div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-blue-600 text-white"><CheckCircle2 className="size-7"/></div><p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Assessment Complete</p><h2 className="mt-2 text-2xl font-bold text-slate-900">{test.title}</h2><p className="mt-2 text-slate-500">Your latest score</p><p className="mt-1 text-5xl font-bold text-slate-900">{Number(subs[0]?.score||0).toFixed(2)}<span className="text-xl text-slate-400">/100</span></p><p className="mt-3 text-sm text-slate-500">Attempts used: {used}/{max}</p><div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">{test.allow_review===false?<Button variant="outline" disabled>Review Not Permitted</Button>:subs[0]&&<Button variant="outline" onClick={()=>setReviewing(subs[0])}>Review Assessment</Button>}{left>0&&<Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>void retryAssessment()}>Retry Assessment</Button>}<Button variant="outline" onClick={()=>router.push('/dashboard/student')}>Back to Dashboard</Button></div></CardContent></Card></main>;
- const q=questions[current];
- if(!q)return <main className="min-h-screen bg-blue-50 flex items-center justify-center p-6"><Card><CardContent className="p-8 text-center">This test has no questions.</CardContent></Card></main>;
- const qType=typeOf(q);const qAnswer=answers[q.id]||'';const optionLetters=['A','B','C','D'] as const;const selectedMatching=parseMatching(qAnswer);
- return <div className="min-h-screen bg-blue-50 text-slate-900 pb-28"><header className="sticky top-0 z-40 border-b border-blue-100 bg-white/95 shadow-sm backdrop-blur"><div className="mx-auto max-w-7xl px-4 sm:px-6"><div className="flex min-h-16 items-center gap-4"><div className="flex min-w-0 flex-1 items-center gap-3"><div className="hidden size-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white sm:flex"><FileText className="size-4"/></div><div className="min-w-0"><p className="truncate text-sm font-bold sm:text-base">{test.title}</p><p className="text-xs text-slate-500">Attempt {used+1} of {max} · {questions.length} questions</p></div></div><div className="flex items-center gap-3"><div className="hidden text-right sm:block"><p className="text-[10px] font-bold uppercase tracking-wider text-blue-500">Progress</p><p className="text-sm font-semibold">{progress}% complete</p></div>{time!==null&&<div className={`flex items-center gap-2 rounded-lg border px-3 py-2 font-mono text-sm font-bold ${remaining!==null&&remaining<=60?'border-rose-300 bg-rose-50 text-rose-700':'border-blue-200 bg-blue-50 text-blue-700'}`}><Clock3 className="size-4"/>{time}</div>}</div></div><div className="h-1 w-full overflow-hidden bg-blue-100"><div className="h-full bg-blue-600 transition-all duration-300" style={{width:`${progress}%`}}/></div></div></header>
- <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6"><div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]"><aside className="hidden lg:block"><div className="sticky top-24 rounded-xl border border-blue-100 bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Questions</p><div className="mt-3 grid grid-cols-5 gap-2">{questions.map((x,i)=><button key={x.id} type="button" onClick={()=>setCurrent(i)} className={`relative flex size-8 items-center justify-center rounded-md text-xs font-semibold transition ${i===current?'bg-blue-600 text-white ring-2 ring-blue-200':answeredQuestion(x,answers)?'bg-blue-50 text-blue-700':'border bg-white text-slate-500 hover:bg-blue-50'}`}>{i+1}</button>)}</div></div></aside>
- <main className="min-w-0"><div className="mb-5 rounded-xl border border-blue-100 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Assessment</p><h1 className="mt-1 text-xl font-bold">{test.title}</h1></div><div className="rounded-lg bg-blue-50 px-3 py-2 text-right"><p className="text-xs text-blue-600">Question</p><p className="font-bold">{current+1} <span className="font-normal text-slate-400">of {questions.length}</span></p></div></div>{desc(test.description)&&<p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">{desc(test.description)}</p>}</div>
- <Card className="overflow-hidden border-blue-100 shadow-md"><CardHeader className="border-b border-blue-100 bg-white px-5 py-5 sm:px-7"><div className="flex items-start gap-4"><div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">{current+1}</div><div className="min-w-0 flex-1"><div className="mb-2 flex flex-wrap items-center gap-2"><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-blue-700">{qType==='fill-blank'?'Fill in the blank':qType==='true-false'?'True / False':qType==='matching'?'Matching':'Multiple choice'}</span><span className="text-xs text-slate-400">{Number(q.points||0)} point{Number(q.points||0)===1?'':'s'}</span></div><h2 className="text-lg font-semibold leading-7 sm:text-xl">{q.question}</h2>{imageOf(q)&&<img src={imageOf(q)} alt="Question" className="mt-4 max-h-80 w-full rounded-lg border bg-blue-50 object-contain"/>}</div></div></CardHeader><CardContent className="space-y-5 bg-white px-5 py-6 sm:px-7">
- {qType==='multiple-choice'&&<div className="grid gap-3">{optionLetters.map(letter=>{const text=q[`option_${letter.toLowerCase()}` as 'option_a'|'option_b'|'option_c'|'option_d'];if(!text)return null;const selected=qAnswer===letter;return <button key={letter} type="button" onClick={()=>setAnswer(q.id,letter)} className={`flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition ${selected?'border-blue-600 bg-blue-50 shadow-sm':'border-blue-100 bg-white hover:border-blue-300 hover:bg-blue-50'}`}><span className={`flex size-9 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${selected?'border-blue-600 bg-blue-600 text-white':'border-slate-300 text-slate-600'}`}>{letter}</span><span className="flex-1 text-sm leading-6 sm:text-base">{text}</span>{selected&&<Check className="size-5 text-blue-600"/>}</button>})}</div>}
- {qType==='true-false'&&<div className="grid gap-3 sm:grid-cols-2">{[['A','True'],['B','False']].map(([letter,label])=>{const selected=tf(qAnswer)===letter;return <button key={letter} type="button" onClick={()=>setAnswer(q.id,letter)} className={`flex items-center justify-center gap-3 rounded-xl border-2 p-5 text-base font-semibold transition ${selected?'border-blue-600 bg-blue-600 text-white shadow-sm':'border-blue-100 bg-white hover:border-blue-300 hover:bg-blue-50'}`}>{selected&&<Check className="size-5"/>}{label}</button>})}</div>}
- {qType==='fill-blank'&&<div><label className="text-sm font-semibold text-slate-700">Your answer</label><Input autoComplete="off" className="mt-2 h-14 border-2 border-blue-100 text-base lowercase" value={qAnswer} onChange={e=>setAnswer(q.id,e.target.value.toLowerCase())} onPaste={e=>{e.preventDefault();setAnswer(q.id,e.clipboardData.getData('text').toLowerCase())}} onBlur={()=>void save(answersRef.current)} placeholder="Type your answer here"/><p className="mt-2 text-xs text-blue-500">Lowercase only. Your response is saved automatically.</p></div>}
- {qType==='matching'&&<div className="space-y-3">{pairs(q).map(pair=><div key={pair.left} className="grid gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 sm:grid-cols-[1fr_32px_1fr] sm:items-center"><div className="rounded-lg bg-white p-3 text-sm font-medium shadow-sm">{pair.left}</div><div className="hidden text-center text-blue-400 sm:block">→</div><select className="h-11 rounded-lg border border-blue-100 bg-white px-3 text-sm" value={selectedMatching[pair.left]||''} onChange={e=>setAnswer(q.id,JSON.stringify({...selectedMatching,[pair.left]:e.target.value}))}><option value="">Select a match</option>{matchingOptions.map(o=><option key={o} value={o}>{o}</option>)}</select></div>)}</div>}
- </CardContent></Card>{error&&<div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}<div className="mt-5 flex items-center justify-between gap-3"><Button variant="outline" disabled={current===0} onClick={()=>setCurrent(v=>Math.max(0,v-1))}><ChevronLeft className="mr-1 size-4"/>Previous</Button>{current<questions.length-1?<Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>setCurrent(v=>Math.min(questions.length-1,v+1))}>Next question<ChevronRight className="ml-1 size-4"/></Button>:<Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>void submitTest(false)} disabled={submitting}>{submitting?'Submitting...':'Submit assessment'}</Button>}</div>{confirm&&<Card className="mt-5 border-blue-200 shadow-md"><CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">Ready to submit?</p><p className="text-sm text-slate-500">You will use one attempt and cannot edit your answers afterward.</p></div><div className="flex gap-2"><Button variant="outline" onClick={()=>setConfirm(false)}>Continue</Button><Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>void submitTest(false)} disabled={submitting}>{submitting?'Submitting...':'Confirm submission'}</Button></div></CardContent></Card>}</main></div></div>
- <footer className="fixed bottom-0 left-0 right-0 z-30 border-t border-blue-100 bg-white/95 shadow-lg backdrop-blur"><div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6"><div className="hidden text-sm text-slate-500 sm:block"><span className="font-semibold text-blue-700">{questions.filter(x=>answeredQuestion(x,answers)).length}</span> of {questions.length} answered</div><div className="flex w-full justify-end gap-2 sm:w-auto"><Button variant="outline" onClick={()=>setCurrent(v=>Math.max(0,v-1))} disabled={current===0}><ChevronLeft className="size-4 sm:mr-1"/><span className="hidden sm:inline">Previous</span></Button>{current<questions.length-1?<Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>setCurrent(v=>Math.min(questions.length-1,v+1))}>Next<span className="hidden sm:inline"> question</span><ChevronRight className="size-4 sm:ml-1"/></Button>:<Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>void submitTest(false)} disabled={submitting}>{submitting?'Submitting...':'Submit assessment'}</Button>}</div></div></footer></div>;
-}
-
 function parseMatching(v:string):Record<string,string>{try{const x=JSON.parse(v||'{}');return x&&typeof x==='object'&&!Array.isArray(x)?x as Record<string,string>:{} }catch{return{}}}
 function answeredQuestion(q:Question,a:Record<string,string>){if(typeOf(q)==='matching'){const s=parseMatching(a[q.id]||'');const p=pairs(q);return p.length>0&&p.every(x=>!!s[x.left])}return Boolean(String(a[q.id]??'').trim())}
 function isCorrect(q:Question,a:Record<string,string>){const v=a[q.id]||'';const t=typeOf(q);if(t==='fill-blank'){const accepted=acceptedFill(q);return accepted.length>0&&accepted.includes(norm(v))}if(t==='matching'){const s=parseMatching(v);const p=pairs(q);return p.length>0&&p.every(x=>norm(s[x.left])===norm(x.right))}if(t==='true-false')return tf(v)===tf(q.correct_answer);return norm(v)===norm(q.correct_answer)}
+export default function TakeTestPage(){
+ const {id:raw}=useParams<{id:string}>();const id=String(raw||'');const router=useRouter();const sp=useSearchParams();const classCode=String(sp.get('class_code')||'').trim();const reviewLatest=sp.get('review')==='latest';
+ const[test,setTest]=useState<Test|null>(null),[questions,setQuestions]=useState<Question[]>([]),[answers,setAnswers]=useState<Record<string,string>>({}),[subs,setSubs]=useState<Submission[]>([]),[reviewing,setReviewing]=useState<Submission|null>(null),[loading,setLoading]=useState(true),[submitting,setSubmitting]=useState(false),[password,setPassword]=useState(''),[entered,setEntered]=useState(''),[unlocked,setUnlocked]=useState(false),[confirm,setConfirm]=useState(false),[error,setError]=useState(''),[started,setStarted]=useState<number|null>(null),[remaining,setRemaining]=useState<number|null>(null),[sid,setSid]=useState<string|null>(null),[submissionComplete,setSubmissionComplete]=useState(false),[current,setCurrent]=useState(0);
+ const attemptRef=useRef<Attempt|null>(null),answersRef=useRef<Record<string,string>>({}),savingRef=useRef(false),submittingRef=useRef(false),autoSubmittedRef=useRef(false),deadlineRef=useRef<number|null>(null);useEffect(()=>{answersRef.current=answers},[answers]);const max=Math.max(1,Number(test?.max_attempts)||1),used=subs.length,left=Math.max(0,max-used);
+ const save=useCallback(async(a=answersRef.current)=>{const x=attemptRef.current;if(!x?.id||savingRef.current)return;savingRef.current=true;try{await fetch(`${url}/rest/v1/test_attempts?id=eq.${encodeURIComponent(x.id)}`,{method:'PATCH',headers:{...headers,Prefer:'return=minimal'},body:JSON.stringify({answers:a,status:'in_progress',updated_at:new Date().toISOString()})})}finally{savingRef.current=false}},[]);
+ const finishAttempt=useCallback(async(a:Record<string,string>)=>{const x=attemptRef.current;if(!x?.id)return;const now=new Date().toISOString();await fetch(`${url}/rest/v1/test_attempts?id=eq.${encodeURIComponent(x.id)}`,{method:'PATCH',headers:{...headers,Prefer:'return=minimal'},body:JSON.stringify({answers:a,status:'completed',updated_at:now,completed_at:now})});attemptRef.current=null},[]);
+ const createAttempt=useCallback(async(s:string)=>{const now=new Date().toISOString();const r=await fetch(`${url}/rest/v1/test_attempts`,{method:'POST',headers:{...headers,Prefer:'return=representation'},body:JSON.stringify({test_id:id,student_id:s,status:'in_progress',answers:{},started_at:now,updated_at:now})});if(!r.ok)throw new Error(await r.text());const d=await r.json();const x=(Array.isArray(d)?d[0]:d) as Attempt;if(!x?.id)throw new Error('Could not create test attempt.');attemptRef.current=x;return x},[id]);
+ const findAttempt=useCallback(async(s:string)=>{const r=await fetch(`${url}/rest/v1/test_attempts?test_id=eq.${encodeURIComponent(id)}&student_id=eq.${encodeURIComponent(s)}&status=eq.in_progress&select=*&order=started_at.desc&limit=1`,{headers,cache:'no-store'});if(!r.ok)return null;const d=await r.json();if(!Array.isArray(d)||!d[0])return null;const x=d[0] as Attempt;attemptRef.current=x;if(x.answers){answersRef.current=x.answers;setAnswers(x.answers)}return x},[id]);
+ const submitTest=useCallback(async(auto=false)=>{if(!test||!sid||submittingRef.current||reviewing||left<=0)return;if(auto&&autoSubmittedRef.current)return;if(!auto&&questions.some(q=>!answeredQuestion(q,answersRef.current))){setError('Please answer every question before submitting.');return}if(!auto&&!confirm){setConfirm(true);return}if(auto)autoSubmittedRef.current=true;submittingRef.current=true;setSubmitting(true);setError('');try{const a={...answersRef.current};const correct=questions.reduce((n,q)=>n+(isCorrect(q,a)?1:0),0);const score=questions.length?Math.min(100,Math.round(correct/questions.length*10000)/100):0;const r=await fetch(`${url}/rest/v1/test_submissions`,{method:'POST',headers:{...headers,Prefer:'return=representation'},body:JSON.stringify({test_id:id,student_id:sid,answers:a,score})});if(!r.ok)throw new Error(await r.text());const d=await r.json();const row=(Array.isArray(d)?d[0]:d) as Submission;if(!row?.id)throw new Error('Submission was not saved.');await finishAttempt(a);setSubs(x=>[{...row,answers:a,score},...x]);setStarted(null);setRemaining(null);deadlineRef.current=null;setAnswers({});answersRef.current={};setConfirm(false);setSubmissionComplete(true)}catch(e){if(auto)autoSubmittedRef.current=false;setError(e instanceof Error?e.message:'Failed to submit assessment.')}finally{submittingRef.current=false;setSubmitting(false)}},[test,sid,reviewing,left,questions,confirm,id,finishAttempt]);
+ useEffect(()=>{if(!id)return;let cancelled=false;(async()=>{try{const s=studentId();if(!s)throw new Error('Student UUID not found. Please sign in again.');setSid(s);
+   let tr:Response;if(classCode){const f=`\"${classCode.replace(/\"/g,'\\\"')}\"`;tr=await fetch(`${url}/rest/v1/tests?published=eq.true&class_code=in.(${f})&select=*`,{headers,cache:'no-store'})}else{tr=await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(id)}&select=*`,{headers,cache:'no-store'})}if(!tr.ok)throw new Error((await tr.text())||'Could not load test.');const rows=await tr.json();const found=Array.isArray(rows)?rows.find((x:any)=>String(x.id)===id):null;if(!found)throw new Error('Test not found.');const t=found as Test;if(t.published===false)throw new Error('This test is not published yet.');setTest(t);const p=String(t.test_password||'').trim();setPassword(p);setUnlocked(!p);
+   const qr=await fetch(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(id)}&select=*&order=question_order.asc,id.asc`,{headers,cache:'no-store'});if(!qr.ok)throw new Error(await qr.text());const qs=await qr.json();setQuestions(Array.isArray(qs)?qs:[]);
+   const sr=await fetch(`${url}/rest/v1/test_submissions?test_id=eq.${encodeURIComponent(id)}&student_id=eq.${encodeURIComponent(s)}&select=*&order=id.desc`,{headers,cache:'no-store'});const rows2=sr.ok?await sr.json():[];const list:Array<Submission>=Array.isArray(rows2)?rows2:[];setSubs(list);if(reviewLatest&&t.allow_review!==false&&list[0]){setReviewing(list[0]);return}if(list.length>=Math.max(1,Number(t.max_attempts)||1))return;const attempt=await findAttempt(s);if(cancelled)return;if(attempt){setUnlocked(true);const st=attempt.started_at?new Date(attempt.started_at).getTime():Date.now();setStarted(st);if(t.time_limit_minutes){const deadline=st+Number(t.time_limit_minutes)*60000;deadlineRef.current=deadline;setRemaining(Math.max(0,Math.ceil((deadline-Date.now())/1000)))}else setRemaining(null)}else if(!p){const fresh=await createAttempt(s);if(cancelled)return;const st=fresh.started_at?new Date(fresh.started_at).getTime():Date.now();setStarted(st);setUnlocked(true);if(t.time_limit_minutes){const deadline=st+Number(t.time_limit_minutes)*60000;deadlineRef.current=deadline;setRemaining(Math.max(0,Math.ceil((deadline-Date.now())/1000)))}}}catch(e){if(!cancelled)setError(e instanceof Error?e.message:'Failed to load test.')}finally{if(!cancelled)setLoading(false)}})();return()=>{cancelled=true}},[id,classCode,reviewLatest,findAttempt,createAttempt]);
+ useEffect(()=>{if(!started||reviewing||!attemptRef.current||submissionComplete||left<=0)return;const i=window.setInterval(()=>void save(),5000);return()=>window.clearInterval(i)},[started,reviewing,submissionComplete,left,save]);
+ useEffect(()=>{if(!started||reviewing||!attemptRef.current||submissionComplete)return;const f=()=>void save();window.addEventListener('pagehide',f);return()=>window.removeEventListener('pagehide',f)},[started,reviewing,submissionComplete,save]);
+ useEffect(()=>{if(!started||!test?.time_limit_minutes||reviewing||submissionComplete||left<=0)return;const deadline=deadlineRef.current??(started+Number(test.time_limit_minutes)*60000);deadlineRef.current=deadline;const tick=()=>{const s=Math.max(0,Math.ceil((deadline-Date.now())/1000));setRemaining(s);if(s<=0&&!submittingRef.current)void submitTest(true)};tick();const i=window.setInterval(tick,250);return()=>window.clearInterval(i)},[started,test?.time_limit_minutes,reviewing,submissionComplete,left,submitTest]);
+ const start=async()=>{if(!sid||left<=0)return;try{setError('');const existing=await findAttempt(sid);const a=existing||await createAttempt(sid);const st=a.started_at?new Date(a.started_at).getTime():Date.now();setStarted(st);setUnlocked(true);autoSubmittedRef.current=false;if(test?.time_limit_minutes){const deadline=st+Number(test.time_limit_minutes)*60000;deadlineRef.current=deadline;setRemaining(Math.max(0,Math.ceil((deadline-Date.now())/1000)));if(deadline<=Date.now())void submitTest(true)}else{deadlineRef.current=null;setRemaining(null)}}catch(e){setError(e instanceof Error?e.message:'Could not start assessment.');setUnlocked(false)}};
+ const enter=()=>{if(entered===password)void start();else setError('Incorrect assessment password.')};const retry=async()=>{if(left<=0){setError('You have used all available attempts.');return}setError('');setReviewing(null);setCurrent(0);setAnswers({});answersRef.current={};setConfirm(false);setSubmissionComplete(false);autoSubmittedRef.current=false;attemptRef.current=null;deadlineRef.current=null;if(password){setEntered('');setUnlocked(false);return}await start()};const setAnswer=(qid:string,v:string)=>{const next={...answersRef.current,[qid]:v};answersRef.current=next;setAnswers(next);void save(next)};const matchingOptions=useMemo(()=>Array.from(new Set(questions.filter(q=>typeOf(q)==='matching').flatMap(q=>pairs(q).map(p=>p.right)))),[questions]);const progress=questions.length?Math.round(questions.filter(q=>answeredQuestion(q,answers)).length/questions.length*100):0;const time=remaining===null?null:`${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`;
+ if(loading)return <div className="min-h-screen bg-blue-50 flex items-center justify-center"><Loader2 className="size-8 animate-spin text-blue-600"/></div>;
+ if(!test)return <main className="min-h-screen bg-blue-50 flex items-center justify-center p-6"><Card className="w-full max-w-md"><CardContent className="p-8 text-center"><p className="text-destructive">{error||'Unable to load assessment.'}</p><Button className="mt-5" onClick={()=>router.push('/dashboard/student')}>Back to Dashboard</Button></CardContent></Card></main>;
+ if(!unlocked&&left>0)return <main className="min-h-screen bg-blue-50 flex items-center justify-center p-6"><Card className="w-full max-w-md border-blue-100 shadow-xl"><CardHeader className="border-b bg-white p-7 text-center"><div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-xl bg-blue-600 text-white"><Lock className="size-5"/></div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Assessment Access</p><CardTitle className="mt-1 text-2xl">{test.title}</CardTitle><p className="mt-2 text-sm text-slate-500">Enter the assessment password to begin.</p></CardHeader><CardContent className="space-y-4 p-7"><label className="text-sm font-semibold text-slate-800">Assessment password<Input className="mt-2 h-11" type="password" value={entered} onChange={e=>setEntered(e.target.value)} onKeyDown={e=>e.key==='Enter'&&enter()}/></label>{error&&<p className="text-sm text-destructive">{error}</p>}<div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-700">Attempt {used+1} of {max}</div><Button className="h-11 w-full bg-blue-600 hover:bg-blue-700" onClick={enter}>Begin Assessment</Button><Button variant="ghost" className="w-full" onClick={()=>router.push('/dashboard/student')}>Cancel</Button></CardContent></Card></main>;
+ if(reviewing)return <main className="min-h-screen bg-blue-50 py-8"><div className="mx-auto max-w-4xl px-5"><div className="mb-7 flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Assessment Review</p><h1 className="mt-1 text-2xl font-bold">{test.title}</h1><p className="mt-1 text-slate-600">Final score <strong>{Number(reviewing.score).toFixed(2)}/100</strong></p></div><Button variant="outline" onClick={()=>setReviewing(null)}>Back</Button></div><div className="space-y-4">{questions.map((q,i)=>{const ok=isCorrect(q,reviewing.answers||{});const a=(reviewing.answers||{})[q.id]||'';return <Card key={q.id} className="border"><CardHeader><div className="flex justify-between"><CardTitle className="text-base">Question {i+1}</CardTitle><span className={ok?'text-emerald-700':'text-rose-700'}>{ok?'Correct':'Incorrect'}</span></div><p>{q.question}</p></CardHeader><CardContent><p className="text-xs font-semibold uppercase text-slate-500">Your answer</p><p className="mt-1 rounded-lg border bg-blue-50 p-3">{typeOf(q)==='matching'?Object.entries(parseMatching(a)).map(([k,v])=>`${k} → ${v}`).join(' • '):a||'No answer'}</p>{!ok&&<><p className="mt-4 text-xs font-semibold uppercase text-emerald-700">Correct answer</p><p className="mt-1 rounded-lg border border-emerald-200 bg-emerald-50 p-3">{typeOf(q)==='fill-blank'?fillAnswer(q):typeOf(q)==='true-false'?(tf(q.correct_answer)==='A'?'True':'False'):typeOf(q)==='matching'?pairs(q).map(p=>`${p.left} → ${p.right}`).join(' • '):(q.correct_answer||'')}</p></>}</CardContent></Card>})}</div></div></main>;
+ if(!started||left<=0||submissionComplete)return <main className="min-h-screen bg-blue-50 flex items-center justify-center p-6"><Card className="w-full max-w-xl"><CardContent className="p-10 text-center"><div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-blue-600 text-white"><CheckCircle2 className="size-7"/></div><p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Assessment Complete</p><h2 className="mt-2 text-2xl font-bold">{test.title}</h2><p className="mt-2 text-slate-500">Your latest score</p><p className="mt-1 text-5xl font-bold">{Number(subs[0]?.score||0).toFixed(2)}<span className="text-xl text-slate-400">/100</span></p><p className="mt-3 text-sm text-slate-500">Attempts used: {used}/{max}</p><div className="mt-6 flex flex-wrap justify-center gap-3">{test.allow_review!==false&&subs[0]&&<Button variant="outline" onClick={()=>setReviewing(subs[0])}>Review Assessment</Button>}{left>0&&<Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>void retry()}>Retry Assessment</Button>}<Button variant="outline" onClick={()=>router.push('/dashboard/student')}>Back to Dashboard</Button></div></CardContent></Card></main>;
+ const q=questions[current];if(!q)return <main className="min-h-screen bg-blue-50 flex items-center justify-center p-6"><Card><CardContent className="p-8">This test has no questions.</CardContent></Card></main>;const qt=typeOf(q),qa=answers[q.id]||'',letters=['A','B','C','D'] as const,selectedMatching=parseMatching(qa);
+ return <div className="min-h-screen bg-blue-50 text-slate-900 pb-24"><header className="sticky top-0 z-40 border-b border-blue-100 bg-white/95 shadow-sm"><div className="mx-auto max-w-5xl px-4"><div className="flex min-h-16 items-center justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold">{test.title}</p><p className="text-xs text-slate-500">Question {current+1} of {questions.length}</p></div><div className="flex items-center gap-3"><span className="hidden text-sm font-semibold sm:block">{progress}% complete</span>{time!==null&&<div className={`flex items-center gap-2 rounded-lg border px-3 py-2 font-mono font-bold ${remaining!==null&&remaining<=60?'border-rose-300 bg-rose-50 text-rose-700':'border-blue-200 bg-blue-50 text-blue-700'}`}><Clock3 className="size-4"/>{time}</div>}</div></div><div className="h-1 bg-blue-100"><div className="h-full bg-blue-600 transition-all" style={{width:`${progress}%`}}/></div></div></header>
+ <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6"><div className="mb-5 rounded-xl border border-blue-100 bg-white p-5 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Assessment</p><h1 className="mt-1 text-xl font-bold">{test.title}</h1>{desc(test.description)&&<p className="mt-3 text-sm leading-6 text-slate-600">{desc(test.description)}</p>}</div><Card className="overflow-hidden border-blue-100 shadow-md"><CardHeader className="border-b border-blue-100"><div className="flex items-start gap-4"><div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-white">{current+1}</div><div className="min-w-0 flex-1"><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold uppercase text-blue-700">{qt==='fill-blank'?'Fill in the blank':qt==='true-false'?'True / False':qt==='matching'?'Matching':'Multiple choice'}</span><h2 className="mt-2 text-lg font-semibold leading-7 sm:text-xl">{q.question}</h2>{imageOf(q)&&<img src={imageOf(q)} alt="Question" className="mt-4 max-h-80 w-full rounded-lg border object-contain"/>}</div></div></CardHeader><CardContent className="space-y-4 p-5 sm:p-7">{qt==='multiple-choice'&&<div className="grid gap-3">{letters.map(l=>{const text=q[`option_${l.toLowerCase()}` as 'option_a'|'option_b'|'option_c'|'option_d'];if(!text)return null;const selected=qa===l;return <button key={l} type="button" onClick={()=>setAnswer(q.id,l)} className={`flex items-center gap-4 rounded-xl border-2 p-4 text-left ${selected?'border-blue-600 bg-blue-50':'border-blue-100 bg-white hover:border-blue-300'}`}><span className={`flex size-9 items-center justify-center rounded-full border font-bold ${selected?'border-blue-600 bg-blue-600 text-white':'border-slate-300'}`}>{l}</span><span className="flex-1">{text}</span>{selected&&<Check className="size-5 text-blue-600"/>}</button>})}</div>}{qt==='true-false'&&<div className="grid gap-3 sm:grid-cols-2">{[['A','True'],['B','False']].map(([l,label])=>{const selected=tf(qa)===l;return <button key={l} type="button" onClick={()=>setAnswer(q.id,l)} className={`flex items-center justify-center gap-3 rounded-xl border-2 p-5 font-semibold ${selected?'border-blue-600 bg-blue-600 text-white':'border-blue-100 bg-white hover:border-blue-300'}`}>{selected&&<Check className="size-5"/>}{label}</button>})}</div>}{qt==='fill-blank'&&<div><label className="text-sm font-semibold">Your answer</label><Input autoComplete="off" className="mt-2 h-14 border-2 border-blue-100" value={qa} onChange={e=>setAnswer(q.id,e.target.value.toLowerCase())} placeholder="Type your answer here"/></div>}{qt==='matching'&&<div className="space-y-3">{pairs(q).map(pair=><div key={pair.left} className="grid gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 sm:grid-cols-[1fr_1fr] sm:items-center"><div className="rounded-lg bg-white p-3 font-medium">{pair.left}</div><select className="h-11 rounded-lg border border-blue-100 bg-white px-3" value={selectedMatching[pair.left]||''} onChange={e=>setAnswer(q.id,JSON.stringify({...selectedMatching,[pair.left]:e.target.value}))}><option value="">Select a match</option>{matchingOptions.map(o=><option key={o} value={o}>{o}</option>)}</select></div>)}</div>}</CardContent></Card>{error&&<div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}<div className="mt-5 flex items-center justify-between gap-3"><Button variant="outline" disabled={current===0} onClick={()=>setCurrent(v=>Math.max(0,v-1))}><ChevronLeft className="mr-1 size-4"/>Previous</Button>{current<questions.length-1?<Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>setCurrent(v=>Math.min(questions.length-1,v+1))}>Next question<ChevronRight className="ml-1 size-4"/></Button>:<Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>void submitTest(false)} disabled={submitting}>{submitting?'Submitting...':'Submit assessment'}</Button>}</div>{confirm&&<Card className="mt-5 border-blue-200"><CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">Ready to submit?</p><p className="text-sm text-slate-500">You will use one attempt and cannot edit your answers afterward.</p></div><div className="flex gap-2"><Button variant="outline" onClick={()=>setConfirm(false)}>Continue</Button><Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>void submitTest(false)} disabled={submitting}>Confirm submission</Button></div></CardContent></Card>}</main><footer className="fixed bottom-0 left-0 right-0 z-30 border-t border-blue-100 bg-white/95 shadow-lg"><div className="mx-auto flex max-w-5xl justify-end gap-2 px-4 py-3"><Button variant="outline" onClick={()=>setCurrent(v=>Math.max(0,v-1))} disabled={current===0}><ChevronLeft className="size-4"/></Button>{current<questions.length-1?<Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>setCurrent(v=>Math.min(questions.length-1,v+1))}>Next<ChevronRight className="size-4"/></Button>:<Button className="bg-blue-600 hover:bg-blue-700" onClick={()=>void submitTest(false)} disabled={submitting}>{submitting?'Submitting...':'Submit'}</Button>}</div></footer></div>;
+}
