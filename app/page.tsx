@@ -10,7 +10,7 @@ const highlights = [
 
 export default function Page() {
   return (
-    <main className="min-h-screen bg-background lg:grid lg:grid-cols-[0.95fr_1.05fr]">
+    <main className="min-h-screen bg-background lg:grid lg:grid-cols-[1.1fr_0.9fr]">
       <section className="relative flex min-h-[430px] flex-col overflow-hidden bg-primary px-6 py-8 text-primary-foreground sm:px-10 lg:min-h-screen lg:px-14 lg:py-12">
         <div aria-hidden="true" className="pointer-events-none absolute -right-32 -top-32 size-96 rounded-full bg-primary-foreground/10 blur-3xl" />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-32 size-[28rem] rounded-full bg-primary-foreground/10 blur-3xl" />
@@ -23,21 +23,21 @@ export default function Page() {
         </div>
 
         <div className="relative z-10 flex flex-1 items-center justify-center">
-          <div className="mx-auto w-full max-w-xl text-center">
+          <div className="mx-auto w-full max-w-2xl text-center">
             <h1
-              className="text-balance text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl"
+              className="text-balance text-5xl font-black leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl"
               style={{ fontFamily: 'cursive' }}
             >
               Where curiosity becomes knowledge
             </h1>
-            <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-primary-foreground/70 sm:text-lg">
+            <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-primary-foreground/70 sm:text-xl">
               Create, share, and manage quizzes, tests, and assignments in one place.
             </p>
 
-            <ul className="mx-auto mt-8 grid w-full max-w-md gap-3 sm:max-w-xl sm:grid-cols-3 lg:max-w-md lg:grid-cols-1">
+            <ul className="mx-auto mt-10 grid w-full max-w-2xl gap-4 sm:grid-cols-3">
               {highlights.map((item) => (
-                <li key={item} className="flex items-center gap-3 rounded-2xl bg-primary-foreground/[0.07] px-4 py-3 text-left text-sm font-medium ring-1 ring-primary-foreground/10">
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary-foreground/10">
+                <li key={item} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-primary-foreground/[0.07] px-4 py-4 text-center text-base font-medium ring-1 ring-primary-foreground/10">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-foreground/10">
                     <CheckCircle2 className="size-4" />
                   </span>
                   <span>{item}</span>
