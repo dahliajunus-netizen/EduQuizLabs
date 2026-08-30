@@ -46,7 +46,6 @@ export default function TestMaker({title,setTitle,description,setDescription,due
      const text=await response.text();
      if(!response.ok)throw new Error(text||`Failed to save test details (${response.status})`);
      setTitle(cleanTitle);
-     setSaveMessage?.;
      setSettingsMessage('Test details saved successfully.');
      try{await onSaveDetails();}catch{}
    }catch(e){setSettingsMessage(e instanceof Error?e.message:'Failed to save test details.');}
