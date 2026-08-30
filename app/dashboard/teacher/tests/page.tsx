@@ -41,9 +41,9 @@ function getAccessToken(): string | null {
         const parsed = JSON.parse(currentUser);
         if (parsed?.access_token) return parsed.access_token;
         if (parsed?.session?.access_token) return parsed.session.access_token;
-      } catch { /* ignore */ }
+      } catch {}
     }
-  } catch { /* ignore */ }
+  } catch {}
   return null;
 }
 
@@ -137,15 +137,15 @@ export default function TeacherTestsPage() {
     const d = Number(dueDay), m = Number(dueMonth), y = Number(dueYear);
     const check = new Date(y, m - 1, d);
     if (check.getFullYear() !== y || check.getMonth() !== m - 1 || check.getDate() !== d) throw new Error('Please enter a valid due date.');
-    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T23:59:59.000Z`;
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
 
   async function saveTestDetails() {
-    if (!url || !key || !classCode.trim() || !title.trim()) return;
+    if (!url || !key) { setError('Supabase environment variables are missing.'); return; }
+    if (!classCode.trim()) { setError('Please enter a class code.'); return; }
+    if (!title.trim()) { setError('Please enter a test title.'); return; }
     setBusy(true); setError('');
     try {
-      const token = getAccessToken();
-      if (!token) throw new Error('Your teacher session has expired. Please sign in again.');
       const dueDate = buildDueDate();
       const payload = {
         class_code: classCode.trim().toUpperCase(),
@@ -154,24 +154,43 @@ export default function TeacherTestsPage() {
         due_date: dueDate,
         time_limit_minutes: timeLimit ? Math.max(1, Number(timeLimit)) : null,
       };
+      const requestHeaders = { ...authHeaders(), Prefer: 'return=representation' };
       let r: Response;
       if (editingId) {
-        r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(editingId)}`, {
+        r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(editingId)}&select=*`, {
           method: 'PATCH',
-          headers: { ...authHeaders(), Prefer: 'return=representation' },
+          headers: requestHeaders,
           body: JSON.stringify(payload),
         });
-        if (!r.ok) throw new Error(await r.text());
       } else {
-        r = await fetch(`${url}/rest/v1/tests`, {
+        r = await fetch(`${url}/rest/v1/tests?select=*`, {
           method: 'POST',
-          headers: { ...authHeaders(), Prefer: 'return=representation' },
+          headers: requestHeaders,
           body: JSON.stringify({ ...payload, published: false }),
         });
-        if (!r.ok) throw new Error(await r.text());
+      }
+      const responseText = await r.text();
+      if (!r.ok) throw new Error(responseText || `Supabase returned HTTP ${r.status}.`);
+      let returned: Test | null = null;
+      try {
+        const parsed = JSON.parse(responseText);
+        returned = Array.isArray(parsed) ? (parsed[0] || null) : parsed;
+      } catch {}
+      if (!editingId && !returned?.id) throw new Error('Supabase did not return the newly saved test.');
+      if (editingId && !returned?.id) {
+        const check = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(editingId)}&select=*`, { headers: authHeaders(), cache: 'no-store' });
+        if (!check.ok) throw new Error(await check.text());
+        const checked: Test[] = await check.json();
+        returned = checked[0] || null;
+      }
+      if (!returned) throw new Error('The test was not found after saving.');
+      if (editingId) {
+        setTests(prev => prev.map(t => t.id === returned!.id ? returned! : t));
+      } else {
+        setTests(prev => [returned!, ...prev]);
       }
       resetDetails();
-      await load();
+      setError('');
     } catch (e) {
       setError(`Failed to save test details: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally { setBusy(false); }
@@ -192,7 +211,7 @@ export default function TeacherTestsPage() {
     try {
       const r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(t.id)}`, { method: 'PATCH', headers: { ...authHeaders(), Prefer: 'return=minimal' }, body: JSON.stringify({ published: !t.published }) });
       if (!r.ok) throw new Error(await r.text());
-      setTests(p => p.map(x => x.id === t.id ? { ...x, published: !x.published } : x));
+      setTests(p => p.map(x => x.id === t.id ? { ...x, published: !t.published } : x));
     } catch (e) { setError(`Failed to change publication status: ${e instanceof Error ? e.message : 'Unknown error'}`); }
   }
 
@@ -215,8 +234,7 @@ export default function TeacherTestsPage() {
 
   async function recalculatePoints(testId: string) {
     if (!url) throw new Error('Supabase URL is missing.');
-    const headers = authHeaders();
-    const r = await fetch(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(testId)}&select=id`, { headers, cache: 'no-store' });
+    const r = await fetch(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(testId)}&select=id`, { headers: authHeaders(), cache: 'no-store' });
     if (!r.ok) throw new Error(await r.text());
     const rows: { id: string }[] = await r.json();
     const points = rows.length ? 100 / rows.length : 0;
@@ -252,8 +270,6 @@ export default function TeacherTestsPage() {
     if (!url || !key) { setError('Supabase is not configured.'); return; }
     setBusy(true); setError('');
     try {
-      const token = getAccessToken();
-      if (!token) throw new Error('Your teacher session has expired. Please sign in again.');
       const testId = draft.test_id;
       const order = (questions[testId]?.length || 0) + 1;
       const payload = { test_id: testId, question_order: order, question: draft.question.trim(), image_url: draft.image_url?.trim() || null, option_a: draft.option_a.trim(), option_b: draft.option_b.trim(), option_c: draft.option_c.trim(), option_d: draft.option_d.trim(), correct_answer: draft.correct_answer, points: 100 / order, question_type: draft.question_type };
