@@ -6,7 +6,7 @@ import { Navbar } from '@/components/Navbar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Plus, Trash2, Loader2, Eye, EyeOff, Image as ImageIcon, X, Check } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader2, Eye, EyeOff, Image as ImageIcon, X, Check, Pencil } from 'lucide-react';
 
 type QuestionType = 'multiple_choice' | 'true_false' | 'fill_blank' | 'matching';
 type MatchPair = { left: string; right: string };
@@ -31,9 +31,7 @@ function getAccessToken(): string | null {
             if (typeof parsed === 'string') return parsed;
             if (parsed?.access_token) return parsed.access_token;
             if (parsed?.currentSession?.access_token) return parsed.currentSession.access_token;
-          } catch {
-            return value;
-          }
+          } catch { return value; }
         }
       }
     }
@@ -43,9 +41,9 @@ function getAccessToken(): string | null {
         const parsed = JSON.parse(currentUser);
         if (parsed?.access_token) return parsed.access_token;
         if (parsed?.session?.access_token) return parsed.session.access_token;
-      } catch { /* ignore malformed localStorage */ }
+      } catch { /* ignore */ }
     }
-  } catch { /* ignore storage access errors */ }
+  } catch { /* ignore */ }
   return null;
 }
 
@@ -69,6 +67,13 @@ function formatDueDate(value?: string | null) {
   return date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+function dateParts(value?: string | null) {
+  if (!value) return { day: '', month: '', year: '' };
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return { day: '', month: '', year: '' };
+  return { day: String(d.getDate()).padStart(2, '0'), month: String(d.getMonth() + 1).padStart(2, '0'), year: String(d.getFullYear()) };
+}
+
 export default function TeacherTestsPage() {
   const [tests, setTests] = useState<Test[]>([]);
   const [questions, setQuestions] = useState<Record<string, Question[]>>({});
@@ -80,8 +85,8 @@ export default function TeacherTestsPage() {
   const [dueDay, setDueDay] = useState('');
   const [dueMonth, setDueMonth] = useState('');
   const [dueYear, setDueYear] = useState('');
-  const [testPassword, setTestPassword] = useState('');
   const [timeLimit, setTimeLimit] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [q, setQ] = useState<Question | null>(null);
   const [pairs, setPairs] = useState<MatchPair[]>([{ left: '', right: '' }, { left: '', right: '' }]);
@@ -110,38 +115,66 @@ export default function TeacherTestsPage() {
 
   useEffect(() => { void load(); }, []);
 
-  async function createTest() {
+  function resetDetails() {
+    setClassCode(''); setTitle(''); setDescription(''); setDueDay(''); setDueMonth(''); setDueYear(''); setTimeLimit(''); setEditingId(null);
+  }
+
+  function beginEdit(t: Test) {
+    const parts = dateParts(t.due_date);
+    setEditingId(t.id);
+    setClassCode(t.class_code || '');
+    setTitle(t.title || '');
+    setDescription(t.description || '');
+    setDueDay(parts.day); setDueMonth(parts.month); setDueYear(parts.year);
+    setTimeLimit(t.time_limit_minutes ? String(t.time_limit_minutes) : '');
+    setError('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function buildDueDate() {
+    if (!dueDay && !dueMonth && !dueYear) return null;
+    if (!/^\d{1,2}$/.test(dueDay) || !/^\d{1,2}$/.test(dueMonth) || !/^\d{4}$/.test(dueYear)) throw new Error('Please enter the due date as DD/MM/YYYY.');
+    const d = Number(dueDay), m = Number(dueMonth), y = Number(dueYear);
+    const check = new Date(y, m - 1, d);
+    if (check.getFullYear() !== y || check.getMonth() !== m - 1 || check.getDate() !== d) throw new Error('Please enter a valid due date.');
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T23:59:59.000Z`;
+  }
+
+  async function saveTestDetails() {
     if (!url || !key || !classCode.trim() || !title.trim()) return;
     setBusy(true); setError('');
     try {
       const token = getAccessToken();
       if (!token) throw new Error('Your teacher session has expired. Please sign in again.');
-      let dueDate: string | null = null;
-      if (dueDay || dueMonth || dueYear) {
-        if (!/^\d{1,2}$/.test(dueDay) || !/^\d{1,2}$/.test(dueMonth) || !/^\d{4}$/.test(dueYear)) {
-          throw new Error('Please enter the due date as DD/MM/YYYY.');
-        }
-        const d = Number(dueDay), m = Number(dueMonth), y = Number(dueYear);
-        const check = new Date(y, m - 1, d);
-        if (check.getFullYear() !== y || check.getMonth() !== m - 1 || check.getDate() !== d) {
-          throw new Error('Please enter a valid due date.');
-        }
-        dueDate = `${dueYear}-${dueMonth.padStart(2, '0')}-${dueDay.padStart(2, '0')}T23:59:59.000Z`;
-      }
+      const dueDate = buildDueDate();
       const payload = {
         class_code: classCode.trim().toUpperCase(),
         title: title.trim(),
         description: description.trim() || null,
         due_date: dueDate,
-        test_password: testPassword.trim() || null,
         time_limit_minutes: timeLimit ? Math.max(1, Number(timeLimit)) : null,
-        published: false,
       };
-      const r = await fetch(`${url}/rest/v1/tests`, { method: 'POST', headers: { ...authHeaders(), Prefer: 'return=representation' }, body: JSON.stringify(payload) });
-      if (!r.ok) throw new Error(await r.text());
-      setClassCode(''); setTitle(''); setDescription(''); setDueDay(''); setDueMonth(''); setDueYear(''); setTestPassword(''); setTimeLimit(''); await load();
-    } catch (e) { setError(`Failed to create test: ${e instanceof Error ? e.message : 'Unknown error'}`); }
-    finally { setBusy(false); }
+      let r: Response;
+      if (editingId) {
+        r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(editingId)}`, {
+          method: 'PATCH',
+          headers: { ...authHeaders(), Prefer: 'return=representation' },
+          body: JSON.stringify(payload),
+        });
+        if (!r.ok) throw new Error(await r.text());
+      } else {
+        r = await fetch(`${url}/rest/v1/tests`, {
+          method: 'POST',
+          headers: { ...authHeaders(), Prefer: 'return=representation' },
+          body: JSON.stringify({ ...payload, published: false }),
+        });
+        if (!r.ok) throw new Error(await r.text());
+      }
+      resetDetails();
+      await load();
+    } catch (e) {
+      setError(`Failed to save test details: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    } finally { setBusy(false); }
   }
 
   async function deleteTest(id: string) {
@@ -149,6 +182,7 @@ export default function TeacherTestsPage() {
     try {
       const r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
       if (!r.ok) throw new Error(await r.text());
+      if (editingId === id) resetDetails();
       await load();
     } catch (e) { setError(`Failed to delete test: ${e instanceof Error ? e.message : 'Unknown error'}`); }
   }
@@ -247,18 +281,17 @@ export default function TeacherTestsPage() {
         <Link href="/dashboard/teacher"><Button variant="ghost" className="gap-2"><ArrowLeft className="size-4" />Back to Dashboard</Button></Link>
         <div><h1 className="text-3xl font-bold">🧪 Tests</h1><p className="text-muted-foreground">Create tests with all four question types.</p></div>
         {error && <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive whitespace-pre-wrap">{error}</div>}
-        <Card><CardHeader><CardTitle>Create Test</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" autoComplete="off">
+        <Card><CardHeader><CardTitle>{editingId ? 'Edit Test Details' : 'Create Test'}</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" autoComplete="off">
           <Input name="test-class-code" autoComplete="off" value={classCode} onChange={e => setClassCode(e.target.value)} placeholder="Class code" className="uppercase" />
           <Input name="test-title" autoComplete="off" value={title} onChange={e => setTitle(e.target.value)} placeholder="Test title" />
           <Input name="test-description" autoComplete="off" value={description} onChange={e => setDescription(e.target.value)} placeholder="Description (optional)" />
           <div className="space-y-1.5"><label className="text-sm font-medium">Due date</label><div className="flex h-10 items-center rounded-md border border-input bg-background px-2"><input name="due-day" autoComplete="off" inputMode="numeric" aria-label="Due date day" placeholder="DD" maxLength={2} value={dueDay} onChange={e => setDueDay(e.target.value.replace(/\D/g, '').slice(0, 2))} className="w-10 bg-transparent text-center text-sm outline-none placeholder:text-muted-foreground" /><span className="text-muted-foreground">/</span><input name="due-month" autoComplete="off" inputMode="numeric" aria-label="Due date month" placeholder="MM" maxLength={2} value={dueMonth} onChange={e => setDueMonth(e.target.value.replace(/\D/g, '').slice(0, 2))} className="w-10 bg-transparent text-center text-sm outline-none placeholder:text-muted-foreground" /><span className="text-muted-foreground">/</span><input name="due-year" autoComplete="off" inputMode="numeric" aria-label="Due date year" placeholder="YYYY" maxLength={4} value={dueYear} onChange={e => setDueYear(e.target.value.replace(/\D/g, '').slice(0, 4))} className="w-16 bg-transparent text-center text-sm outline-none placeholder:text-muted-foreground" /></div><p className="text-xs text-muted-foreground">DD/MM/YYYY</p></div>
-          <div className="space-y-1.5"><label className="text-sm font-medium">Test password</label><Input name="assessment-password" autoComplete="new-password" type="password" value={testPassword} onChange={e => setTestPassword(e.target.value)} placeholder="Optional" spellCheck={false} /></div>
           <div className="space-y-1.5"><label className="text-sm font-medium">Time limit (minutes)</label><Input name="test-time-limit" autoComplete="off" type="number" min="1" step="1" inputMode="numeric" value={timeLimit} onChange={e => setTimeLimit(e.target.value.replace(/\D/g, ''))} placeholder="Optional" /></div>
-          <Button onClick={() => void createTest()} disabled={busy || !classCode.trim() || !title.trim()} className="lg:mt-6">{busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="mr-2 size-4" />}Create Test</Button>
+          <div className="flex gap-2 lg:mt-6"><Button onClick={() => void saveTestDetails()} disabled={busy || !classCode.trim() || !title.trim()} className="flex-1">{busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="mr-2 size-4" />}Save Test Details</Button>{editingId && <Button variant="outline" onClick={resetDetails} disabled={busy}>Cancel</Button>}</div>
         </CardContent></Card>
         {loading ? <Loader2 className="mx-auto size-8 animate-spin" /> : tests.map(t => (
           <Card key={t.id}>
-            <CardHeader className="overflow-hidden"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0 flex-1"><CardTitle className="break-words whitespace-normal">{t.title}</CardTitle><p className="break-words whitespace-normal text-sm text-muted-foreground">Class: {t.class_code} · {questions[t.id]?.length || 0} questions</p><div className="mt-2 flex flex-wrap gap-2 text-xs"><span className="rounded-full bg-muted px-2.5 py-1 whitespace-nowrap">Due: {formatDueDate(t.due_date)}</span>{t.time_limit_minutes ? <span className="rounded-full bg-muted px-2.5 py-1 whitespace-nowrap">Time: {t.time_limit_minutes} min</span> : null}{t.test_password ? <span className="rounded-full bg-muted px-2.5 py-1 whitespace-nowrap">Password protected</span> : null}</div></div><div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto"><Button variant="outline" onClick={() => void togglePublished(t)} className="shrink-0">{t.published ? <><EyeOff className="mr-2 size-4" />Unpublish</> : <><Eye className="mr-2 size-4" />Publish</>}</Button><Button variant="destructive" onClick={() => void deleteTest(t.id)} className="shrink-0"><Trash2 className="size-4" /></Button></div></div></CardHeader>
+            <CardHeader className="overflow-hidden"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0 flex-1"><CardTitle className="break-words whitespace-normal">{t.title}</CardTitle><p className="break-words whitespace-normal text-sm text-muted-foreground">Class: {t.class_code} · {questions[t.id]?.length || 0} questions</p><div className="mt-2 flex flex-wrap gap-2 text-xs"><span className="rounded-full bg-muted px-2.5 py-1 whitespace-nowrap">Due: {formatDueDate(t.due_date)}</span>{t.time_limit_minutes ? <span className="rounded-full bg-muted px-2.5 py-1 whitespace-nowrap">Time: {t.time_limit_minutes} min</span> : null}</div></div><div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto"><Button variant="outline" onClick={() => beginEdit(t)} className="shrink-0"><Pencil className="mr-2 size-4" />Edit Details</Button><Button variant="outline" onClick={() => void togglePublished(t)} className="shrink-0">{t.published ? <><EyeOff className="mr-2 size-4" />Unpublish</> : <><Eye className="mr-2 size-4" />Publish</>}</Button><Button variant="destructive" onClick={() => void deleteTest(t.id)} className="shrink-0"><Trash2 className="size-4" /></Button></div></div></CardHeader>
             <CardContent className="space-y-4">
               {t.description && <p className="min-w-0 break-words whitespace-normal [overflow-wrap:anywhere] text-sm text-muted-foreground">{t.description}</p>}
               <div className="rounded-lg border p-3"><div className="flex items-center justify-between gap-3"><p className="font-medium">Questions</p><Button onClick={() => newQuestion(t.id)} disabled={busy} className="shrink-0"><Plus className="mr-2 size-4" />Add Question</Button></div>
