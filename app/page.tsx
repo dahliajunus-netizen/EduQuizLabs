@@ -15,28 +15,28 @@ export default function Page() {
         <div aria-hidden="true" className="pointer-events-none absolute -right-32 -top-32 size-96 rounded-full bg-primary-foreground/10 blur-3xl" />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-32 size-[28rem] rounded-full bg-primary-foreground/10 blur-3xl" />
 
-        <div className="relative z-10 flex items-center gap-3">
+        <div className="relative z-10 flex items-center justify-center gap-3">
           <span className="flex size-10 items-center justify-center rounded-2xl bg-primary-foreground/15 ring-1 ring-primary-foreground/10">
             <GraduationCap className="size-5" />
           </span>
           <span className="text-lg font-extrabold tracking-tight">EduQuizLabs</span>
         </div>
 
-        <div className="relative z-10 my-12 max-w-xl lg:my-0">
+        <div className="relative z-10 mx-auto my-12 w-full max-w-xl text-center lg:my-0">
           <h1 className="text-balance text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
             Quizzes made simple.
           </h1>
-          <p className="mt-5 max-w-lg text-base leading-7 text-primary-foreground/70 sm:text-lg">
+          <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-primary-foreground/70 sm:text-lg">
             Create, share, and manage quizzes, tests, and assignments in one place.
           </p>
 
-          <ul className="mt-8 grid gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:max-w-md">
+          <ul className="mx-auto mt-8 grid w-full max-w-md gap-3 sm:max-w-xl sm:grid-cols-3 lg:max-w-md lg:grid-cols-1">
             {highlights.map((item) => (
-              <li key={item} className="flex items-center gap-3 rounded-2xl bg-primary-foreground/[0.07] px-4 py-3 text-sm font-medium ring-1 ring-primary-foreground/10">
+              <li key={item} className="flex items-center gap-3 rounded-2xl bg-primary-foreground/[0.07] px-4 py-3 text-left text-sm font-medium ring-1 ring-primary-foreground/10">
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary-foreground/10">
                   <CheckCircle2 className="size-4" />
                 </span>
-                {item}
+                <span>{item}</span>
               </li>
             ))}
           </ul>
