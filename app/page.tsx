@@ -25,8 +25,8 @@ export default function Page() {
         <div className="relative z-10 flex flex-1 items-center justify-center">
           <div className="mx-auto w-full max-w-3xl text-center">
             <h1
-              className="text-balance text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl"
-              style={{ fontFamily: 'var(--font-dancing-script)' }}
+              className="text-balance text-4xl font-normal italic leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl"
+              style={{ fontFamily: 'var(--font-instrument-serif)' }}
             >
               Where curiosity becomes knowledge
             </h1>
