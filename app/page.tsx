@@ -23,8 +23,11 @@ export default function Page() {
         </div>
 
         <div className="relative z-10 mx-auto my-12 w-full max-w-xl text-center lg:my-0">
-          <h1 className="text-balance text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
-            Quizzes made simple.
+          <h1
+            className="text-balance text-4xl font-black leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl"
+            style={{ fontFamily: 'cursive' }}
+          >
+            Where curiosity becomes knowledge
           </h1>
           <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-primary-foreground/70 sm:text-lg">
             Create, share, and manage quizzes, tests, and assignments in one place.
