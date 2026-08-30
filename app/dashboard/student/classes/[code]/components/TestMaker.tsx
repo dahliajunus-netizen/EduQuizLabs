@@ -10,7 +10,9 @@ export type BuilderQuestion = { id?:string; question:string; option_a:string; op
 type Props={title:string;setTitle:(v:string)=>void;description:string;setDescription:(v:string)=>void;dueDate:string;setDueDate:(v:string)=>void;questions:BuilderQuestion[];busy?:boolean;message?:string;onSaveDetails:()=>void;onAddQuestion:()=>void;onEditQuestion:(q:BuilderQuestion)=>void;onDeleteQuestion:(q:BuilderQuestion)=>void;onClose:()=>void;pointsFor:(n:number)=>number;testId?:string};
 const url=process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const getHeaders=()=>{let token='';try{token=localStorage.getItem('supabase_access_token')||'';}catch{}return {apikey:key,Authorization:`Bearer ${token||key}`,'Content-Type':'application/json',Prefer:'return=representation'}};
+const getHeaders=()=>{let token='';try{token=localStorage.getItem('supabase_access_token')||'';}catch{}return {apikey:key,Authorization:`Bearer ${token||key}`,'Content-Type':'application/json'}};
+
+function getTeacherId(){try{const raw=localStorage.getItem('current_user');if(!raw)return '';const u=JSON.parse(raw);return String(u.id??u.user_id??u.uid??u.user?.id??'').trim()}catch{return ''}}
 
 function parseDueDate(value:string){
   const digits=value.replace(/\D/g,'');
@@ -40,16 +42,25 @@ export default function TestMaker({title,setTitle,description,setDescription,due
    if(dueDate.trim()&&!due){setSettingsMessage('Enter a valid due date as DD / MM / YYYY.');return;}
    const n=Number(maxAttempts);
    if(!Number.isInteger(n)||n<1||n>100){setSettingsMessage('Maximum attempts must be a whole number from 1 to 100.');return;}
+   const teacherId=getTeacherId();
+   if(!teacherId){setSettingsMessage('Teacher account ID not found. Please sign in again.');return;}
    setSavingDetails(true);setSettingsMessage('');
    try{
-     const response=await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(testId)}`,{method:'PATCH',headers:getHeaders(),cache:'no-store',body:JSON.stringify({title:cleanTitle,description:description.trim()||null,due_date:due,test_password:password.trim()||null,max_attempts:n,allow_review:allowReview})});
+     const response=await fetch('/api/tests/update',{method:'PATCH',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({testId,teacherId,title:cleanTitle,description:description.trim()||null,dueDate:due,testPassword:password.trim()||null,maxAttempts:n,allowReview})});
      const text=await response.text();
-     if(!response.ok)throw new Error(text||`Failed to save test details (${response.status})`);
-     setTitle(cleanTitle);
+     let data:any=null;try{data=text?JSON.parse(text):null}catch{}
+     if(!response.ok)throw new Error(data?.error||text||`Failed to save test details (${response.status})`);
+     const saved=data?.test;
+     if(!saved?.id)throw new Error('Test details were not returned after saving.');
+     setTitle(String(saved.title??cleanTitle));
+     setDescription(String(saved.description??description.trim()));
+     setDueDate(saved.due_date?String(saved.due_date).split('T')[0].split('-').reverse().join(' / '):'');
+     setPassword(String(saved.test_password??''));
+     setMaxAttempts(String(Math.max(1,Number(saved.max_attempts)||1)));
+     setAllowReview(saved.allow_review!==false);
      setSettingsMessage('Test details saved successfully.');
-     try{await onSaveDetails();}catch{}
    }catch(e){setSettingsMessage(e instanceof Error?e.message:'Failed to save test details.');}
-   finally{setSavingDetails(false);}
+   finally{setSavingDetails(false)}
  };
  const messageIsSuccess=!!message&&(message.toLowerCase().includes('saved')||message.toLowerCase().includes('success'));const settingsSuccess=settingsMessage.toLowerCase().includes('saved')||settingsMessage.toLowerCase().includes('success');
  return <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4"><div className="mx-auto my-6 w-full max-w-4xl"><Card><CardHeader className="flex flex-row items-start justify-between gap-4"><div><CardTitle>Test Maker</CardTitle><p className="mt-1 text-sm text-muted-foreground">Build the entire test here.</p></div><Button type="button" variant="ghost" size="sm" onClick={onClose}><X/></Button></CardHeader><CardContent className="space-y-6">
