@@ -53,13 +53,10 @@ export function ThemeToggle() {
       width:${radius * 2}px;
       height:${radius * 2}px;
       border-radius:50%;
-      background:${nextTheme === 'dark' ? 'rgba(18, 24, 38, .88)' : 'rgba(248, 250, 252, .88)'};
+      background:${nextTheme === 'dark' ? 'rgb(18, 24, 38)' : 'rgb(248, 250, 252)'};
       transform:scale(.01);
-      opacity:0;
-      transition:
-        transform 680ms cubic-bezier(.16,1,.3,1),
-        opacity 160ms ease-out;
-      will-change:transform,opacity;
+      transition:transform 700ms cubic-bezier(.2,.8,.2,1);
+      will-change:transform;
     `
 
     overlay.appendChild(circle)
@@ -68,19 +65,15 @@ export function ThemeToggle() {
 
     requestAnimationFrame(() => {
       circle.style.transform = 'scale(1)'
-      circle.style.opacity = '.94'
     })
 
-    window.setTimeout(() => setTheme(nextTheme), 220)
-
-    window.setTimeout(() => {
-      circle.style.opacity = '0'
-    }, 620)
+    // Switch exactly as the expanding reveal reaches the middle of the screen.
+    window.setTimeout(() => setTheme(nextTheme), 350)
 
     window.setTimeout(() => {
       overlay.remove()
       setAnimating(false)
-    }, 760)
+    }, 720)
   }
 
   const isDark = resolvedTheme === 'dark'
