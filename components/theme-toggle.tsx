@@ -35,7 +35,6 @@ export function ThemeToggle() {
       Math.max(y, window.innerHeight - y),
     )
 
-    // Keep the old theme visible underneath while the new theme grows over it.
     const overlay = document.createElement('div')
     overlay.setAttribute('aria-hidden', 'true')
     overlay.style.cssText = `
@@ -57,7 +56,7 @@ export function ThemeToggle() {
       background:${nextTheme === 'dark' ? 'rgb(18, 24, 38)' : 'rgb(248, 250, 252)'};
       box-shadow:0 0 80px ${nextTheme === 'dark' ? 'rgba(80,110,180,.18)' : 'rgba(255,255,255,.8)'};
       transform:scale(0);
-      transition:transform 700ms cubic-bezier(.16,1,.3,1);
+      transition:transform 600ms cubic-bezier(.22,1,.36,1);
       will-change:transform;
     `
 
@@ -69,13 +68,12 @@ export function ThemeToggle() {
       circle.style.transform = 'scale(1)'
     })
 
-    // Delay the actual theme swap until the reveal has visibly started.
-    window.setTimeout(() => setTheme(nextTheme), 90)
+    window.setTimeout(() => setTheme(nextTheme), 120)
 
     window.setTimeout(() => {
       overlay.remove()
       setAnimating(false)
-    }, 760)
+    }, 650)
   }
 
   const isDark = resolvedTheme === 'dark'
