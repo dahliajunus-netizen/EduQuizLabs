@@ -1,6 +1,9 @@
 name: Apply Live Quiz UI fixes
 
-on: push
+on:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -63,7 +66,4 @@ jobs:
             exit 0
           fi
           git commit -m 'fix: improve live quiz results and controls'
-          git push origin main
-          git rm .github/workflows/apply-live-quiz-ui-fixes.yml
-          git commit -m 'chore: remove temporary live quiz patch workflow'
           git push origin main
