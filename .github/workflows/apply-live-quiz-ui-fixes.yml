@@ -1,0 +1,69 @@
+name: Apply Live Quiz UI fixes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-live-quiz-ui-fixes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: main
+
+      - name: Patch Live Quiz UI
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          student = Path('app/dashboard/student/live-quiz/[code]/page.tsx')
+          s = student.read_text()
+
+          old = '<span className="text-sm font-black">{p.score} pts</span>'
+          new = '<div className="flex items-center gap-3 text-right"><div><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Correct</p><p className="text-sm font-black">{p.correct_answers}</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Time</p><p className="text-sm font-black tabular-nums">{p.total_response_time_ms > 0 ? `${(p.total_response_time_ms / 1000).toFixed(2)}s` : "—"}</p></div></div>'
+          if old not in s:
+              raise SystemExit('student leaderboard marker not found')
+          s = s.replace(old, new, 1)
+
+          old = 'min-h-[30vh] max-h-80 flex-col'
+          new = 'min-h-[34vh] sm:min-h-[36vh] max-h-none flex-col'
+          if old not in s:
+              raise SystemExit('student answer button marker not found')
+          s = s.replace(old, new, 1)
+          student.write_text(s)
+
+          teacher = Path('app/dashboard/teacher/live-quiz/page.tsx')
+          t = teacher.read_text()
+
+          marker = 'const progress=Math.max(0,Math.min(100,(remaining/30)*100));'
+          injection = '''async function endQuizNow() {\n    if (!quiz) return;\n    if (!window.confirm('End this live quiz now? Players will see the final leaderboard.')) return;\n    try {\n      const rows = await api(`live_quizzes?id=eq.${encodeURIComponent(quiz.id)}`, { method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify({ status: 'finished', question_started_at: null }) });\n      setQuiz(rows?.[0] || { ...quiz, status: 'finished', question_started_at: null });\n      setAnsweredCount(0);\n    } catch (e) { setError(e instanceof Error ? e.message : 'Could not end the quiz.'); }\n  }\n  const progress=Math.max(0,Math.min(100,(remaining/30)*100));'''
+          if marker not in t:
+              raise SystemExit('teacher progress marker not found')
+          t = t.replace(marker, injection, 1)
+
+          header_marker = '</div></div><Card className="flex flex-1'
+          header_replacement = '</div><Button variant="destructive" className="ml-2 h-10 rounded-xl px-4 font-black shadow-sm" onClick={endQuizNow}>End Quiz</Button></div><Card className="flex flex-1'
+          if header_marker not in t:
+              raise SystemExit('teacher header marker not found')
+          t = t.replace(header_marker, header_replacement, 1)
+          teacher.write_text(t)
+          PY
+
+      - name: Commit fixes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/dashboard/student/live-quiz/'[code]'/page.tsx app/dashboard/teacher/live-quiz/page.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: improve live quiz results and controls'
+          git push origin main
+          git rm .github/workflows/apply-live-quiz-ui-fixes.yml
+          git commit -m 'chore: remove temporary live quiz patch workflow'
+          git push origin main
