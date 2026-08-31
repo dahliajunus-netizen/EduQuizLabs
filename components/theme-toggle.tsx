@@ -35,6 +35,7 @@ export function ThemeToggle() {
       Math.max(y, window.innerHeight - y),
     )
 
+    // A soft, translucent reveal gives the theme change a polished, native feel.
     const overlay = document.createElement('div')
     overlay.setAttribute('aria-hidden', 'true')
     overlay.style.cssText = `
@@ -53,11 +54,14 @@ export function ThemeToggle() {
       width:${radius * 2}px;
       height:${radius * 2}px;
       border-radius:50%;
-      background:${nextTheme === 'dark' ? 'rgba(18, 24, 38, .88)' : 'rgba(248, 250, 252, .88)'};
-      box-shadow:0 0 100px ${nextTheme === 'dark' ? 'rgba(80,110,180,.12)' : 'rgba(255,255,255,.55)'};
-      transform:scale(0);
-      transition:transform 850ms cubic-bezier(.16,1,.3,1);
-      will-change:transform;
+      background:${nextTheme === 'dark' ? 'rgba(18, 24, 38, .78)' : 'rgba(248, 250, 252, .78)'};
+      box-shadow:0 0 120px ${nextTheme === 'dark' ? 'rgba(110,145,210,.10)' : 'rgba(255,255,255,.42)'};
+      transform:scale(.02);
+      opacity:.96;
+      transition:
+        transform 1050ms cubic-bezier(.22,1,.36,1),
+        opacity 1050ms cubic-bezier(.22,1,.36,1);
+      will-change:transform,opacity;
     `
 
     overlay.appendChild(circle)
@@ -66,14 +70,16 @@ export function ThemeToggle() {
 
     requestAnimationFrame(() => {
       circle.style.transform = 'scale(1)'
+      circle.style.opacity = '.88'
     })
 
-    window.setTimeout(() => setTheme(nextTheme), 150)
+    // Let the reveal get established before switching the underlying theme.
+    window.setTimeout(() => setTheme(nextTheme), 180)
 
     window.setTimeout(() => {
       overlay.remove()
       setAnimating(false)
-    }, 950)
+    }, 1150)
   }
 
   const isDark = resolvedTheme === 'dark'
@@ -93,8 +99,8 @@ export function ThemeToggle() {
       <span className="absolute inset-0 rounded-xl bg-primary/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
       {mounted ? (
         <span className="relative flex size-5 items-center justify-center">
-          <Sun className={`absolute size-5 transition-all duration-600 ease-out ${isDark ? 'rotate-[180deg] scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'}`} />
-          <Moon className={`absolute size-5 transition-all duration-600 ease-out ${isDark ? 'rotate-0 scale-100 opacity-100' : 'rotate-[-180deg] scale-50 opacity-0'}`} />
+          <Sun className={`absolute size-5 transition-all duration-700 ease-out ${isDark ? 'rotate-[180deg] scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'}`} />
+          <Moon className={`absolute size-5 transition-all duration-700 ease-out ${isDark ? 'rotate-0 scale-100 opacity-100' : 'rotate-[-180deg] scale-50 opacity-0'}`} />
         </span>
       ) : (
         <span className="relative size-5 rounded-full bg-muted animate-pulse" aria-hidden="true" />
