@@ -35,7 +35,6 @@ export function ThemeToggle() {
       Math.max(y, window.innerHeight - y),
     )
 
-    // Subtle glass-like reveal: slow enough to feel intentional, but never lingers.
     const overlay = document.createElement('div')
     overlay.setAttribute('aria-hidden', 'true')
     overlay.style.cssText = `
@@ -54,12 +53,12 @@ export function ThemeToggle() {
       width:${radius * 2}px;
       height:${radius * 2}px;
       border-radius:50%;
-      background:${nextTheme === 'dark' ? 'rgba(18, 24, 38, .62)' : 'rgba(248, 250, 252, .62)'};
-      transform:scale(0.01);
+      background:${nextTheme === 'dark' ? 'rgba(18, 24, 38, .88)' : 'rgba(248, 250, 252, .88)'};
+      transform:scale(.01);
       opacity:0;
       transition:
-        transform 720ms cubic-bezier(.2,.75,.25,1),
-        opacity 180ms ease-out;
+        transform 680ms cubic-bezier(.16,1,.3,1),
+        opacity 160ms ease-out;
       will-change:transform,opacity;
     `
 
@@ -69,20 +68,19 @@ export function ThemeToggle() {
 
     requestAnimationFrame(() => {
       circle.style.transform = 'scale(1)'
-      circle.style.opacity = '.68'
+      circle.style.opacity = '.94'
     })
 
-    // Change the theme once the reveal has covered the center, avoiding a visible flash.
-    window.setTimeout(() => setTheme(nextTheme), 260)
+    window.setTimeout(() => setTheme(nextTheme), 220)
 
     window.setTimeout(() => {
       circle.style.opacity = '0'
-    }, 600)
+    }, 620)
 
     window.setTimeout(() => {
       overlay.remove()
       setAnimating(false)
-    }, 800)
+    }, 760)
   }
 
   const isDark = resolvedTheme === 'dark'
