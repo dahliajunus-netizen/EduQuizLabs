@@ -53,10 +53,10 @@ export function ThemeToggle() {
       width:${radius * 2}px;
       height:${radius * 2}px;
       border-radius:50%;
-      background:${nextTheme === 'dark' ? 'rgb(18, 24, 38)' : 'rgb(248, 250, 252)'};
-      box-shadow:0 0 80px ${nextTheme === 'dark' ? 'rgba(80,110,180,.18)' : 'rgba(255,255,255,.8)'};
+      background:${nextTheme === 'dark' ? 'rgba(18, 24, 38, .88)' : 'rgba(248, 250, 252, .88)'};
+      box-shadow:0 0 100px ${nextTheme === 'dark' ? 'rgba(80,110,180,.12)' : 'rgba(255,255,255,.55)'};
       transform:scale(0);
-      transition:transform 600ms cubic-bezier(.22,1,.36,1);
+      transition:transform 850ms cubic-bezier(.16,1,.3,1);
       will-change:transform;
     `
 
@@ -68,12 +68,12 @@ export function ThemeToggle() {
       circle.style.transform = 'scale(1)'
     })
 
-    window.setTimeout(() => setTheme(nextTheme), 120)
+    window.setTimeout(() => setTheme(nextTheme), 150)
 
     window.setTimeout(() => {
       overlay.remove()
       setAnimating(false)
-    }, 650)
+    }, 950)
   }
 
   const isDark = resolvedTheme === 'dark'
@@ -93,8 +93,8 @@ export function ThemeToggle() {
       <span className="absolute inset-0 rounded-xl bg-primary/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
       {mounted ? (
         <span className="relative flex size-5 items-center justify-center">
-          <Sun className={`absolute size-5 transition-all duration-500 ease-out ${isDark ? 'rotate-[180deg] scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'}`} />
-          <Moon className={`absolute size-5 transition-all duration-500 ease-out ${isDark ? 'rotate-0 scale-100 opacity-100' : 'rotate-[-180deg] scale-50 opacity-0'}`} />
+          <Sun className={`absolute size-5 transition-all duration-600 ease-out ${isDark ? 'rotate-[180deg] scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'}`} />
+          <Moon className={`absolute size-5 transition-all duration-600 ease-out ${isDark ? 'rotate-0 scale-100 opacity-100' : 'rotate-[-180deg] scale-50 opacity-0'}`} />
         </span>
       ) : (
         <span className="relative size-5 rounded-full bg-muted animate-pulse" aria-hidden="true" />
