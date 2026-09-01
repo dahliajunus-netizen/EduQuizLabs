@@ -123,7 +123,7 @@ export default function TeacherLiveQuiz() {
     if (!quiz) return;
     if (!window.confirm('End this live quiz now? Players will see the final leaderboard.')) return;
     try {
-      const rows = await api(`live_quizzes?id=eq.${encodeURIComponent(quiz.id)}`, { method: 'PATCH', headers: { ...h, Prefer: 'return=representation' }, body: JSON.stringify({ status: 'finished', question_started_at: null }) });
+      const rows = await api(`live_quizzes?id=eq.${encodeURIComponent(quiz.id)}`, { method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify({ status: 'finished', question_started_at: null }) });
       setQuiz(rows?.[0] || { ...quiz, status: 'finished', question_started_at: null });
       setAnsweredCount(0);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not end the quiz.'); }
