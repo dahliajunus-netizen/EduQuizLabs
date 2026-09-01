@@ -1,0 +1,69 @@
+name: Live Quiz UX polish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    if: ${{ !contains(github.event.head_commit.message, '[live-quiz-ux]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Patch Live Quiz UX
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          student = Path('app/dashboard/student/live-quiz/[code]/page.tsx')
+          s = student.read_text()
+          old = '<div className="rounded-2xl border bg-card p-4"><p className="text-2xl font-black">{player.score}</p><p className="text-xs text-muted-foreground">Points</p></div>'
+          new = '<div className="rounded-2xl border bg-card p-4"><p className="text-2xl font-black tabular-nums">{player.total_response_time_ms > 0 ? `${(player.total_response_time_ms / 1000).toFixed(2)}s` : "—"}</p><p className="text-xs text-muted-foreground">Time</p></div>'
+          if old in s:
+              s = s.replace(old, new, 1)
+          student.write_text(s)
+
+          teacher = Path('app/dashboard/teacher/live-quiz/page.tsx')
+          s = teacher.read_text()
+          s = s.replace(
+              "const [loading, setLoading] = useState(false); const [deletingId, setDeletingId] = useState<string | null>(null); const [error, setError] = useState(''); const [remaining, setRemaining] = useState(30); const [answeredCount, setAnsweredCount] = useState(0);",
+              "const [loading, setLoading] = useState(false); const [deletingId, setDeletingId] = useState<string | null>(null); const [error, setError] = useState(''); const [remaining, setRemaining] = useState(30); const [answeredCount, setAnsweredCount] = useState(0); const [answerCounts, setAnswerCounts] = useState<Record<string, number>>({});"
+          )
+          s = s.replace(
+              "api(`live_quiz_answers?quiz_id=eq.${encodeURIComponent(quiz.id)}&question_id=eq.${encodeURIComponent(questionId)}&select=id`)"
+              ,
+              "api(`live_quiz_answers?quiz_id=eq.${encodeURIComponent(quiz.id)}&question_id=eq.${encodeURIComponent(questionId)}&select=answer`)"
+          )
+          s = s.replace(
+              "const count = Array.isArray(responseRows) ? responseRows.length : 0; setAnsweredCount(count);",
+              "const count = Array.isArray(responseRows) ? responseRows.length : 0; setAnsweredCount(count); const distribution = (Array.isArray(responseRows) ? responseRows : []).reduce((acc: Record<string, number>, row: { answer?: string }) => { const key = String(row.answer || '').toUpperCase(); if (key) acc[key] = (acc[key] || 0) + 1; return acc; }, {}); setAnswerCounts(distribution);"
+          )
+          s = s.replace("} else setAnsweredCount(0);", "} else { setAnsweredCount(0); setAnswerCounts({}); }")
+          marker = '<div className="mt-4 flex items-center justify-center rounded-xl border bg-card/70 px-4 py-2 text-sm font-black"><Users className="mr-2 size-4 text-primary" />Answered: <span className="mx-1 text-primary">{answeredCount}</span> / {players.length}</div>'
+          insert = marker + '<div className="mt-3 grid grid-cols-4 gap-2">{answers.map(item => <div key={item.letter} className="rounded-xl border bg-card/60 px-2 py-2 text-center"><p className="text-xs font-black">{item.letter}</p><p className="text-sm font-black text-primary">{answerCounts[item.letter] || 0}</p></div>)}</div>'
+          if marker in s and 'answerCounts[item.letter]' not in s:
+              s = s.replace(marker, insert, 1)
+          teacher.write_text(s)
+          PY
+
+      - name: Commit and remove patch workflow
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/dashboard/student/live-quiz/'[code]'/page.tsx app/dashboard/teacher/live-quiz/page.tsx .github/workflows/live-quiz-ux-patch.yml
+          git rm .github/workflows/live-quiz-ux-patch.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m '[live-quiz-ux] polish Live Quiz student and teacher UX'
+          git push
