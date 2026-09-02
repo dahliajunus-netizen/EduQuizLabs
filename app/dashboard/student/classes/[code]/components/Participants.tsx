@@ -21,6 +21,7 @@ type Participant = { student_id: string; full_name: string | null };
 export default function Participants() {
   const params = useParams();
   const classCode = String(Array.isArray(params.code) ? params.code[0] : params.code || '');
+  const [isTeacher, setIsTeacher] = useState(false);
   const [isPrimary, setIsPrimary] = useState(false);
   const [open, setOpen] = useState(false);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -28,6 +29,17 @@ export default function Participants() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem('current_user');
+      if (!raw) return;
+      const user = JSON.parse(raw);
+      const role = String(user.role ?? user.user?.role ?? '').trim().toLowerCase();
+      setIsTeacher(role === 'teacher');
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!isTeacher) return;
     const owner = Symbol('participants');
     if (participantOwner === null) {
       participantOwner = owner;
@@ -36,10 +48,10 @@ export default function Participants() {
     return () => {
       if (participantOwner === owner) participantOwner = null;
     };
-  }, []);
+  }, [isTeacher]);
 
   async function load() {
-    if (!classCode) return;
+    if (!classCode || !isTeacher) return;
     setLoading(true);
     setError('');
     try {
@@ -61,7 +73,7 @@ export default function Participants() {
     }
   }
 
-  if (!isPrimary) return null;
+  if (!isTeacher || !isPrimary) return null;
 
   function openParticipants() {
     setOpen(true);
