@@ -211,7 +211,10 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
           </h3>
           <p className="mt-0.5 text-xs text-muted-foreground">{teacher ? 'Drafts and published tests for this course.' : 'Published tests for this course.'}</p>
         </div>
-        {teacher && <div className="flex items-center gap-2"><Participants /><Button type="button" size="sm" className="rounded-xl shadow-sm" onClick={onCreate} disabled={busy}><PlusCircle className="mr-1 size-4" />Test Maker</Button></div>}
+        <div className="flex items-center gap-2">
+          <Participants />
+          {teacher && <Button type="button" size="sm" className="rounded-xl shadow-sm" onClick={onCreate} disabled={busy}><PlusCircle className="mr-1 size-4" />Test Maker</Button>}
+        </div>
       </div>
 
       {tests.length ? tests.map(test => {
