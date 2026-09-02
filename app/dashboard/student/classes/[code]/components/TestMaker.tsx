@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Pencil, PlusCircle, Save, Trash2, X, Eye, EyeOff, Lock } from 'lucide-react';
 
 export type BuilderQuestion = { id?:string; question:string; option_a:string; option_b:string; option_c:string; option_d:string; correct_answer:'A'|'B'|'C'|'D'; points:number };
-type Props={title:string;setTitle:(v:string)=>void;description:string;setDescription:(v:string)=>void;dueDate:string;setDueDate:(v:string)=>void;questions:BuilderQuestion[];busy?:boolean;message?:string;onSaveDetails:()=>void;onAddQuestion:()=>void;onEditQuestion:(q:BuilderQuestion)=>void;onDeleteQuestion:(q:BuilderQuestion)=>void;onClose:()=>void;pointsFor:(n:number)=>number;testId?:string};
+type Props={title:string;setTitle:(v:string)=>void;description:string;setDescription:(v:string)=>void;dueDate:string;setDueDate:(v:string)=>void;questions:BuilderQuestion[];busy?:boolean;message?:string;onSaveDetails:()=>void;onCreateTest?:(data:{title:string;description:string|null;dueDate:string|null;testPassword:string|null;maxAttempts:number;allowReview:boolean})=>void|Promise<void>;onAddQuestion:()=>void;onEditQuestion:(q:BuilderQuestion)=>void;onDeleteQuestion:(q:BuilderQuestion)=>void;onClose:()=>void;pointsFor:(n:number)=>number;testId?:string};
 const url=process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const getHeaders=()=>{let token='';try{token=localStorage.getItem('supabase_access_token')||'';}catch{}return {apikey:key,Authorization:`Bearer ${token||key}`,'Content-Type':'application/json'}};
@@ -27,18 +27,16 @@ function parseDueDate(value:string){
 function normalizeBuilderDueDate(value:string){
   if(!value)return '';
   const raw=String(value).trim();
-  // Test due dates are date-only. Never carry a timezone/time portion into the maker.
   const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|\s|$)/);
   if(iso)return `${iso[3]} / ${iso[2]} / ${iso[1]}`;
   const dmy=raw.match(/^(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{4})/);
   if(dmy)return `${dmy[1]} / ${dmy[2]} / ${dmy[3]}`;
-  // Handles old values such as "08/30/2026, 07:00 AM" without preserving the time.
   const slashDate=raw.match(/(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{4})/);
   if(slashDate)return `${slashDate[1]} / ${slashDate[2]} / ${slashDate[3]}`;
   return raw;
 }
 
-export default function TestMaker({title,setTitle,description,setDescription,dueDate,setDueDate,questions,busy,message,onSaveDetails,onAddQuestion,onEditQuestion,onDeleteQuestion,onClose,pointsFor,testId}:Props){
+export default function TestMaker({title,setTitle,description,setDescription,dueDate,setDueDate,questions,busy,message,onSaveDetails,onCreateTest,onAddQuestion,onEditQuestion,onDeleteQuestion,onClose,pointsFor,testId}:Props){
  const [password,setPassword]=useState('');
  const [showPassword,setShowPassword]=useState(false);
  const [loadedPassword,setLoadedPassword]=useState(false);
@@ -50,13 +48,23 @@ export default function TestMaker({title,setTitle,description,setDescription,due
  useEffect(()=>{if(!testId||!url||!key){setLoadedPassword(true);return;}let cancelled=false;setLoadedPassword(false);setSettingsMessage('');fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(testId)}&select=test_password,max_attempts,allow_review`,{headers:getHeaders(),cache:'no-store'}).then(async r=>{if(!r.ok)throw new Error(await r.text());return r.json();}).then(rows=>{if(!cancelled){const row=rows?.[0]||{};setPassword(String(row.test_password??''));setMaxAttempts(String(Math.max(1,Number(row.max_attempts)||1)));setAllowReview(row.allow_review!==false);}}).catch(()=>{if(!cancelled)setSettingsMessage('Could not load the current test settings.');}).finally(()=>{if(!cancelled)setLoadedPassword(true);});return()=>{cancelled=true;};},[testId]);
  const handleDueDateChange=(raw:string)=>{const digits=raw.replace(/\D/g,'').slice(0,8);let formatted=digits;if(digits.length>4)formatted=`${digits.slice(0,2)} / ${digits.slice(2,4)} / ${digits.slice(4)}`;else if(digits.length>2)formatted=`${digits.slice(0,2)} / ${digits.slice(2)}`;setDueDate(formatted);};
  const handleSaveDetails=async()=>{
-   if(savingDetails||busy||!testId)return;
+   if(savingDetails||busy)return;
    const cleanTitle=title.trim();
    if(!cleanTitle){setSettingsMessage('Test title is required.');return;}
    const due=parseDueDate(dueDate);
    if(dueDate.trim()&&!due){setSettingsMessage('Enter a valid due date as DD / MM / YYYY.');return;}
    const n=Number(maxAttempts);
    if(!Number.isInteger(n)||n<1||n>100){setSettingsMessage('Maximum attempts must be a whole number from 1 to 100.');return;}
+   if(!testId){
+     if(!onCreateTest){setSettingsMessage('Test creation is unavailable.');return;}
+     setSavingDetails(true);setSettingsMessage('');
+     try{
+       await onCreateTest({title:cleanTitle,description:description.trim()||null,dueDate:due,testPassword:password.trim()||null,maxAttempts:n,allowReview});
+       setSettingsMessage('Test details saved successfully.');
+     }catch(e){setSettingsMessage(e instanceof Error?e.message:'Failed to create test.');}
+     finally{setSavingDetails(false)}
+     return;
+   }
    const teacherId=getTeacherId();
    if(!teacherId){setSettingsMessage('Teacher account ID not found. Please sign in again.');return;}
    setSavingDetails(true);setSettingsMessage('');
@@ -83,9 +91,9 @@ export default function TestMaker({title,setTitle,description,setDescription,due
    <div className="space-y-2"><label className="text-sm font-medium">Description</label><textarea name="test-description" autoComplete="off" className="w-full rounded border bg-background p-2" rows={3} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Describe the test" disabled={savingDetails}/></div>
    <div className="rounded-lg border p-4"><div className="mb-3 flex items-center gap-2"><Lock className="size-4"/><div><p className="font-medium">Test Password <span className="text-xs font-normal text-muted-foreground">(optional)</span></p><p className="text-xs text-muted-foreground">Students must enter this before starting the test.</p></div></div><div className="flex flex-wrap gap-2"><Input name="test-password" autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" className="min-w-0 flex-1" type={showPassword?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Leave empty for no password" disabled={!loadedPassword||savingDetails}/><Button type="button" variant="outline" size="icon" onClick={()=>setShowPassword(v=>!v)} disabled={!loadedPassword||savingDetails} title={showPassword?'Hide password':'Show password'}><span className="pointer-events-none">{showPassword?<EyeOff className="size-4"/>:<Eye className="size-4"/>}</span></Button></div>{!loadedPassword&&testId&&<p className="mt-2 text-xs text-muted-foreground">Loading current password…</p>}</div>
    <div className="rounded-lg border p-4 space-y-4"><div><p className="font-medium">Student Attempts & Review</p><p className="text-xs text-muted-foreground">Control how many times each student may submit this test and whether they can review their answers.</p></div><div className="grid gap-4 md:grid-cols-2"><div className="space-y-2"><label className="text-sm font-medium">Maximum attempts</label><Input name="maximum-attempts" autoComplete="off" type="number" min={1} max={100} step={1} value={maxAttempts} onChange={e=>setMaxAttempts(e.target.value)} disabled={!loadedPassword||savingDetails}/><p className="text-xs text-muted-foreground">1 = one attempt. 3 = up to three attempts.</p></div><div className="flex items-center gap-3 rounded-md border p-3"><input id="allow-review" name="allow-test-review" type="checkbox" className="size-4" checked={allowReview} onChange={e=>setAllowReview(e.target.checked)} disabled={!loadedPassword||savingDetails}/><label htmlFor="allow-review"><span className="font-medium">Allow test review</span><span className="block text-xs text-muted-foreground">Students can review their submitted attempt after grading.</span></label></div></div></div>
-   <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 p-3"><div><b>{questions.length} questions</b><p className="text-xs text-muted-foreground">100 points total · {questions.length?`${pointsFor(questions.length)} points per question`:'add questions to calculate points'}</p></div><Button type="button" onClick={handleSaveDetails} disabled={busy||savingDetails||!testId||!loadedPassword}><Save className="mr-2 size-4"/>{savingDetails?'Saving...':'Save Test Details'}</Button></div>
+   <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 p-3"><div><b>{questions.length} questions</b><p className="text-xs text-muted-foreground">100 points total · {questions.length?`${pointsFor(questions.length)} points per question`:'add questions to calculate points'}</p></div><Button type="button" onClick={handleSaveDetails} disabled={busy||savingDetails||!loadedPassword}><Save className="mr-2 size-4"/>{savingDetails?'Saving...':'Save Test Details'}</Button></div>
    {(message||settingsMessage)&&<p className={`text-sm ${(messageIsSuccess||settingsSuccess)?'text-green-600 dark:text-green-400':'text-destructive'}`}>{settingsMessage||message}</p>}
-   <div className="space-y-3"><div className="flex items-center justify-between"><h3 className="text-lg font-semibold">Questions</h3><Button type="button" onClick={onAddQuestion} disabled={busy||savingDetails}><PlusCircle className="mr-2 size-4"/>Add Question</Button></div>{questions.length===0&&<div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No questions yet. Add your first question.</div>}{questions.map((q,i)=>{const tf=q.option_a==='True'&&q.option_b==='False'&&!q.option_c&&!q.option_d;return <div key={q.id??i} className="rounded-lg border p-4"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="font-medium">{i+1}. {q.question}</p>{tf?<p className="mt-2 text-sm">True · False</p>:<div className="mt-2 grid gap-1 text-sm md:grid-cols-2"><span>A. {q.option_a}</span><span>B. {q.option_b}</span><span>C. {q.option_c}</span><span>D. {q.option_d}</span></div>}<p className="mt-2 text-xs text-muted-foreground">Correct answer: <b>{tf?(q.correct_answer==='A'?'True':'False'):q.correct_answer}</b> · {pointsFor(questions.length)} points</p></div><div className="flex shrink-0 gap-1"><Button type="button" variant="outline" size="sm" onClick={()=>onEditQuestion(q)}><Pencil className="mr-1 size-3"/>Edit</Button><Button type="button" variant="ghost" size="sm" onClick={()=>onDeleteQuestion(q)}><Trash2 className="size-3"/></Button></div></div></div>})}</div>
+   <div className="space-y-3"><div className="flex items-center justify-between"><h3 className="text-lg font-semibold">Questions</h3><Button type="button" onClick={onAddQuestion} disabled={busy||savingDetails||!testId}><PlusCircle className="mr-2 size-4"/>Add Question</Button></div>{questions.length===0&&<div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No questions yet. Add your first question.</div>}{questions.map((q,i)=>{const tf=q.option_a==='True'&&q.option_b==='False'&&!q.option_c&&!q.option_d;return <div key={q.id??i} className="rounded-lg border p-4"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="font-medium">{i+1}. {q.question}</p>{tf?<p className="mt-2 text-sm">True · False</p>:<div className="mt-2 grid gap-1 text-sm md:grid-cols-2"><span>A. {q.option_a}</span><span>B. {q.option_b}</span><span>C. {q.option_c}</span><span>D. {q.option_d}</span></div>}<p className="mt-2 text-xs text-muted-foreground">Correct answer: <b>{tf?(q.correct_answer==='A'?'True':'False'):q.correct_answer}</b> · {pointsFor(questions.length)} points</p></div><div className="flex shrink-0 gap-1"><Button type="button" variant="outline" size="sm" onClick={()=>onEditQuestion(q)}><Pencil className="mr-1 size-3"/>Edit</Button><Button type="button" variant="ghost" size="sm" onClick={()=>onDeleteQuestion(q)}><Trash2 className="size-3"/></Button></div></div></div>})}</div>
    <div className="flex justify-end"><Button type="button" variant="outline" onClick={onClose}>{busy?<Loader2 className="size-4 animate-spin"/>:'Done — Return to Tests'}</Button></div>
  </CardContent></Card></div></div>;
 }
