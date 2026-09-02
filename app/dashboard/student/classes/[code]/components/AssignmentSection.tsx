@@ -6,7 +6,7 @@ import { ClipboardList, ChevronDown, ChevronUp, Save, Trash2, CheckCircle2, Cloc
 import { Input } from '@/components/ui/input';
 
 export type AssignmentItem = { id?: string; name: string; description: string; due_date?: string | null };
-export type AssignmentSubmission = { id?: string; nickname: string; class: string; link: string; grade?: number | null; student_id?: string | null };
+export type AssignmentSubmission = { id?: string; nickname: string; class: string; link: string; grade?: number | null; student_id?: string | null; assignment_id?: string | null };
 type Props = { assignments: AssignmentItem[]; submissions: Record<string, AssignmentSubmission[]>; teacher: boolean; studentId: string; gradeInputs: Record<string,string>; setGradeInputs: React.Dispatch<React.SetStateAction<Record<string,string>>>; open: Record<string,boolean>; setOpen: React.Dispatch<React.SetStateAction<Record<string,boolean>>>; displayDate: (value?: string|null)=>string; onSubmit: (assignment: AssignmentItem)=>void; onUndo: (assignment: AssignmentItem)=>void; onDelete: (id:string)=>void; onSaveGrade: (submission: AssignmentSubmission)=>void };
 function formatDueDate(value?: string | null) { if (!value) return ''; const date = new Date(value); if (Number.isNaN(date.getTime())) return value; return date.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 
@@ -14,8 +14,9 @@ export default function AssignmentSection({ assignments, submissions, teacher, s
  const [persistedSubmissions, setPersistedSubmissions] = useState<Record<string, AssignmentSubmission[]>>(submissions);
 
  useEffect(() => {
-  setPersistedSubmissions(submissions);
- }, [submissions]);
+  const hasSubmissionData = Object.values(submissions).some(list => list?.length > 0);
+  if (teacher || hasSubmissionData) setPersistedSubmissions(submissions);
+ }, [submissions, teacher]);
 
  useEffect(() => {
   if (teacher || !studentId || assignments.length === 0) return;
@@ -35,11 +36,8 @@ export default function AssignmentSection({ assignments, submissions, teacher, s
     const rows = await response.json() as AssignmentSubmission[];
     if (cancelled) return;
     const next: Record<string, AssignmentSubmission[]> = {};
-    for (const assignment of assignments) {
-     if (assignment.id) next[assignment.id] = rows.filter(row => String(row.student_id) === String(studentId) && rows.length && false);
-    }
     for (const row of rows) {
-     const assignmentId = (row as AssignmentSubmission & { assignment_id?: string }).assignment_id;
+     const assignmentId = row.assignment_id;
      if (assignmentId) (next[assignmentId] ||= []).push(row);
     }
     setPersistedSubmissions(prev => {
