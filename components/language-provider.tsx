@@ -1,27 +1,37 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { translations, Language, TranslationKey } from '@/lib/translations'
+
+export const SUPPORTED_LANGUAGES = [
+  { code: 'en', name: 'English', nativeName: 'English' },
+  { code: 'id', name: 'Indonesian', nativeName: 'Bahasa Indonesia' },
+  { code: 'zh-CN', name: 'Chinese', nativeName: '简体中文' },
+  { code: 'es', name: 'Spanish', nativeName: 'Español' },
+  { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी' },
+  { code: 'fr', name: 'French', nativeName: 'Français' },
+  { code: 'ar', name: 'Arabic', nativeName: 'العربية' },
+] as const
 
 type LanguageContextType = {
   language: Language
   setLanguage: (language: Language) => void
   t: (key: TranslationKey) => string
+  languages: typeof SUPPORTED_LANGUAGES
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
+function isSupportedLanguage(value: string | null): value is Language {
+  return SUPPORTED_LANGUAGES.some((language) => language.code === value)
+}
+
 function setGoogleTranslateCookie(language: Language) {
   if (typeof document === 'undefined') return
-
-  if (language === 'en') {
-    document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'
-    document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${window.location.hostname}`
-  } else {
-    const value = `/en/${language}`
-    document.cookie = `googtrans=${value}; path=/; max-age=31536000`
-    document.cookie = `googtrans=${value}; path=/; domain=${window.location.hostname}; max-age=31536000`
-  }
+  const value = language === 'en' ? '' : `/en/${language}`
+  const expires = language === 'en' ? '; expires=Thu, 01 Jan 1970 00:00:00 GMT' : '; max-age=31536000'
+  document.cookie = `googtrans=${value}; path=/${expires}`
+  document.cookie = `googtrans=${value}; path=/; domain=${window.location.hostname}${expires}`
 }
 
 function loadGoogleTranslate() {
@@ -31,24 +41,16 @@ function loadGoogleTranslate() {
   ;(window as any).googleTranslateElementInit = () => {
     const GoogleTranslate = (window as any).google?.translate?.TranslateElement
     const target = document.getElementById('google_translate_element')
-    if (!GoogleTranslate || !target) return
-
-    if (target.getAttribute('data-loaded') === 'true') return
+    if (!GoogleTranslate || !target || target.getAttribute('data-loaded') === 'true') return
     target.setAttribute('data-loaded', 'true')
-
-    new GoogleTranslate(
-      {
-        pageLanguage: 'en',
-        includedLanguages: 'en,id',
-        autoDisplay: false,
-      },
-      'google_translate_element'
-    )
+    new GoogleTranslate({
+      pageLanguage: 'en',
+      includedLanguages: SUPPORTED_LANGUAGES.map((language) => language.code).join(','),
+      autoDisplay: false,
+    }, 'google_translate_element')
   }
 
-  const existing = document.querySelector('script[data-google-translate]')
-  if (existing) return
-
+  if (document.querySelector('script[data-google-translate]')) return
   const script = document.createElement('script')
   script.src = 'https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit'
   script.async = true
@@ -62,41 +64,41 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const savedLanguage = localStorage.getItem('language')
-      if (savedLanguage === 'en' || savedLanguage === 'id') {
-        setLanguageState(savedLanguage)
-      }
+      if (isSupportedLanguage(savedLanguage)) setLanguageState(savedLanguage)
     } catch (error) {
       console.error('Error loading language preference:', error)
     }
-
-    document.documentElement.lang = 'en'
-    document.documentElement.setAttribute('translate', 'yes')
-    document.body.setAttribute('translate', 'yes')
     loadGoogleTranslate()
   }, [])
 
   useEffect(() => {
     document.documentElement.lang = language
+    document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr'
     document.documentElement.setAttribute('translate', 'yes')
     document.body.setAttribute('translate', 'yes')
+    setGoogleTranslateCookie(language)
   }, [language])
 
   const setLanguage = (newLanguage: Language) => {
+    if (!isSupportedLanguage(newLanguage) || newLanguage === language) return
     setLanguageState(newLanguage)
-
     try {
       localStorage.setItem('language', newLanguage)
       setGoogleTranslateCookie(newLanguage)
-      window.location.reload()
     } catch (error) {
       console.error('Error saving language preference:', error)
     }
   }
 
-  const t = (key: TranslationKey) => translations[language][key]
+  const t = (key: TranslationKey) => {
+    const selected = translations[language]
+    return selected?.[key] ?? translations.en[key] ?? key
+  }
+
+  const value = useMemo(() => ({ language, setLanguage, t, languages: SUPPORTED_LANGUAGES }), [language])
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t }}>
+    <LanguageContext.Provider value={value}>
       <div id="google_translate_element" className="hidden" aria-hidden="true" />
       {children}
     </LanguageContext.Provider>
@@ -105,8 +107,6 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
 export function useLanguage() {
   const context = useContext(LanguageContext)
-  if (!context) {
-    throw new Error('useLanguage must be used inside LanguageProvider')
-  }
+  if (!context) throw new Error('useLanguage must be used inside LanguageProvider')
   return context
 }
