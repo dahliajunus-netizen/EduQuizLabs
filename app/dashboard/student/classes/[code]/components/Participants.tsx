@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Users, X } from 'lucide-react';
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+let participantOwner: symbol | null = null;
 
 function getHeaders() {
   let token = '';
@@ -16,13 +18,25 @@ function getHeaders() {
 
 type Participant = { student_id: string; full_name: string | null };
 
-type Props = { classCode: string };
-
-export default function Participants({ classCode }: Props) {
+export default function Participants() {
+  const params = useParams();
+  const classCode = String(Array.isArray(params.code) ? params.code[0] : params.code || '');
+  const [isPrimary, setIsPrimary] = useState(false);
   const [open, setOpen] = useState(false);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const owner = Symbol('participants');
+    if (participantOwner === null) {
+      participantOwner = owner;
+      setIsPrimary(true);
+    }
+    return () => {
+      if (participantOwner === owner) participantOwner = null;
+    };
+  }, []);
 
   async function load() {
     if (!classCode) return;
@@ -47,13 +61,15 @@ export default function Participants({ classCode }: Props) {
     }
   }
 
+  if (!isPrimary) return null;
+
   function openParticipants() {
     setOpen(true);
     void load();
   }
 
   return <>
-    <Button type="button" variant="outline" className="rounded-xl" onClick={openParticipants}>
+    <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={openParticipants}>
       <Users className="mr-2 size-4" />Participants
     </Button>
 
