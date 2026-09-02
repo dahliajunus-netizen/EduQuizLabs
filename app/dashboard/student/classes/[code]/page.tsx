@@ -13,6 +13,7 @@ import MaterialSection from './components/MaterialSection';
 import AssignmentSection from './components/AssignmentSection';
 import TestsSection from './components/TestsSection';
 import TestMaker from './components/TestMaker';
+import Participants from './components/Participants';
 import QuestionModal, { type QuestionFormState } from './components/QuestionModal';
 import SubmissionModal from './components/SubmissionModal';
 import type { AddType, Assignment, Course, Material, Question, Submission, Test } from './components/types';
@@ -182,6 +183,7 @@ export default function ClassDetailsPage() {
   const filteredCourses = courses.filter(course => course.course_name.toLowerCase().includes(courseSearch.trim().toLowerCase()));
 
   return <><Navbar /><main className="mx-auto max-w-6xl space-y-6 p-4 md:p-6"><div className="flex items-center justify-between gap-3"><div><Link href={`/dashboard/${teacher ? 'teacher' : 'student'}`}><Button variant="outline" size="sm"><ArrowLeft className="mr-2 size-4"/>Back to Dashboard</Button></Link><h1 className="mt-4 text-3xl font-bold">{className || 'Class'}</h1><p className="text-muted-foreground">{school}</p></div>{teacher ? <Button type="button" onClick={()=>setCourseModal(true)}><PlusCircle className="mr-2 size-4"/>Create New Course</Button> : <Button type="button" variant="outline" onClick={leaveClass} disabled={busy || !studentId}>Leave Class</Button>}</div>
+    <div className="flex justify-end -mt-2"><Participants /></div>
     {loading && <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin"/>Loading...</div>}
     {error && <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
     {!loading && courses.length > 0 && <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input value={courseSearch} onChange={e=>setCourseSearch(e.target.value)} placeholder="Search courses..." aria-label="Search courses" className="pl-9 pr-9" />{courseSearch && <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 size-8 -translate-y-1/2" onClick={()=>setCourseSearch('')} aria-label="Clear course search"><X className="size-4"/></Button>}</div>}
