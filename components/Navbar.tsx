@@ -5,15 +5,30 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, BookOpen, Users, LogOut, Sparkles, Menu, X, Languages } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, LogOut, Sparkles, Menu, X, Languages, ChevronDown } from 'lucide-react';
 import { useLanguage } from '@/components/language-provider';
 import type { Language } from '@/lib/translations';
+
+const LANGUAGE_FLAGS: Record<Language, string> = {
+  en: 'us',
+  id: 'id',
+  'zh-CN': 'cn',
+  es: 'es',
+  hi: 'in',
+  fr: 'fr',
+  ar: 'sa',
+};
+
+function flagUrl(language: Language) {
+  return `https://flagcdn.com/24x18/${LANGUAGE_FLAGS[language]}.png`;
+}
 
 export function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
   const { language, setLanguage, t, languages } = useLanguage();
 
   useEffect(() => {
@@ -27,17 +42,29 @@ export function Navbar() {
 
   useEffect(() => setMobileOpen(false), [pathname]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('[data-language-menu]')) setLanguageOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const role = user?.role ? user.role.toLowerCase() : 'student';
   const dashboardHref = role === 'teacher' ? '/dashboard/teacher' : role === 'parent' ? '/dashboard/parent' : '/dashboard/student';
 
-  const handleLanguageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setLanguage(event.target.value as Language);
+  const handleLanguageChange = (newLanguage: Language) => {
+    setLanguage(newLanguage);
+    setLanguageOpen(false);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('current_user');
     router.push('/');
   };
+
+  const selectedLanguage = languages.find((item) => item.code === language) ?? languages[0];
 
   const navItems = [
     { href: dashboardHref, label: t('overview'), icon: LayoutDashboard },
@@ -79,19 +106,39 @@ export function Navbar() {
           </div>
           <ThemeToggle />
 
-          <div className="flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card px-2 shadow-sm transition hover:border-primary/50 hover:bg-muted/60 focus-within:ring-2 focus-within:ring-primary">
-            <Languages className="size-4 shrink-0 text-muted-foreground" />
-            <select
-              value={language}
-              onChange={handleLanguageChange}
+          <div className="relative" data-language-menu>
+            <button
+              type="button"
+              onClick={() => setLanguageOpen((open) => !open)}
               aria-label="Select language"
-              title="Select language"
-              className="h-full min-w-[120px] cursor-pointer bg-transparent text-xs font-semibold text-foreground outline-none"
+              aria-haspopup="listbox"
+              aria-expanded={languageOpen}
+              className="flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card px-2.5 shadow-sm transition hover:border-primary/50 hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              {languages.map((item) => (
-                <option key={item.code} value={item.code}>{item.nativeName}</option>
-              ))}
-            </select>
+              <Languages className="size-4 shrink-0 text-muted-foreground" />
+              <img src={flagUrl(language)} alt="" className="h-3.5 w-5 rounded-sm object-cover" />
+              <span className="hidden text-xs font-semibold text-foreground sm:inline">{selectedLanguage.nativeName}</span>
+              <ChevronDown className={`size-3.5 text-muted-foreground transition-transform ${languageOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {languageOpen && (
+              <div className="absolute right-0 top-full z-[60] mt-2 w-52 overflow-hidden rounded-xl border border-border bg-card p-1.5 shadow-xl" role="listbox" aria-label="Languages">
+                {languages.map((item) => (
+                  <button
+                    key={item.code}
+                    type="button"
+                    role="option"
+                    aria-selected={item.code === language}
+                    onClick={() => handleLanguageChange(item.code)}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${item.code === language ? 'bg-primary/10 font-semibold text-primary' : 'text-foreground hover:bg-muted'}`}
+                  >
+                    <img src={flagUrl(item.code)} alt="" className="h-3.5 w-5 shrink-0 rounded-sm object-cover" />
+                    <span className="min-w-0 flex-1 truncate">{item.nativeName}</span>
+                    {item.code === language && <span className="text-xs">✓</span>}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <Button variant="outline" size="sm" onClick={handleLogout} className="hidden h-9 gap-2 rounded-xl px-3 sm:flex">
@@ -119,16 +166,39 @@ export function Navbar() {
           </nav>
 
           <div className="mt-3 grid grid-cols-[1fr_auto] gap-2 border-t border-border/60 pt-3">
-            <select
-              value={language}
-              onChange={handleLanguageChange}
-              aria-label="Select language"
-              className="h-11 min-w-0 rounded-xl border border-border/70 bg-card px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:ring-2 focus:ring-primary"
-            >
-              {languages.map((item) => (
-                <option key={item.code} value={item.code}>{item.nativeName}</option>
-              ))}
-            </select>
+            <div className="relative" data-language-menu>
+              <button
+                type="button"
+                onClick={() => setLanguageOpen((open) => !open)}
+                aria-label="Select language"
+                aria-haspopup="listbox"
+                aria-expanded={languageOpen}
+                className="flex h-11 w-full items-center gap-2 rounded-xl border border-border/70 bg-card px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:ring-2 focus:ring-primary"
+              >
+                <img src={flagUrl(language)} alt="" className="h-3.5 w-5 shrink-0 rounded-sm object-cover" />
+                <span className="min-w-0 flex-1 truncate text-left">{selectedLanguage.nativeName}</span>
+                <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${languageOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {languageOpen && (
+                <div className="absolute bottom-full left-0 z-[60] mb-2 w-full overflow-hidden rounded-xl border border-border bg-card p-1.5 shadow-xl" role="listbox" aria-label="Languages">
+                  {languages.map((item) => (
+                    <button
+                      key={item.code}
+                      type="button"
+                      role="option"
+                      aria-selected={item.code === language}
+                      onClick={() => handleLanguageChange(item.code)}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${item.code === language ? 'bg-primary/10 font-semibold text-primary' : 'text-foreground hover:bg-muted'}`}
+                    >
+                      <img src={flagUrl(item.code)} alt="" className="h-3.5 w-5 shrink-0 rounded-sm object-cover" />
+                      <span className="min-w-0 flex-1 truncate">{item.nativeName}</span>
+                      {item.code === language && <span className="text-xs">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <Button variant="outline" onClick={handleLogout} className="h-11 gap-2 rounded-xl px-4">
               <LogOut className="size-4" />
               <span>{t('exit')}</span>
