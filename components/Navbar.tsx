@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, BookOpen, Users, LogOut, Sparkles, Menu, X } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, LogOut, Sparkles, Menu, X, Languages } from 'lucide-react';
 import { useLanguage } from '@/components/language-provider';
 import type { Language } from '@/lib/translations';
 
@@ -79,17 +79,20 @@ export function Navbar() {
           </div>
           <ThemeToggle />
 
-          <select
-            value={language}
-            onChange={handleLanguageChange}
-            aria-label="Select language"
-            title="Select language"
-            className="hidden h-9 min-w-[130px] rounded-xl border border-border/70 bg-card px-2.5 text-xs font-semibold text-foreground shadow-sm outline-none transition focus:ring-2 focus:ring-primary"
-          >
-            {languages.map((item) => (
-              <option key={item.code} value={item.code}>{item.nativeName}</option>
-            ))}
-          </select>
+          <div className="flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card px-2 shadow-sm transition hover:border-primary/50 hover:bg-muted/60 focus-within:ring-2 focus-within:ring-primary">
+            <Languages className="size-4 shrink-0 text-muted-foreground" />
+            <select
+              value={language}
+              onChange={handleLanguageChange}
+              aria-label="Select language"
+              title="Select language"
+              className="h-full min-w-[120px] cursor-pointer bg-transparent text-xs font-semibold text-foreground outline-none"
+            >
+              {languages.map((item) => (
+                <option key={item.code} value={item.code}>{item.nativeName}</option>
+              ))}
+            </select>
+          </div>
 
           <Button variant="outline" size="sm" onClick={handleLogout} className="hidden h-9 gap-2 rounded-xl px-3 sm:flex">
             <LogOut className="size-4" />
