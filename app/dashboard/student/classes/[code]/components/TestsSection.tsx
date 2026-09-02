@@ -203,6 +203,7 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
 
   return (
     <section className="space-y-3">
+      <Participants />
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-base font-bold tracking-tight">
@@ -211,10 +212,7 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
           </h3>
           <p className="mt-0.5 text-xs text-muted-foreground">{teacher ? 'Drafts and published tests for this course.' : 'Published tests for this course.'}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Participants />
-          {teacher && <Button type="button" size="sm" className="rounded-xl shadow-sm" onClick={onCreate} disabled={busy}><PlusCircle className="mr-1 size-4" />Test Maker</Button>}
-        </div>
+        {teacher && <Button type="button" size="sm" className="rounded-xl shadow-sm" onClick={onCreate} disabled={busy}><PlusCircle className="mr-1 size-4" />Test Maker</Button>}
       </div>
 
       {tests.length ? tests.map(test => {
@@ -275,13 +273,12 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
               <div className="flex items-center gap-2 text-xs text-muted-foreground"><Users className="size-3.5" />{testAttempts.filter(a => !a.finished_at).length} active attempt{testAttempts.filter(a => !a.finished_at).length === 1 ? '' : 's'} • {testSubmissions.length} completed submission{testSubmissions.length === 1 ? '' : 's'}</div>
               <div className="space-y-2">
                 {qs.length === 0 && <p className="rounded-xl border border-dashed p-5 text-center text-sm text-muted-foreground">No questions yet. Open Test Maker to add them.</p>}
-                {qs.map((question, index) => { const type = question.question_type || 'multiple-choice'; return <div key={question.id} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-medium">{index + 1}. {question.question}</p><span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{questionTypeLabel(type)}</span></div>{type === 'multiple-choice' && <div className="mt-2 grid gap-1 text-sm text-muted-foreground md:grid-cols-2"><span>A: {question.option_a}</span><span>B: {question.option_b}</span><span>C: {question.option_c}</span><span>D: {question.option_d}</span></div>}{type === 'true-false' && <p className="mt-2 text-sm text-muted-foreground">Students choose True or False.</p>}{type === 'fill-blank' && <p className="mt-2 text-sm text-muted-foreground">Students type the answer. Correct answer: <b>{question.option_a}</b></p>}{type === 'matching' && <div className="mt-2 space-y-1 text-sm text-muted-foreground">{matchingPairs(question.option_a).map((pair: string, i: number) => <div key={i} className="rounded-lg bg-muted/50 px-2 py-1">{pair}</div>)}</div>}<p className="mt-2 text-xs text-muted-foreground">{formatPoints(qs.length)} pts</p></div><div className="flex shrink-0 gap-1"><Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => onEditQuestion(question)}><Pencil className="size-3" /></Button><Button type="button" variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive" onClick={() => onDeleteQuestion(question)}><Trash2 className="size-3" /></Button></div></div></div>; })}
+                {qs.map((question, index) => { const type = question.question_type || 'multiple-choice'; return <div key={question.id} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-medium">{index + 1}. {question.question}</p><span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{questionTypeLabel(type)}</span></div>{type === 'multiple-choice' && <div className="mt-2 grid gap-1 text-sm text-muted-foreground sm:grid-cols-2"><span>A. {question.option_a}</span><span>B. {question.option_b}</span><span>C. {question.option_c}</span><span>D. {question.option_d}</span></div>}{type === 'true-false' && <div className="mt-2 text-sm text-muted-foreground">A. True &nbsp; B. False</div>}{type === 'fill-blank' && <div className="mt-2 text-sm text-muted-foreground">Answer: {question.option_a}</div>}{type === 'matching' && <div className="mt-2 space-y-1 text-sm text-muted-foreground">{matchingPairs(question.option_a).map((pair, pairIndex) => <div key={pairIndex}>{pair}</div>)}</div>}</div><div className="flex shrink-0 gap-1"><Button type="button" variant="outline" size="icon" className="size-9 rounded-lg" onClick={() => onEditQuestion(question)}><Pencil className="size-4" /></Button><Button type="button" variant="ghost" size="icon" className="size-9 rounded-lg text-muted-foreground hover:text-destructive" onClick={() => onDeleteQuestion(question)}><Trash2 size={14} /></Button></div></div></div>; })}
               </div>
-              <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={() => onEdit(test)}><Pencil className="mr-1 size-4" />Open Test Maker</Button>
             </div>}
           </div>
         );
-      }) : <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-5 py-8 text-center"><FlaskConical className="mx-auto size-7 text-muted-foreground/60" /><p className="mt-2 text-sm font-medium">{teacher ? 'No tests yet' : 'No published tests yet'}</p><p className="mt-1 text-xs text-muted-foreground">{teacher ? 'Create your first test with Test Maker.' : 'Your teacher has not published a test here yet.'}</p></div>}
+      }) : <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">No tests yet.</div>}
     </section>
   );
 }
