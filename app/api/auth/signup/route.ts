@@ -46,6 +46,29 @@ async function findExistingUser(email: string) {
     : null;
 }
 
+function calculateExactAge(birthday: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthday);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const birthDate = new Date(year, month - 1, day);
+
+  if (
+    !Number.isFinite(birthDate.getTime()) ||
+    birthDate.getFullYear() !== year ||
+    birthDate.getMonth() !== month - 1 ||
+    birthDate.getDate() !== day
+  ) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  if (today.getMonth() < month - 1 || (today.getMonth() === month - 1 && today.getDate() < day)) age--;
+  if (age < 0 || age > 120) return null;
+  return age;
+}
+
 export async function POST(request: Request) {
   try {
     if (!supabaseUrl || !supabaseAnonKey) {
@@ -59,12 +82,11 @@ export async function POST(request: Request) {
     const email = String(body?.email ?? '').trim().toLowerCase();
     const password = String(body?.password ?? '');
     const fullName = String(body?.full_name ?? '').trim();
-    const age = Number(body?.age);
     const birthday = String(body?.birthday ?? '').trim();
     const country = String(body?.country ?? '').trim();
     const role = body?.role === 'teacher' ? 'teacher' : 'student';
 
-    if (!email || !password || !fullName || !birthday || !country || !Number.isInteger(age)) {
+    if (!email || !password || !fullName || !birthday || !country) {
       return NextResponse.json({ error: 'Missing required signup information.' }, { status: 400 });
     }
     if (password.length < 8) {
@@ -72,6 +94,13 @@ export async function POST(request: Request) {
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 });
+    }
+
+    // Never trust the age supplied by the browser. Derive it from the
+    // birthday on the server so teacher eligibility cannot be bypassed.
+    const age = calculateExactAge(birthday);
+    if (age === null) {
+      return NextResponse.json({ error: 'Please enter a valid birthday.' }, { status: 400 });
     }
     if (role === 'teacher' && age < 21) {
       return NextResponse.json({ error: 'Teachers must be at least 21 years old.' }, { status: 400 });
