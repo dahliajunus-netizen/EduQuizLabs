@@ -14,7 +14,7 @@ export function Navbar() {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { language, setLanguage, t } = useLanguage();
+  const { language, setLanguage, t, languages } = useLanguage();
 
   useEffect(() => {
     try {
@@ -40,10 +40,10 @@ export function Navbar() {
   };
 
   const navItems = [
-    { href: dashboardHref, label: t.overview, icon: LayoutDashboard },
+    { href: dashboardHref, label: t('overview'), icon: LayoutDashboard },
     ...(role === 'teacher' ? [{ href: '/dashboard/teacher/live-quiz', label: 'Live Quiz', icon: Sparkles }] : []),
     ...(role === 'student' ? [{ href: '/dashboard/student/live-quiz', label: 'Join Live Quiz', icon: Sparkles }] : []),
-    ...(role === 'parent' ? [{ href: '/dashboard/parent/children', label: t.children, icon: Users }] : []),
+    ...(role === 'parent' ? [{ href: '/dashboard/parent/children', label: t('children'), icon: Users }] : []),
   ];
 
   return (
@@ -74,7 +74,7 @@ export function Navbar() {
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           <div className="hidden max-w-[190px] rounded-xl border border-border/70 bg-card/70 px-3 py-1.5 text-right shadow-sm sm:block">
-            <div className="truncate text-sm font-bold text-foreground">{user?.fullName || user?.full_name || t.guestUser}</div>
+            <div className="truncate text-sm font-bold text-foreground">{user?.fullName || user?.full_name || t('guestUser')}</div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{role}</div>
           </div>
           <ThemeToggle />
@@ -84,15 +84,16 @@ export function Navbar() {
             onChange={handleLanguageChange}
             aria-label="Select language"
             title="Select language"
-            className="hidden h-9 min-w-[108px] rounded-xl border border-border/70 bg-card px-2.5 text-xs font-semibold text-foreground shadow-sm outline-none transition focus:ring-2 focus:ring-primary sm:block"
+            className="hidden h-9 min-w-[130px] rounded-xl border border-border/70 bg-card px-2.5 text-xs font-semibold text-foreground shadow-sm outline-none transition focus:ring-2 focus:ring-primary"
           >
-            <option value="en">English</option>
-            <option value="id">Bahasa Indonesia</option>
+            {languages.map((item) => (
+              <option key={item.code} value={item.code}>{item.nativeName}</option>
+            ))}
           </select>
 
           <Button variant="outline" size="sm" onClick={handleLogout} className="hidden h-9 gap-2 rounded-xl px-3 sm:flex">
             <LogOut className="size-4" />
-            <span>{t.exit}</span>
+            <span>{t('exit')}</span>
           </Button>
           <Button variant="outline" size="icon" onClick={() => setMobileOpen(v => !v)} className="size-10 shrink-0 rounded-xl md:hidden" aria-label={mobileOpen ? 'Close menu' : 'Open menu'} aria-expanded={mobileOpen}>
             {mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}
@@ -121,12 +122,13 @@ export function Navbar() {
               aria-label="Select language"
               className="h-11 min-w-0 rounded-xl border border-border/70 bg-card px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:ring-2 focus:ring-primary"
             >
-              <option value="en">English</option>
-              <option value="id">Bahasa Indonesia</option>
+              {languages.map((item) => (
+                <option key={item.code} value={item.code}>{item.nativeName}</option>
+              ))}
             </select>
             <Button variant="outline" onClick={handleLogout} className="h-11 gap-2 rounded-xl px-4">
               <LogOut className="size-4" />
-              <span>{t.exit}</span>
+              <span>{t('exit')}</span>
             </Button>
           </div>
         </div>
