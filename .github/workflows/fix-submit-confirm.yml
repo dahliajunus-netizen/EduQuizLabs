@@ -19,22 +19,13 @@ jobs:
           from pathlib import Path
           p=Path('app/dashboard/student/tests/[id]/page.tsx')
           s=p.read_text()
-          old="{submitting?'Submitting…':'Confirm submission'}"
-          s=s.replace(old,"{submitting?'Submitting…':'Confirm Assessment'}")
-          marker='Review submission'
-          i=s.find(marker)
-          if i<0:
-              raise SystemExit('Review submission marker not found')
-          start=s.rfind(':confirm?',0,i)
-          if start<0:
-              raise SystemExit('confirm footer start not found')
-          end_marker='Submit assessment</Button>'
-          end=s.find(end_marker,i)
-          if end<0:
-              raise SystemExit('Submit assessment footer end not found')
-          end += len(end_marker)
-          replacement=':<Button className="h-11 rounded-xl bg-blue-600 px-5 hover:bg-blue-700" onClick={()=>void submit(false)} disabled={submitting||confirm}>Submit Assessment</Button>'
-          s=s[:start]+replacement+s[end:]
+          old="onClick={()=>setConfirm(true)}>Review submission</Button>"
+          new="disabled>Submit Assessment</Button>"
+          if old not in s:
+              raise SystemExit('Review submission button marker not found')
+          s=s.replace(old,new,1)
+          old2="{submitting?'Submitting…':'Confirm submission'}"
+          s=s.replace(old2,"{submitting?'Submitting…':'Confirm Assessment'}")
           p.write_text(s)
           PY
       - name: Commit patch and cleanup
@@ -42,6 +33,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add 'app/dashboard/student/tests/[id]/page.tsx'
-          git rm .github/workflows/fix-submit-confirm.yml .github/workflows/fix-submit-confirm-2.yml SUBMIT_CONFIRM_TRIGGER.txt SUBMIT_CONFIRM_TRIGGER_2.txt
-          git commit -m "Fix assessment submit confirmation behavior"
+          git rm .github/workflows/fix-submit-confirm.yml .github/workflows/fix-submit-confirm-2.yml SUBMIT_CONFIRM_TRIGGER.txt SUBMIT_CONFIRM_TRIGGER_2.txt SUBMIT_CONFIRM_TRIGGER_3.txt
+          git commit -m "Prevent duplicate assessment submit clicks"
           git push
