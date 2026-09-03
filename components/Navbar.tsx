@@ -5,207 +5,21 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, BookOpen, Users, LogOut, Sparkles, Menu, X, Languages, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, LogOut, Sparkles, Menu, X, Languages, ChevronDown, Settings } from 'lucide-react';
 import { useLanguage } from '@/components/language-provider';
 import type { Language } from '@/lib/translations';
 
-const LANGUAGE_FLAGS: Record<Language, string> = {
-  en: 'us',
-  id: 'id',
-  'zh-CN': 'cn',
-  es: 'es',
-  hi: 'in',
-  fr: 'fr',
-  ar: 'sa',
-};
-
-function flagUrl(language: Language) {
-  return `https://flagcdn.com/24x18/${LANGUAGE_FLAGS[language]}.png`;
-}
+const LANGUAGE_FLAGS: Record<Language, string> = { en: 'us', id: 'id', 'zh-CN': 'cn', es: 'es', hi: 'in', fr: 'fr', ar: 'sa' };
+function flagUrl(language: Language) { return `https://flagcdn.com/24x18/${LANGUAGE_FLAGS[language]}.png`; }
 
 export function Navbar() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [user, setUser] = useState<any>(null);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [languageOpen, setLanguageOpen] = useState(false);
-  const { language, setLanguage, t, languages } = useLanguage();
-
-  useEffect(() => {
-    try {
-      const rawUser = localStorage.getItem('current_user');
-      if (rawUser) setUser(JSON.parse(rawUser));
-    } catch (e) {
-      console.error('Error loading navbar settings', e);
-    }
-  }, []);
-
-  useEffect(() => setMobileOpen(false), [pathname]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('[data-language-menu]')) setLanguageOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const role = user?.role ? user.role.toLowerCase() : 'student';
-  const dashboardHref = role === 'teacher' ? '/dashboard/teacher' : role === 'parent' ? '/dashboard/parent' : '/dashboard/student';
-
-  const handleLanguageChange = (newLanguage: Language) => {
-    setLanguage(newLanguage);
-    setLanguageOpen(false);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('current_user');
-    router.push('/');
-  };
-
-  const selectedLanguage = languages.find((item) => item.code === language) ?? languages[0];
-
-  const navItems = [
-    { href: dashboardHref, label: t('overview'), icon: LayoutDashboard },
-    ...(role === 'teacher' ? [{ href: '/dashboard/teacher/live-quiz', label: 'Live Quiz', icon: Sparkles }] : []),
-    ...(role === 'student' ? [{ href: '/dashboard/student/live-quiz', label: 'Join Live Quiz', icon: Sparkles }] : []),
-    ...(role === 'parent' ? [{ href: '/dashboard/parent/children', label: t('children'), icon: Users }] : []),
-  ];
-
-  return (
-    <header className="sticky top-0 z-50 border-b border-border/60 bg-background/90 shadow-sm backdrop-blur-2xl supports-[backdrop-filter]:bg-background/65">
-      <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:h-[68px] sm:px-6 sm:py-0 lg:px-8">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-5">
-          <Link href={dashboardHref} className="group flex min-w-0 shrink-0 items-center gap-2.5" aria-label="EduQuizLabs dashboard">
-            <span className="relative flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md transition duration-200 group-hover:scale-105 group-hover:shadow-lg">
-              <BookOpen className="size-5" />
-              <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-background" />
-            </span>
-            <span className="hidden text-base font-black tracking-tight text-foreground sm:inline">EduQuizLabs</span>
-          </Link>
-
-          <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
-            {navItems.map(({ href, label, icon: Icon }) => {
-              const active = pathname === href || (href !== dashboardHref && pathname.startsWith(href));
-              return (
-                <Link key={href} href={href} className={`relative flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
-                  <Icon className="size-4" />
-                  {label}
-                  {active && <span className="absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full bg-primary" />}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-          <div className="hidden max-w-[190px] rounded-xl border border-border/70 bg-card/70 px-3 py-1.5 text-right shadow-sm sm:block">
-            <div className="truncate text-sm font-bold text-foreground">{user?.fullName || user?.full_name || t('guestUser')}</div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{role}</div>
-          </div>
-          <ThemeToggle />
-
-          <div className="relative" data-language-menu>
-            <button
-              type="button"
-              onClick={() => setLanguageOpen((open) => !open)}
-              aria-label="Select language"
-              aria-haspopup="listbox"
-              aria-expanded={languageOpen}
-              className="flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card px-2.5 shadow-sm transition hover:border-primary/50 hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <Languages className="size-4 shrink-0 text-muted-foreground" />
-              <img src={flagUrl(language)} alt="" className="h-3.5 w-5 rounded-sm object-cover" />
-              <span className="hidden text-xs font-semibold text-foreground sm:inline">{selectedLanguage.nativeName}</span>
-              <ChevronDown className={`size-3.5 text-muted-foreground transition-transform ${languageOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {languageOpen && (
-              <div className="absolute right-0 top-full z-[60] mt-2 w-52 overflow-hidden rounded-xl border border-border bg-card p-1.5 shadow-xl" role="listbox" aria-label="Languages">
-                {languages.map((item) => (
-                  <button
-                    key={item.code}
-                    type="button"
-                    role="option"
-                    aria-selected={item.code === language}
-                    onClick={() => handleLanguageChange(item.code)}
-                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${item.code === language ? 'bg-primary/10 font-semibold text-primary' : 'text-foreground hover:bg-muted'}`}
-                  >
-                    <img src={flagUrl(item.code)} alt="" className="h-3.5 w-5 shrink-0 rounded-sm object-cover" />
-                    <span className="min-w-0 flex-1 truncate">{item.nativeName}</span>
-                    {item.code === language && <span className="text-xs">✓</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <Button variant="outline" size="sm" onClick={handleLogout} className="hidden h-9 gap-2 rounded-xl px-3 sm:flex">
-            <LogOut className="size-4" />
-            <span>{t('exit')}</span>
-          </Button>
-          <Button variant="outline" size="icon" onClick={() => setMobileOpen(v => !v)} className="size-10 shrink-0 rounded-xl md:hidden" aria-label={mobileOpen ? 'Close menu' : 'Open menu'} aria-expanded={mobileOpen}>
-            {mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}
-          </Button>
-        </div>
-      </div>
-
-      {mobileOpen && (
-        <div className="border-t border-border/60 bg-background/95 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 shadow-lg backdrop-blur-xl md:hidden">
-          <nav className="space-y-1" aria-label="Mobile navigation">
-            {navItems.map(({ href, label, icon: Icon }) => {
-              const active = pathname === href || (href !== dashboardHref && pathname.startsWith(href));
-              return (
-                <Link key={href} href={href} className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
-                  <Icon className="size-5 shrink-0" />
-                  <span className="truncate">{label}</span>
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2 border-t border-border/60 pt-3">
-            <div className="relative" data-language-menu>
-              <button
-                type="button"
-                onClick={() => setLanguageOpen((open) => !open)}
-                aria-label="Select language"
-                aria-haspopup="listbox"
-                aria-expanded={languageOpen}
-                className="flex h-11 w-full items-center gap-2 rounded-xl border border-border/70 bg-card px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:ring-2 focus:ring-primary"
-              >
-                <img src={flagUrl(language)} alt="" className="h-3.5 w-5 shrink-0 rounded-sm object-cover" />
-                <span className="min-w-0 flex-1 truncate text-left">{selectedLanguage.nativeName}</span>
-                <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${languageOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {languageOpen && (
-                <div className="absolute bottom-full left-0 z-[60] mb-2 w-full overflow-hidden rounded-xl border border-border bg-card p-1.5 shadow-xl" role="listbox" aria-label="Languages">
-                  {languages.map((item) => (
-                    <button
-                      key={item.code}
-                      type="button"
-                      role="option"
-                      aria-selected={item.code === language}
-                      onClick={() => handleLanguageChange(item.code)}
-                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${item.code === language ? 'bg-primary/10 font-semibold text-primary' : 'text-foreground hover:bg-muted'}`}
-                    >
-                      <img src={flagUrl(item.code)} alt="" className="h-3.5 w-5 shrink-0 rounded-sm object-cover" />
-                      <span className="min-w-0 flex-1 truncate">{item.nativeName}</span>
-                      {item.code === language && <span className="text-xs">✓</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <Button variant="outline" onClick={handleLogout} className="h-11 gap-2 rounded-xl px-4">
-              <LogOut className="size-4" />
-              <span>{t('exit')}</span>
-            </Button>
-          </div>
-        </div>
-      )}
-    </header>
-  );
+  const router = useRouter(); const pathname = usePathname(); const [user,setUser]=useState<any>(null); const [mobileOpen,setMobileOpen]=useState(false); const [languageOpen,setLanguageOpen]=useState(false); const {language,setLanguage,t,languages}=useLanguage();
+  useEffect(()=>{try{const raw=localStorage.getItem('current_user');if(raw)setUser(JSON.parse(raw));}catch(e){console.error('Error loading navbar settings',e);}},[]);
+  useEffect(()=>setMobileOpen(false),[pathname]);
+  useEffect(()=>{const handleClickOutside=(event:MouseEvent)=>{const target=event.target as HTMLElement;if(!target.closest('[data-language-menu]'))setLanguageOpen(false);};document.addEventListener('mousedown',handleClickOutside);return()=>document.removeEventListener('mousedown',handleClickOutside);},[]);
+  const role=user?.role?user.role.toLowerCase():'student'; const dashboardHref=role==='teacher'?'/dashboard/teacher':role==='parent'?'/dashboard/parent':'/dashboard/student';
+  const handleLogout=()=>{localStorage.removeItem('current_user');localStorage.removeItem('supabase_access_token');localStorage.removeItem('supabase_refresh_token');localStorage.removeItem('supabase_user_id');router.push('/');};
+  const selectedLanguage=languages.find(item=>item.code===language)??languages[0];
+  const navItems=[{href:dashboardHref,label:t('overview'),icon:LayoutDashboard},...(role==='teacher'?[{href:'/dashboard/teacher/live-quiz',label:'Live Quiz',icon:Sparkles}]:[]),...(role==='student'?[{href:'/dashboard/student/live-quiz',label:'Join Live Quiz',icon:Sparkles}]:[]),...(role==='parent'?[{href:'/dashboard/parent/children',label:t('children'),icon:Users}]:[])];
+  return <header className="sticky top-0 z-50 border-b border-border/60 bg-background/90 shadow-sm backdrop-blur-2xl supports-[backdrop-filter]:bg-background/65"><div className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:h-[68px] sm:px-6 sm:py-0 lg:px-8"><div className="flex min-w-0 items-center gap-2 sm:gap-5"><Link href={dashboardHref} className="group flex min-w-0 shrink-0 items-center gap-2.5" aria-label="EduQuizLabs dashboard"><span className="relative flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md"><BookOpen className="size-5"/><span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-background"/></span><span className="hidden text-base font-black tracking-tight text-foreground sm:inline">EduQuizLabs</span></Link><nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">{navItems.map(({href,label,icon:Icon})=>{const active=pathname===href||(href!==dashboardHref&&pathname.startsWith(href));return <Link key={href} href={href} className={`relative flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${active?'bg-primary/10 text-primary':'text-muted-foreground hover:bg-muted hover:text-foreground'}`}><Icon className="size-4"/>{label}{active&&<span className="absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full bg-primary"/>}</Link>})}</nav></div><div className="flex shrink-0 items-center gap-1.5 sm:gap-3"><Link href="/settings" className={`hidden items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition sm:flex ${pathname.startsWith('/settings')?'bg-primary/10 text-primary':'text-muted-foreground hover:bg-muted hover:text-foreground'}`}><Settings className="size-4"/>Settings</Link><div className="hidden max-w-[190px] rounded-xl border border-border/70 bg-card/70 px-3 py-1.5 text-right shadow-sm sm:block"><div className="truncate text-sm font-bold text-foreground">{user?.fullName||user?.full_name||t('guestUser')}</div><div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{role}</div></div><ThemeToggle/><div className="relative" data-language-menu><button type="button" onClick={()=>setLanguageOpen(open=>!open)} aria-label="Select language" aria-haspopup="listbox" aria-expanded={languageOpen} className="flex h-9 items-center gap-2 rounded-xl border border-border/70 bg-card px-2.5 shadow-sm"><Languages className="size-4 shrink-0 text-muted-foreground"/><img src={flagUrl(language)} alt="" className="h-3.5 w-5 rounded-sm object-cover"/><span className="hidden text-xs font-semibold text-foreground sm:inline">{selectedLanguage.nativeName}</span><ChevronDown className={`size-3.5 text-muted-foreground ${languageOpen?'rotate-180':''}`}/></button>{languageOpen&&<div className="absolute right-0 top-full z-[60] mt-2 w-52 overflow-hidden rounded-xl border border-border bg-card p-1.5 shadow-xl" role="listbox">{languages.map(item=><button key={item.code} type="button" role="option" aria-selected={item.code===language} onClick={()=>{setLanguage(item.code);setLanguageOpen(false)}} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm ${item.code===language?'bg-primary/10 font-semibold text-primary':'text-foreground hover:bg-muted'}`}><img src={flagUrl(item.code)} alt="" className="h-3.5 w-5 rounded-sm"/><span className="min-w-0 flex-1 truncate">{item.nativeName}</span>{item.code===language&&<span>✓</span>}</button>)}</div>}</div><Button variant="outline" size="sm" onClick={handleLogout} className="hidden h-9 gap-2 rounded-xl px-3 sm:flex"><LogOut className="size-4"/><span>{t('exit')}</span></Button><Button variant="outline" size="icon" onClick={()=>setMobileOpen(v=>!v)} className="size-10 shrink-0 rounded-xl md:hidden" aria-label={mobileOpen?'Close menu':'Open menu'}>{mobileOpen?<X className="size-4"/>:<Menu className="size-4"/>}</Button></div></div>{mobileOpen&&<div className="border-t border-border/60 bg-background/95 px-3 pb-3 pt-3 shadow-lg md:hidden"><nav className="space-y-1">{navItems.map(({href,label,icon:Icon})=>{const active=pathname===href||(href!==dashboardHref&&pathname.startsWith(href));return <Link key={href} href={href} className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${active?'bg-primary/10 text-primary':'text-muted-foreground hover:bg-muted hover:text-foreground'}`}><Icon className="size-5 shrink-0"/><span>{label}</span></Link>})}<Link href="/settings" className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${pathname.startsWith('/settings')?'bg-primary/10 text-primary':'text-muted-foreground hover:bg-muted hover:text-foreground'}`}><Settings className="size-5"/>Settings</Link></nav><div className="mt-3 grid grid-cols-[1fr_auto] gap-2 border-t border-border/60 pt-3"><div className="flex h-11 items-center gap-2 rounded-xl border border-border/70 bg-card px-3 text-sm font-semibold"><img src={flagUrl(language)} alt="" className="h-3.5 w-5 rounded-sm"/><span className="truncate">{selectedLanguage.nativeName}</span></div><Button variant="outline" onClick={handleLogout} className="h-11 gap-2 rounded-xl px-4"><LogOut className="size-4"/>Exit</Button></div></div>}</header>;
 }
