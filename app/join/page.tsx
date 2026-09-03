@@ -44,7 +44,7 @@ export default function PublicJoinLiveQuiz() {
           </div>
           {error && <p className="text-sm font-medium text-destructive">{error}</p>}
           <Button size="lg" className="h-12 w-full rounded-xl font-black" onClick={join}>Join Quiz <Zap className="ml-2 size-5" /></Button>
-          <Link href="/sign-in" className="flex h-10 items-center justify-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+          <Link href="/" className="flex h-10 items-center justify-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
             <ArrowLeft className="size-4" /> Back to Sign In
           </Link>
         </CardContent>
