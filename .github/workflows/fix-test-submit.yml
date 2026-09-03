@@ -1,0 +1,50 @@
+name: Fix student assessment submit flow
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix submit flow
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/dashboard/student/tests/[id]/page.tsx')
+          s = p.read_text()
+
+          old = "if(!auto&&questions.some(q=>!answered(q,answersRef.current))){setError('Please answer every question before submitting.');setConfirm(true);return}if(!auto&&!confirm){setConfirm(true);return}"
+          new = "if(!auto){if(questions.some(q=>!answered(q,answersRef.current))){setError('Please answer every question before submitting.');setConfirm(false);return}if(!confirm){setConfirm(true);return}}"
+          if old not in s:
+              raise SystemExit('submit validation pattern not found')
+          s = s.replace(old, new, 1)
+
+          old = "<Button className=\"bg-blue-600 hover:bg-blue-700\" onClick={()=>void submit(false)} disabled={submitting}>{submitting?'Submitting…':'Confirm submission'}</Button>"
+          new = "<Button className=\"bg-blue-600 hover:bg-blue-700\" onClick={()=>void submit(false)} disabled={submitting}>{submitting?'Submitting…':'Confirm Assessment'}</Button>"
+          if old not in s:
+              raise SystemExit('confirm button pattern not found')
+          s = s.replace(old, new, 1)
+
+          old = "{current<questions.length-1?<Button className=\"h-11 rounded-xl bg-blue-600 px-5 hover:bg-blue-700\" onClick={()=>setCurrent(v=>Math.min(questions.length-1,v+1))}>Next<span className=\"hidden sm:inline\"> question</span><ChevronRight className=\"size-4 sm:ml-1\"/></Button>:confirm?<Button variant=\"outline\" className=\"h-11 rounded-xl border-amber-300 bg-amber-50 px-5 text-amber-800 hover:bg-amber-100\" onClick={()=>setConfirm(true)}>Review submission</Button>:<Button className=\"h-11 rounded-xl bg-blue-600 px-5 hover:bg-blue-700\" onClick={()=>void submit(false)} disabled={submitting}>Submit assessment</Button>}"
+          new = "{current<questions.length-1?<Button className=\"h-11 rounded-xl bg-blue-600 px-5 hover:bg-blue-700\" onClick={()=>setCurrent(v=>Math.min(questions.length-1,v+1))}>Next<span className=\"hidden sm:inline\"> question</span><ChevronRight className=\"size-4 sm:ml-1\"/></Button>:<Button className=\"h-11 rounded-xl bg-blue-600 px-5 hover:bg-blue-700\" onClick={()=>void submit(false)} disabled={submitting}>Submit Assessment</Button>}"
+          if old not in s:
+              raise SystemExit('footer button pattern not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+      - name: Commit fix and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 'app/dashboard/student/tests/[id]/page.tsx'
+          git rm .github/workflows/fix-test-submit.yml
+          git commit -m "Fix student assessment submit buttons"
+          git push
