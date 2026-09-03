@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Zap } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeft, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -43,6 +44,9 @@ export default function PublicJoinLiveQuiz() {
           </div>
           {error && <p className="text-sm font-medium text-destructive">{error}</p>}
           <Button size="lg" className="h-12 w-full rounded-xl font-black" onClick={join}>Join Quiz <Zap className="ml-2 size-5" /></Button>
+          <Link href="/sign-up" className="flex h-10 items-center justify-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            <ArrowLeft className="size-4" /> Back to Sign Up
+          </Link>
         </CardContent>
       </Card>
     </main>
