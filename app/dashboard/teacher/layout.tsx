@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { RoleGuard } from '@/components/RoleGuard';
-import LiveQuizTeacherReveal from '@/components/live-quiz-teacher-reveal';
 
 export default function TeacherDashboardLayout({
   children,
@@ -55,7 +54,6 @@ export default function TeacherDashboardLayout({
   return (
     <RoleGuard role="teacher">
       {children}
-      <LiveQuizTeacherReveal />
     </RoleGuard>
   );
 }
