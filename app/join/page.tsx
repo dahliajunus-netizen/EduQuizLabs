@@ -15,10 +15,24 @@ export default function PublicJoinLiveQuiz() {
   const [nickname, setNickname] = useState('');
   const [error, setError] = useState('');
   const [scanned, setScanned] = useState(false);
+  const [returnSource, setReturnSource] = useState<'dashboard' | 'signup' | 'signin' | ''>('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const scannedCode = (params.get('code') || '').trim().toUpperCase();
+    const explicitSource = params.get('from');
+    const referrer = document.referrer;
+    const source = explicitSource === 'dashboard' || explicitSource === 'signup' || explicitSource === 'signin'
+      ? explicitSource
+      : referrer.includes('/dashboard/student')
+        ? 'dashboard'
+        : referrer.includes('/sign-up')
+          ? 'signup'
+          : referrer === window.location.origin || referrer.includes(`${window.location.origin}/`)
+            ? 'signin'
+            : '';
+
+    setReturnSource(source);
     if (scannedCode) {
       setCode(scannedCode.slice(0, 6));
       setScanned(true);
@@ -33,7 +47,8 @@ export default function PublicJoinLiveQuiz() {
     if (c.length !== 6) return setError('Enter the 6-character game code.');
     if (!n) return setError('Enter a nickname.');
     if (n.length > 15) return setError('Nicknames can be at most 15 characters.');
-    router.push(`/dashboard/student/live-quiz/${encodeURIComponent(c)}?name=${encodeURIComponent(n)}`);
+    const source = returnSource ? `&from=${encodeURIComponent(returnSource)}` : '';
+    router.push(`/dashboard/student/live-quiz/${encodeURIComponent(c)}?name=${encodeURIComponent(n)}${source}`);
   }
 
   return (
