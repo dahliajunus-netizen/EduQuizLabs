@@ -21,13 +21,17 @@ const REMEMBERED_SESSION_KEY = 'eduquizlabs_remembered_session'
 function restoreRememberedSession() {
   if (typeof window === 'undefined') return
   try {
-    if (window.sessionStorage.getItem('supabase_access_token')) return
+    const hasTabUser = !!window.sessionStorage.getItem('current_user')
+    const hasTabToken = !!window.sessionStorage.getItem('supabase_access_token')
+    if (hasTabUser && hasTabToken) return
+
     const raw = window.localStorage.getItem(REMEMBERED_SESSION_KEY)
     if (!raw) return
     const remembered = JSON.parse(raw)
-    if (!remembered?.current_user || !remembered?.access_token) return
+    if (!remembered?.current_user) return
+
     window.sessionStorage.setItem('current_user', JSON.stringify(remembered.current_user))
-    window.sessionStorage.setItem('supabase_access_token', String(remembered.access_token))
+    if (remembered.access_token) window.sessionStorage.setItem('supabase_access_token', String(remembered.access_token))
     if (remembered.refresh_token) window.sessionStorage.setItem('supabase_refresh_token', String(remembered.refresh_token))
     if (remembered.user_id) window.sessionStorage.setItem('supabase_user_id', String(remembered.user_id))
   } catch {}
@@ -97,6 +101,26 @@ async function refreshAccessToken(): Promise<string|null> {
   if(!base||!key||!refreshToken) return null
   refreshPromise=(async()=>{ try { const r=await fetch(`${base}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:refreshToken}),cache:'no-store'}); const data=await r.json().catch(()=>null); if(!r.ok||!data?.access_token) return null; setTokens(String(data.access_token),data.refresh_token?String(data.refresh_token):undefined); return String(data.access_token) } catch { return null } finally { refreshPromise=null } })()
   return refreshPromise
+}
+
+function tokenNeedsRefresh(token: string | null) {
+  if (!token) return true
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    const exp = Number(payload?.exp)
+    return !Number.isFinite(exp) || exp * 1000 - Date.now() < 60_000
+  } catch {
+    return true
+  }
+}
+
+export async function ensureFreshAuthSession() {
+  if (typeof window === 'undefined') return false
+  restoreRememberedSession()
+  const token = getAccessToken()
+  if (!token) return !!getRefreshToken() && !!(await refreshAccessToken())
+  if (tokenNeedsRefresh(token)) return !!(await refreshAccessToken())
+  return true
 }
 
 function installAuthenticatedFetch(){
