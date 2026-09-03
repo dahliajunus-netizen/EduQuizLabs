@@ -1,0 +1,41 @@
+name: Fix assessment submit confirmation 2
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch submit button
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('app/dashboard/student/tests/[id]/page.tsx')
+          s=p.read_text()
+          s2=s.replace("{submitting?'Submitting…':'Confirm submission'}", "{submitting?'Submitting…':'Confirm Assessment'}")
+          pattern=r":confirm\\?<Button[^<]*?onClick=\\{\\(\\)=>setConfirm\\(true\\)\\}>Review submission</Button>:<Button className=\\\"h-11 rounded-xl bg-blue-600 px-5 hover:bg-blue-700\\\" onClick=\\{\\(\\)=>void submit\\(false\\)\\} disabled=\\{submitting\\}>Submit assessment</Button>"
+          replacement=":<Button className=\\\"h-11 rounded-xl bg-blue-600 px-5 hover:bg-blue-700\\\" onClick={()=>void submit(false)} disabled={submitting||confirm}>Submit Assessment</Button>"
+          s2,n=re.subn(pattern,replacement,s)
+          if n != 1:
+              print('regex replacement count:',n)
+              i=s.find('Review submission')
+              print('context:',s[max(0,i-500):i+400] if i>=0 else 'not found')
+              raise SystemExit(1)
+          p.write_text(s2)
+          PY
+      - name: Remove temporary files and commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 'app/dashboard/student/tests/[id]/page.tsx'
+          git rm .github/workflows/fix-submit-confirm.yml .github/workflows/fix-submit-confirm-2.yml SUBMIT_CONFIRM_TRIGGER.txt
+          git commit -m "Fix submit assessment confirmation behavior"
+          git push
