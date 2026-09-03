@@ -39,7 +39,7 @@ export function LoginForm() {
   }
   return <div className="relative">
     <div className="mb-5 flex items-center justify-between">
-      <Link href="/join" className="inline-flex">
+      <Link href="/join?from=signin" className="inline-flex">
         <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 px-3 text-xs">
           <Radio size={14}/> Join Live Quiz
         </Button>
