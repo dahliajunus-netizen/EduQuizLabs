@@ -14,12 +14,14 @@ export default function PublicJoinLiveQuiz() {
   const [code, setCode] = useState('');
   const [nickname, setNickname] = useState('');
   const [error, setError] = useState('');
+  const [scanned, setScanned] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const scannedCode = (params.get('code') || '').trim().toUpperCase();
     if (scannedCode) {
-      setCode(scannedCode);
+      setCode(scannedCode.slice(0, 6));
+      setScanned(true);
       window.setTimeout(() => nicknameRef.current?.focus(), 50);
     }
   }, []);
@@ -33,8 +35,6 @@ export default function PublicJoinLiveQuiz() {
     if (n.length > 15) return setError('Nicknames can be at most 15 characters.');
     router.push(`/dashboard/student/live-quiz/${encodeURIComponent(c)}?name=${encodeURIComponent(n)}`);
   }
-
-  const scanned = Boolean(code);
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-5">
@@ -58,7 +58,17 @@ export default function PublicJoinLiveQuiz() {
               <Check className="size-5 text-primary" />
             </div>
           ) : (
-            <Input value={code} maxLength={6} onChange={e => { setCode(e.target.value.toUpperCase()); setError(''); }} placeholder="GAME CODE" className="h-12 rounded-xl text-center text-lg font-black font-mono tracking-[0.18em] pl-0 pr-0" />
+            <Input
+              value={code}
+              maxLength={6}
+              autoComplete="off"
+              onChange={e => {
+                setCode(e.target.value.replace(/[^a-z0-9]/gi, '').slice(0, 6).toUpperCase());
+                setError('');
+              }}
+              placeholder="GAME CODE"
+              className="h-12 rounded-xl text-center text-lg font-black font-mono tracking-[0.18em] pl-0 pr-0"
+            />
           )}
           <div className="space-y-1">
             <Input ref={nicknameRef} value={nickname} maxLength={15} onChange={e => { setNickname(e.target.value.slice(0, 15)); setError(''); }} onKeyDown={e => { if (e.key === 'Enter') join(); }} placeholder="Nickname" className="h-12 rounded-xl" />
