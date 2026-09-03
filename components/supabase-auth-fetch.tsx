@@ -1,7 +1,63 @@
 'use client'
 
 let installed = false
+let storageIsolated = false
 let refreshPromise: Promise<string | null> | null = null
+
+// Auth state must be tab-scoped. localStorage is shared by every tab on the
+// same origin, so logging into a second account would overwrite the first
+// account's session. Keep the existing localStorage API used throughout the
+// app, but transparently store auth keys in sessionStorage instead.
+const TAB_AUTH_KEYS = new Set([
+  'current_user',
+  'supabase_access_token',
+  'supabase_refresh_token',
+  'supabase_user_id',
+  'access_token',
+  'supabase.auth.token',
+])
+
+function installTabScopedAuthStorage() {
+  if (storageIsolated || typeof window === 'undefined') return
+  storageIsolated = true
+
+  const proto = Storage.prototype
+  const originalGetItem = proto.getItem
+  const originalSetItem = proto.setItem
+  const originalRemoveItem = proto.removeItem
+  const originalClear = proto.clear
+
+  proto.getItem = function (key: string) {
+    if (this === window.localStorage && TAB_AUTH_KEYS.has(key)) {
+      return originalGetItem.call(window.sessionStorage, key)
+    }
+    return originalGetItem.call(this, key)
+  }
+
+  proto.setItem = function (key: string, value: string) {
+    if (this === window.localStorage && TAB_AUTH_KEYS.has(key)) {
+      originalSetItem.call(window.sessionStorage, key, value)
+      return
+    }
+    originalSetItem.call(this, key, value)
+  }
+
+  proto.removeItem = function (key: string) {
+    if (this === window.localStorage && TAB_AUTH_KEYS.has(key)) {
+      originalRemoveItem.call(window.sessionStorage, key)
+      return
+    }
+    originalRemoveItem.call(this, key)
+  }
+
+  proto.clear = function () {
+    if (this === window.localStorage) {
+      for (const key of TAB_AUTH_KEYS) originalRemoveItem.call(window.sessionStorage, key)
+      return
+    }
+    originalClear.call(this)
+  }
+}
 
 function getAccessToken() { try { return localStorage.getItem('supabase_access_token')?.trim() || null } catch { return null } }
 function getRefreshToken() { try { return localStorage.getItem('supabase_refresh_token')?.trim() || null } catch { return null } }
@@ -38,5 +94,7 @@ function installAuthenticatedFetch(){
     return originalFetch(input,{...init,headers:retryHeaders})
   }
 }
+
+installTabScopedAuthStorage()
 installAuthenticatedFetch()
 export function SupabaseAuthFetch(){return null}
