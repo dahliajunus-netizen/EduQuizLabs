@@ -79,7 +79,6 @@ export default function TeacherLiveQuiz() {
     catch { /* editor remains usable */ }
   }, []);
   useEffect(() => { void Promise.all([loadClasses(), loadTemplates()]); }, [loadClasses, loadTemplates]);
-
   async function createTemplate() {
     if (!title.trim() || !classCode) { setError('Choose a class and enter a title.'); return; }
     setLoading(true); setError('');
@@ -122,7 +121,7 @@ export default function TeacherLiveQuiz() {
   useEffect(() => {
     if (!quiz || !currentQ) return;
     const start = quiz.question_started_at ? new Date(quiz.question_started_at).getTime() : Date.now();
-    if (quiz.status === 'question_reveal') { const t = window.setTimeout(() => void beginAnswering(), 3000); return () => window.clearTimeout(t); }
+    if (quiz.status === 'question_reveal') { const t = window.setTimeout(() => void beginAnswering(), 7600); return () => window.clearTimeout(t); }
     if (quiz.status === 'answering') { const limit = (currentQ.time_limit_seconds || 30) * 1000; const tick = () => setRemaining(Math.max(0, Math.ceil((limit - (Date.now() - start)) / 1000))); tick(); const t = window.setInterval(tick, 100); const timeout = window.setTimeout(() => void showResults(), limit + 100); return () => { window.clearInterval(t); window.clearTimeout(timeout); }; }
     if (quiz.status === 'results') { const t = window.setTimeout(() => void intermission(), 4000); return () => window.clearTimeout(t); }
     if (quiz.status === 'intermission') { const t = window.setTimeout(() => void next(), 3000); return () => window.clearTimeout(t); }
