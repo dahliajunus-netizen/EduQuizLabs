@@ -34,6 +34,7 @@ export function LoginForm() {
       const role=String(profile.role||'student').trim().toLowerCase(),validRole=role==='teacher'||role==='student'?role:'student';
       const currentUser={id:userId,user_id:userId,student_id:validRole==='student'?userId:undefined,fullName:profile.full_name||authData.user.user_metadata?.full_name||'User',email:profile.email||authData.user.email||cleanEmail,role:validRole,accessToken};
       localStorage.setItem('current_user',JSON.stringify(currentUser));localStorage.setItem('supabase_access_token',accessToken);if(refreshToken)localStorage.setItem('supabase_refresh_token',refreshToken);localStorage.setItem('supabase_user_id',userId);
+      localStorage.setItem('eduquizlabs_remembered_session',JSON.stringify({current_user:currentUser,access_token:accessToken,refresh_token:refreshToken,user_id:userId}));
       router.replace(`/dashboard/${validRole}`);
     }catch(err){console.error('[Login] Login error:',err);setError('Could not connect to Supabase. Please try again.');}finally{setSubmitting(false);}
   }
