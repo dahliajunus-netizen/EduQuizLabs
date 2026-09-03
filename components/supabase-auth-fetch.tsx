@@ -4,10 +4,9 @@ let installed = false
 let storageIsolated = false
 let refreshPromise: Promise<string | null> | null = null
 
-// Auth state must be tab-scoped. localStorage is shared by every tab on the
-// same origin, so logging into a second account would overwrite the first
-// account's session. Keep the existing localStorage API used throughout the
-// app, but transparently store auth keys in sessionStorage instead.
+// Auth state is tab-scoped while the last successful sign-in is remembered
+// persistently. This lets multiple tabs use different accounts, while a new
+// visit can restore the most recently signed-in account automatically.
 const TAB_AUTH_KEYS = new Set([
   'current_user',
   'supabase_access_token',
@@ -16,6 +15,23 @@ const TAB_AUTH_KEYS = new Set([
   'access_token',
   'supabase.auth.token',
 ])
+
+const REMEMBERED_SESSION_KEY = 'eduquizlabs_remembered_session'
+
+function restoreRememberedSession() {
+  if (typeof window === 'undefined') return
+  try {
+    if (window.sessionStorage.getItem('supabase_access_token')) return
+    const raw = window.localStorage.getItem(REMEMBERED_SESSION_KEY)
+    if (!raw) return
+    const remembered = JSON.parse(raw)
+    if (!remembered?.current_user || !remembered?.access_token) return
+    window.sessionStorage.setItem('current_user', JSON.stringify(remembered.current_user))
+    window.sessionStorage.setItem('supabase_access_token', String(remembered.access_token))
+    if (remembered.refresh_token) window.sessionStorage.setItem('supabase_refresh_token', String(remembered.refresh_token))
+    if (remembered.user_id) window.sessionStorage.setItem('supabase_user_id', String(remembered.user_id))
+  } catch {}
+}
 
 function installTabScopedAuthStorage() {
   if (storageIsolated || typeof window === 'undefined') return
@@ -61,8 +77,17 @@ function installTabScopedAuthStorage() {
 
 function getAccessToken() { try { return localStorage.getItem('supabase_access_token')?.trim() || null } catch { return null } }
 function getRefreshToken() { try { return localStorage.getItem('supabase_refresh_token')?.trim() || null } catch { return null } }
-function setTokens(accessToken: string, refreshToken?: string) { try { localStorage.setItem('supabase_access_token', accessToken); if (refreshToken) localStorage.setItem('supabase_refresh_token', refreshToken); const raw=localStorage.getItem('current_user'); if(raw){const user=JSON.parse(raw);user.accessToken=accessToken;localStorage.setItem('current_user',JSON.stringify(user))} } catch {} }
-function hasExplicitAuthorization(init?: RequestInit,input?: RequestInfo|URL){ if(init?.headers&&new Headers(init.headers).has('Authorization')) return true; if(input instanceof Request) return input.headers.has('Authorization'); return false }
+function setTokens(accessToken: string, refreshToken?: string) {
+  try {
+    localStorage.setItem('supabase_access_token', accessToken)
+    if (refreshToken) localStorage.setItem('supabase_refresh_token', refreshToken)
+    const raw=localStorage.getItem('current_user')
+    if(raw){const user=JSON.parse(raw);user.accessToken=accessToken;localStorage.setItem('current_user',JSON.stringify(user))}
+    const remembered=window.localStorage.getItem(REMEMBERED_SESSION_KEY)
+    if(remembered){const session=JSON.parse(remembered);session.access_token=accessToken;if(refreshToken)session.refresh_token=refreshToken;session.current_user={...(session.current_user||{}),accessToken};window.localStorage.setItem(REMEMBERED_SESSION_KEY,JSON.stringify(session))}
+  } catch {}
+}
+function hasExplicitAuthorization(init?: RequestInit,input?:RequestInfo|URL){ if(init?.headers&&new Headers(init.headers).has('Authorization')) return true; if(input instanceof Request) return input.headers.has('Authorization'); return false }
 
 async function refreshAccessToken(): Promise<string|null> {
   if (refreshPromise) return refreshPromise
@@ -96,5 +121,6 @@ function installAuthenticatedFetch(){
 }
 
 installTabScopedAuthStorage()
+restoreRememberedSession()
 installAuthenticatedFetch()
 export function SupabaseAuthFetch(){return null}
