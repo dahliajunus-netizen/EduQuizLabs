@@ -51,6 +51,17 @@ export default function PublicJoinLiveQuiz() {
     router.push(`/dashboard/student/live-quiz/${encodeURIComponent(c)}?name=${encodeURIComponent(n)}${source}`);
   }
 
+  const backHref = returnSource === 'dashboard'
+    ? '/dashboard/student'
+    : returnSource === 'signup'
+      ? '/sign-up'
+      : '/';
+  const backLabel = returnSource === 'dashboard'
+    ? 'Back to Dashboard'
+    : returnSource === 'signup'
+      ? 'Back to Sign Up'
+      : 'Back to Sign In';
+
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-5">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/.18),transparent_55%)]" />
@@ -91,8 +102,8 @@ export default function PublicJoinLiveQuiz() {
           </div>
           {error && <p className="text-sm font-medium text-destructive">{error}</p>}
           <Button size="lg" className="h-12 w-full rounded-xl font-black" onClick={join}>Join Quiz <Zap className="ml-2 size-5" /></Button>
-          <Link href="/" className="flex h-10 items-center justify-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            <ArrowLeft className="size-4" /> Back to Sign In
+          <Link href={backHref} className="flex h-10 items-center justify-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            <ArrowLeft className="size-4" /> {backLabel}
           </Link>
         </CardContent>
       </Card>
