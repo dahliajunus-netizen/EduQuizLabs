@@ -4,7 +4,7 @@ import type React from 'react';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, Loader2, Award, X } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Award, X, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,12 +34,16 @@ export function LoginForm() {
       const role=String(profile.role||'student').trim().toLowerCase(),validRole=role==='teacher'||role==='student'?role:'student';
       const currentUser={id:userId,user_id:userId,student_id:validRole==='student'?userId:undefined,fullName:profile.full_name||authData.user.user_metadata?.full_name||'User',email:profile.email||authData.user.email||cleanEmail,role:validRole,accessToken};
       localStorage.setItem('current_user',JSON.stringify(currentUser));localStorage.setItem('supabase_access_token',accessToken);if(refreshToken)localStorage.setItem('supabase_refresh_token',refreshToken);localStorage.setItem('supabase_user_id',userId);
-      // Navigate immediately once auth/profile data is ready; don't wait for an artificial loading delay.
       router.replace(`/dashboard/${validRole}`);
     }catch(err){console.error('[Login] Login error:',err);setError('Could not connect to Supabase. Please try again.');}finally{setSubmitting(false);}
   }
   return <div className="relative">
-    <div className="mb-5 flex justify-end">
+    <div className="mb-5 flex items-center justify-between">
+      <Link href="/join" className="inline-flex">
+        <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 px-3 text-xs">
+          <Radio size={14}/> Join Live Quiz
+        </Button>
+      </Link>
       <Button type="button" variant="ghost" size="sm" onClick={()=>setIsCreditsOpen(true)} className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"><Award size={14}/> Credits</Button>
     </div>
     {error&&<div role="alert" className="mb-5 break-words rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm font-medium text-red-500">{error}</div>}
