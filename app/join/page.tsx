@@ -37,7 +37,7 @@ export default function PublicJoinLiveQuiz() {
           <p className="text-muted-foreground">No account needed. Enter the code from your teacher.</p>
         </CardHeader>
         <CardContent className="space-y-4 p-7 pt-0">
-          <Input value={code} maxLength={6} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="GAME CODE" className="h-12 rounded-xl text-center text-lg font-black tracking-[0.25em]" />
+          <Input value={code} maxLength={6} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="GAME CODE" className="h-12 rounded-xl text-center text-lg font-black font-mono tracking-[0.18em] pl-0 pr-0" />
           <div className="space-y-1">
             <Input value={nickname} maxLength={15} onChange={e => { setNickname(e.target.value.slice(0, 15)); setError(''); }} placeholder="Nickname" className="h-12 rounded-xl" />
             <div className="flex justify-end px-1 text-xs text-muted-foreground">{nickname.length}/15</div>
