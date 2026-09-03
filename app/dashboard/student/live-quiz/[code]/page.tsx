@@ -27,14 +27,23 @@ function sid(){
 }
 
 async function api(path:string,opts:RequestInit={}){
-  const r=await fetch(`${url}/rest/v1/${path}`,{
-    ...opts,
-    headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json',...(opts.headers||{})},
-    cache:'no-store'
-  });
-  const text=await r.text();
-  if(!r.ok)throw new Error(text||`Request failed (${r.status})`);
-  return text.trim()?JSON.parse(text):null;
+  if(!url||!key) throw new Error('Live quiz connection is not configured on this deployment.');
+  const controller=new AbortController();
+  const timeout=window.setTimeout(()=>controller.abort(),10000);
+  try{
+    const r=await fetch(`${url}/rest/v1/${path}`,{
+      ...opts,
+      signal:controller.signal,
+      headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json',...(opts.headers||{})},
+      cache:'no-store'
+    });
+    const text=await r.text();
+    if(!r.ok)throw new Error(text||`Request failed (${r.status})`);
+    return text.trim()?JSON.parse(text):null;
+  }catch(e){
+    if(e instanceof DOMException && e.name==='AbortError') throw new Error('Could not connect to the live quiz server. Check the connection and try again.');
+    throw e;
+  }finally{window.clearTimeout(timeout);}
 }
 
 function fmt(ms:number|null|undefined){return ms==null||ms<0?'—':`${(ms/1000).toFixed(2)}s`;}
@@ -46,13 +55,15 @@ function Shape({type}:{type:string}){
 export default function LiveQuizGame(){
   const params=useParams<{code:string}>(),search=useSearchParams(),router=useRouter();
   const code=String(params?.code||'').toUpperCase(),nickname=search.get('name')||'Player';
-  const[quiz,setQuiz]=useState<Quiz|null>(null),[questions,setQuestions]=useState<Q[]>([]),[player,setPlayer]=useState<Player|null>(null),[answer,setAnswer]=useState(''),[answered,setAnswered]=useState(false),[result,setResult]=useState<boolean|null>(null),[responseTime,setResponseTime]=useState<number|null>(null),[remaining,setRemaining]=useState(30),[error,setError]=useState(''),[joining,setJoining]=useState(false),[submitting,setSubmitting]=useState(false),[ranking,setRanking]=useState<Player[]>([]),[revealedAnswers,setRevealedAnswers]=useState(0);
+  const[quiz,setQuiz]=useState<Quiz|null>(null),[questions,setQuestions]=useState<Q[]>([]),[player,setPlayer]=useState<Player|null>(null),[answer,setAnswer]=useState(''),[answered,setAnswered]=useState(false),[result,setResult]=useState<boolean|null>(null),[responseTime,setResponseTime]=useState<number|null>(null),[remaining,setRemaining]=useState(30),[error,setError]=useState(''),[joining,setJoining]=useState(false),[submitting,setSubmitting]=useState(false),[ranking,setRanking]=useState<Player[]>([]),[revealedAnswers,setRevealedAnswers]=useState(0),[loadingTimedOut,setLoadingTimedOut]=useState(false);
   const flight=useRef(false),stateKey=useRef('');
 
   async function load(){
     if(flight.current)return;
     flight.current=true;
+    setError('');
     try{
+      if(!code) throw new Error('No live quiz code was found in this link.');
       const rows=await api(`live_quizzes?game_code=eq.${encodeURIComponent(code)}&select=*`);
       if(!rows?.[0])throw new Error('Game not found.');
       const qz=rows[0] as Quiz;
@@ -77,11 +88,18 @@ export default function LiveQuizGame(){
         const all=await api(`live_quiz_players?quiz_id=${qz.id}&select=*&order=correct_answers.desc,total_response_time_ms.asc`);
         setRanking(all||[]);
       }
+      setLoadingTimedOut(false);
     }catch(e){setError(e instanceof Error?e.message:'Could not load quiz.');}
     finally{flight.current=false;}
   }
 
-  useEffect(()=>{void load();const t=window.setInterval(()=>void load(),700);return()=>window.clearInterval(t);},[code,nickname]);
+  useEffect(()=>{
+    setLoadingTimedOut(false);
+    const timeout=window.setTimeout(()=>setLoadingTimedOut(true),12000);
+    void load();
+    const t=window.setInterval(()=>void load(),700);
+    return()=>{window.clearTimeout(timeout);window.clearInterval(t);};
+  },[code,nickname]);
 
   const idx=quiz?.current_question??-1,q=questions[idx],answering=quiz?.status==='answering',results=quiz?.status==='results',intermission=quiz?.status==='intermission';
   const myRank=ranking.findIndex(p=>p.id===player?.id)+1;
@@ -132,7 +150,7 @@ export default function LiveQuizGame(){
   }
 
   if(error&&!quiz)return <main className="flex min-h-screen items-center justify-center bg-muted/30 p-5"><Card className="w-full max-w-md rounded-3xl"><CardContent className="p-8 text-center"><div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-destructive/10"><X className="size-7 text-destructive"/></div><h1 className="mt-5 text-2xl font-black">Unable to join game</h1><p className="mt-2 text-sm text-muted-foreground">{error}</p><Button className="mt-5 rounded-xl" onClick={()=>router.push('/join')}>Back to Join</Button></CardContent></Card></main>;
-  if(!quiz)return <main className="flex min-h-screen items-center justify-center bg-muted/30"><Loader2 className="size-9 animate-spin text-primary"/></main>;
+  if(!quiz)return <main className="flex min-h-screen items-center justify-center bg-muted/30"><div className="flex flex-col items-center gap-4 text-center"><Loader2 className="size-9 animate-spin text-primary"/><p className="text-sm font-semibold text-muted-foreground">Connecting to live quiz…</p>{loadingTimedOut&&<><p className="max-w-xs text-xs text-muted-foreground">The connection is taking longer than expected.</p><Button variant="outline" className="rounded-xl" onClick={()=>{setLoadingTimedOut(false);void load();}}>Try again</Button></>}</div></main>;
   if(!player)return <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-muted/30 px-5 py-8"><div className="absolute inset-0 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/.14),transparent_55%)]"/><Card className="relative w-full max-w-lg overflow-hidden rounded-[2rem] border-0 shadow-2xl"><div className="bg-primary px-7 py-9 text-center text-primary-foreground"><div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-white/15"><Zap className="size-8"/></div><p className="mt-5 text-[10px] font-black uppercase tracking-[.3em] opacity-80">EduQuizLabs Live</p><h1 className="mt-2 text-3xl font-black">{quiz.title}</h1></div><CardContent className="space-y-5 p-7 sm:p-8"><div className="rounded-2xl bg-muted/60 p-4 text-center"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Playing as</p><p className="mt-1 text-xl font-black">{nickname}</p></div><Button size="lg" className="h-12 w-full rounded-xl font-black" onClick={join} disabled={joining}>{joining?'Joining…':'Join Lobby'}<Users className="ml-2 size-5"/></Button>{error&&<p className="text-center text-sm font-medium text-destructive">{error}</p>}<button onClick={()=>router.push('/join')} className="mx-auto flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4"/>Change game code</button></CardContent></Card></main>;
   if(quiz.status==='lobby')return <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-muted/30 px-5"><div className="absolute inset-0 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/.15),transparent_55%)]"/><div className="relative w-full max-w-2xl text-center"><div className="mx-auto flex size-24 items-center justify-center rounded-[2rem] bg-primary text-primary-foreground shadow-xl"><Wifi className="size-11"/></div><p className="mt-7 text-[11px] font-black uppercase tracking-[.35em] text-primary">You're connected</p><h1 className="mt-2 text-5xl font-black tracking-tight sm:text-7xl">You're in!</h1><div className="mx-auto mt-6 max-w-md rounded-3xl border bg-card/80 p-6 shadow-lg backdrop-blur"><p className="text-sm text-muted-foreground">Waiting for your teacher to start</p><div className="mt-5 flex items-center justify-center gap-2 text-sm font-bold"><span className="size-2 animate-pulse rounded-full bg-green-500"/>Live connection</div></div></div></main>;
   if(quiz.status==='finished')return <main className="min-h-screen bg-muted/30 px-4 py-8 sm:py-12"><div className="mx-auto max-w-2xl"><Card className="overflow-hidden rounded-[2rem] border-0 shadow-2xl"><div className="bg-primary px-6 py-10 text-center text-primary-foreground"><Trophy className="mx-auto size-14"/><p className="mt-4 text-[11px] font-black uppercase tracking-[.3em] opacity-80">Final results</p><h1 className="mt-2 text-4xl font-black">Quiz Finished!</h1><div className="mx-auto mt-6 max-w-sm rounded-3xl bg-white/15 px-6 py-5 backdrop-blur"><p className="text-xs font-black uppercase tracking-[.25em] opacity-80">Your final place</p><p className="mt-1 text-6xl font-black">{myRank>0?`#${myRank}`:'—'}</p><p className="mt-1 text-sm font-semibold opacity-90">out of {ranking.length} {ranking.length===1?'player':'players'}</p></div></div><CardContent className="p-5 sm:p-7"><div className="grid grid-cols-2 gap-3"><div className="rounded-2xl bg-muted/60 p-5 text-center"><b className="text-3xl font-black">{player.correct_answers}</b><p className="mt-1 text-xs font-bold uppercase text-muted-foreground">Correct</p></div><div className="rounded-2xl bg-muted/60 p-5 text-center"><b className="text-3xl font-black">{fmt(player.total_response_time_ms)}</b><p className="mt-1 text-xs font-bold uppercase text-muted-foreground">Total time</p></div></div><div className="mt-6 space-y-2">{ranking.map((p,i)=><div key={p.id} className={`flex items-center gap-3 rounded-2xl border p-4 ${p.id===player.id?'border-primary bg-primary/10':''}`}><span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-black">{i+1}</span><span className="min-w-0 flex-1 truncate font-bold">{p.nickname}</span><span className="text-xs font-bold text-muted-foreground">{p.correct_answers} correct</span></div>)}</div><Button className="mt-6 h-11 w-full rounded-xl" onClick={()=>router.push('/dashboard/student')}>Back to Dashboard</Button></CardContent></Card></div></main>;
