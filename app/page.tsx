@@ -1,10 +1,40 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { GraduationCap, CheckCircle2 } from 'lucide-react'
 import { LoginForm } from '@/components/login-form'
 import { ThemeToggle } from '@/components/theme-toggle'
 
 const highlights = ['Create quizzes and tests', 'Track student grades', 'Share with your class']
 
+function getDashboardPath(user: any) {
+  const role = String(user?.role || 'student').toLowerCase()
+  return role === 'teacher' ? '/dashboard/teacher' : role === 'parent' ? '/dashboard/parent' : '/dashboard/student'
+}
+
 export default function Page() {
+  const router = useRouter()
+  const [checkingSession, setCheckingSession] = useState(true)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('current_user')
+      if (raw) {
+        const user = JSON.parse(raw)
+        if (user?.role) {
+          router.replace(getDashboardPath(user))
+          return
+        }
+      }
+    } catch {}
+    setCheckingSession(false)
+  }, [router])
+
+  if (checkingSession) {
+    return <main className="flex min-h-screen items-center justify-center bg-background" aria-label="Loading account" />
+  }
+
   return (
     <main className="min-h-screen bg-background lg:grid lg:grid-cols-2">
       <section className="relative flex min-h-[520px] flex-col overflow-hidden bg-primary px-6 py-8 text-primary-foreground sm:px-10 lg:min-h-screen lg:px-16 lg:py-10">
