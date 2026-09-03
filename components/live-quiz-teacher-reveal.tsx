@@ -31,13 +31,14 @@ export default function LiveQuizTeacherReveal() {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [question, setQuestion] = useState<Q | null>(null);
   const [visible, setVisible] = useState(0);
+  const [presentation, setPresentation] = useState(false);
 
   useEffect(() => {
     if (!pathname.startsWith('/dashboard/teacher/live-quiz')) return;
     let stopped = false;
     const load = async () => {
       try {
-        const rows = await api('live_quizzes?is_template=eq.false&status=eq.question_reveal&select=id,status,current_question,teacher_id,is_template&order=created_at.desc&limit=1');
+        const rows = await api('live_quizzes?is_template=eq.false&status=in.(question_reveal,answering)&select=id,status,current_question,teacher_id,is_template&order=created_at.desc&limit=1');
         if (stopped) return;
         const qz = rows?.[0] as Quiz | undefined;
         if (!qz) { setQuiz(null); setQuestion(null); return; }
@@ -55,12 +56,18 @@ export default function LiveQuizTeacherReveal() {
 
   useEffect(() => {
     setVisible(0);
+    setPresentation(false);
     if (!quiz || !question) return;
-    const timers = options.map((_, i) => window.setTimeout(() => setVisible(i + 1), i * 750 + 350));
-    return () => timers.forEach(t => window.clearTimeout(t));
+    setPresentation(true);
+    const timers = options.map((_, i) => window.setTimeout(() => setVisible(i + 1), i * 1100 + 600));
+    const hideTimer = window.setTimeout(() => setPresentation(false), 7600);
+    return () => {
+      timers.forEach(t => window.clearTimeout(t));
+      window.clearTimeout(hideTimer);
+    };
   }, [quiz?.id, quiz?.current_question, question?.id]);
 
-  if (!quiz || !question || !pathname.startsWith('/dashboard/teacher/live-quiz')) return null;
+  if (!quiz || !question || !presentation || !pathname.startsWith('/dashboard/teacher/live-quiz')) return null;
   const revealed = visible === options.length;
 
   return (
