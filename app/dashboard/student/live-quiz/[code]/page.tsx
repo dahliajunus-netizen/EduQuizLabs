@@ -23,7 +23,7 @@ function sid(){
   try{
     const u=JSON.parse(localStorage.getItem('current_user')||'{}');
     return String(u.student_id??u.id??u.user_id??u.uid??'').trim()||null;
-  }catch{return null}
+  }catch{return null;}
 }
 
 async function api(path:string,opts:RequestInit={}){
@@ -37,10 +37,10 @@ async function api(path:string,opts:RequestInit={}){
   return text.trim()?JSON.parse(text):null;
 }
 
-function fmt(ms:number|null|undefined){return ms==null||ms<0?'—':`${(ms/1000).toFixed(2)}s`}
+function fmt(ms:number|null|undefined){return ms==null||ms<0?'—':`${(ms/1000).toFixed(2)}s`;}
 
 function Shape({type}:{type:string}){
-  return <span className="flex size-20 items-center justify-center sm:size-24"><span className={`block size-16 sm:size-20 ${type==='triangle'?'[clip-path:polygon(50%_0%,100%_100%,0%_100%)]':type==='diamond'?'rotate-45 rounded-lg':'rounded-full'} ${type==='square'?'rounded-lg':''} bg-white shadow-md`}/></span>
+  return <span className="flex size-20 items-center justify-center sm:size-24"><span className={`block size-16 sm:size-20 ${type==='triangle'?'[clip-path:polygon(50%_0%,100%_100%,0%_100%)]':type==='diamond'?'rotate-45 rounded-lg':'rounded-full'} ${type==='square'?'rounded-lg':''} bg-white shadow-md`}/></span>;
 }
 
 export default function LiveQuizGame(){
@@ -58,14 +58,14 @@ export default function LiveQuizGame(){
       const qz=rows[0] as Quiz;
       setQuiz(qz);
       const[qs,ps]=await Promise.all([
-        api(`live_quiz_questions?quiz_id=eq.${qz.id}&select=*&order=question_order.asc`),
-        api(`live_quiz_players?quiz_id=eq.${qz.id}&nickname=eq.${encodeURIComponent(nickname)}&select=*`)
+        api(`live_quiz_questions?quiz_id=${qz.id}&select=*&order=question_order.asc`),
+        api(`live_quiz_players?quiz_id=${qz.id}&nickname=eq.${encodeURIComponent(nickname)}&select=*`)
       ]);
       if(Array.isArray(qs))setQuestions(qs);
       if(ps?.[0])setPlayer(ps[0]);
       const q=Array.isArray(qs)?qs[qz.current_question] as Q|undefined:undefined;
       if(q&&(qz.status==='results'||qz.status==='intermission')&&ps?.[0]){
-        const ar=await api(`live_quiz_answers?quiz_id=eq.${qz.id}&question_id=eq.${q.id}&player_id=${ps[0].id}&select=answer,correct,response_time_ms&limit=1`);
+        const ar=await api(`live_quiz_answers?quiz_id=${qz.id}&question_id=${q.id}&player_id=${ps[0].id}&select=answer,correct,response_time_ms&limit=1`);
         if(ar?.[0]){
           setAnswer(ar[0].answer||'');
           setResult(Boolean(ar[0].correct));
@@ -77,13 +77,14 @@ export default function LiveQuizGame(){
         const all=await api(`live_quiz_players?quiz_id=${qz.id}&select=*&order=correct_answers.desc,total_response_time_ms.asc`);
         setRanking(all||[]);
       }
-    }catch(e){setError(e instanceof Error?e.message:'Could not load quiz.')}
-    finally{flight.current=false}
+    }catch(e){setError(e instanceof Error?e.message:'Could not load quiz.');}
+    finally{flight.current=false;}
   }
 
-  useEffect(()=>{void load();const t=window.setInterval(()=>void load(),700);return()=>window.clearInterval(t)},[code,nickname]);
+  useEffect(()=>{void load();const t=window.setInterval(()=>void load(),700);return()=>window.clearInterval(t);},[code,nickname]);
 
   const idx=quiz?.current_question??-1,q=questions[idx],answering=quiz?.status==='answering',results=quiz?.status==='results',intermission=quiz?.status==='intermission';
+  const myRank=ranking.findIndex(p=>p.id===player?.id)+1;
 
   useEffect(()=>{
     const k=`${quiz?.id||''}:${idx}:${q?.id||''}`;
@@ -112,8 +113,8 @@ export default function LiveQuizGame(){
     try{
       const rows=await api('live_quiz_players',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({quiz_id:quiz.id,student_id:sid(),nickname})});
       setPlayer(rows?.[0]||null);
-    }catch(e){setError(e instanceof Error?e.message:'Could not join lobby.')}
-    finally{setJoining(false)}
+    }catch(e){setError(e instanceof Error?e.message:'Could not join lobby.');}
+    finally{setJoining(false);}
   }
 
   async function submit(v:string){
@@ -124,17 +125,17 @@ export default function LiveQuizGame(){
       await api('live_quiz_answers',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({quiz_id:quiz.id,question_id:q.id,player_id:player.id,answer:v,correct,response_time_ms:elapsed,points_earned:correct?1:0})});
       setResponseTime(elapsed);
       const nextCorrect=Number(player.correct_answers||0)+(correct?1:0),nextTime=Number(player.total_response_time_ms||0)+elapsed,nextScore=Number(player.score||0)+(correct?1:0);
-      const rows=await api(`live_quiz_players?id=eq.${player.id}`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({correct_answers:nextCorrect,total_response_time_ms:nextTime,score:nextScore})});
+      const rows=await api(`live_quiz_players?id=${player.id}`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({correct_answers:nextCorrect,total_response_time_ms:nextTime,score:nextScore})});
       setPlayer(rows?.[0]||{...player,correct_answers:nextCorrect,total_response_time_ms:nextTime,score:nextScore});
-    }catch(e){setAnswered(false);setError(e instanceof Error?e.message:'Could not submit answer.')}
-    finally{setSubmitting(false)}
+    }catch(e){setAnswered(false);setError(e instanceof Error?e.message:'Could not submit answer.');}
+    finally{setSubmitting(false);}
   }
 
   if(error&&!quiz)return <main className="flex min-h-screen items-center justify-center bg-muted/30 p-5"><Card className="w-full max-w-md rounded-3xl"><CardContent className="p-8 text-center"><div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-destructive/10"><X className="size-7 text-destructive"/></div><h1 className="mt-5 text-2xl font-black">Unable to join game</h1><p className="mt-2 text-sm text-muted-foreground">{error}</p><Button className="mt-5 rounded-xl" onClick={()=>router.push('/join')}>Back to Join</Button></CardContent></Card></main>;
   if(!quiz)return <main className="flex min-h-screen items-center justify-center bg-muted/30"><Loader2 className="size-9 animate-spin text-primary"/></main>;
   if(!player)return <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-muted/30 px-5 py-8"><div className="absolute inset-0 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/.14),transparent_55%)]"/><Card className="relative w-full max-w-lg overflow-hidden rounded-[2rem] border-0 shadow-2xl"><div className="bg-primary px-7 py-9 text-center text-primary-foreground"><div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-white/15"><Zap className="size-8"/></div><p className="mt-5 text-[10px] font-black uppercase tracking-[.3em] opacity-80">EduQuizLabs Live</p><h1 className="mt-2 text-3xl font-black">{quiz.title}</h1></div><CardContent className="space-y-5 p-7 sm:p-8"><div className="rounded-2xl bg-muted/60 p-4 text-center"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Playing as</p><p className="mt-1 text-xl font-black">{nickname}</p></div><Button size="lg" className="h-12 w-full rounded-xl font-black" onClick={join} disabled={joining}>{joining?'Joining…':'Join Lobby'}<Users className="ml-2 size-5"/></Button>{error&&<p className="text-center text-sm font-medium text-destructive">{error}</p>}<button onClick={()=>router.push('/join')} className="mx-auto flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4"/>Change game code</button></CardContent></Card></main>;
   if(quiz.status==='lobby')return <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-muted/30 px-5"><div className="absolute inset-0 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/.15),transparent_55%)]"/><div className="relative w-full max-w-2xl text-center"><div className="mx-auto flex size-24 items-center justify-center rounded-[2rem] bg-primary text-primary-foreground shadow-xl"><Wifi className="size-11"/></div><p className="mt-7 text-[11px] font-black uppercase tracking-[.35em] text-primary">You're connected</p><h1 className="mt-2 text-5xl font-black tracking-tight sm:text-7xl">You're in!</h1><div className="mx-auto mt-6 max-w-md rounded-3xl border bg-card/80 p-6 shadow-lg backdrop-blur"><p className="text-sm text-muted-foreground">Waiting for your teacher to start</p><div className="mt-5 flex items-center justify-center gap-2 text-sm font-bold"><span className="size-2 animate-pulse rounded-full bg-green-500"/>Live connection</div></div></div></main>;
-  if(quiz.status==='finished')return <main className="min-h-screen bg-muted/30 px-4 py-8 sm:py-12"><div className="mx-auto max-w-2xl"><Card className="overflow-hidden rounded-[2rem] border-0 shadow-2xl"><div className="bg-primary px-6 py-10 text-center text-primary-foreground"><Trophy className="mx-auto size-14"/><p className="mt-4 text-[11px] font-black uppercase tracking-[.3em] opacity-80">Final results</p><h1 className="mt-2 text-4xl font-black">Quiz Finished!</h1></div><CardContent className="p-5 sm:p-7"><div className="grid grid-cols-2 gap-3"><div className="rounded-2xl bg-muted/60 p-5 text-center"><b className="text-3xl font-black">{player.correct_answers}</b><p className="mt-1 text-xs font-bold uppercase text-muted-foreground">Correct</p></div><div className="rounded-2xl bg-muted/60 p-5 text-center"><b className="text-3xl font-black">{fmt(player.total_response_time_ms)}</b><p className="mt-1 text-xs font-bold uppercase text-muted-foreground">Total time</p></div></div><div className="mt-6 space-y-2">{ranking.map((p,i)=><div key={p.id} className={`flex items-center gap-3 rounded-2xl border p-4 ${p.id===player.id?'border-primary bg-primary/10':''}`}><span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-black">{i+1}</span><span className="min-w-0 flex-1 truncate font-bold">{p.nickname}</span><span className="text-xs font-bold text-muted-foreground">{p.correct_answers} correct</span></div>)}</div><Button className="mt-6 h-11 w-full rounded-xl" onClick={()=>router.push('/dashboard/student')}>Back to Dashboard</Button></CardContent></Card></div></main>;
+  if(quiz.status==='finished')return <main className="min-h-screen bg-muted/30 px-4 py-8 sm:py-12"><div className="mx-auto max-w-2xl"><Card className="overflow-hidden rounded-[2rem] border-0 shadow-2xl"><div className="bg-primary px-6 py-10 text-center text-primary-foreground"><Trophy className="mx-auto size-14"/><p className="mt-4 text-[11px] font-black uppercase tracking-[.3em] opacity-80">Final results</p><h1 className="mt-2 text-4xl font-black">Quiz Finished!</h1><div className="mx-auto mt-6 max-w-sm rounded-3xl bg-white/15 px-6 py-5 backdrop-blur"><p className="text-xs font-black uppercase tracking-[.25em] opacity-80">Your final place</p><p className="mt-1 text-6xl font-black">{myRank>0?`#${myRank}`:'—'}</p><p className="mt-1 text-sm font-semibold opacity-90">out of {ranking.length} {ranking.length===1?'player':'players'}</p></div></div><CardContent className="p-5 sm:p-7"><div className="grid grid-cols-2 gap-3"><div className="rounded-2xl bg-muted/60 p-5 text-center"><b className="text-3xl font-black">{player.correct_answers}</b><p className="mt-1 text-xs font-bold uppercase text-muted-foreground">Correct</p></div><div className="rounded-2xl bg-muted/60 p-5 text-center"><b className="text-3xl font-black">{fmt(player.total_response_time_ms)}</b><p className="mt-1 text-xs font-bold uppercase text-muted-foreground">Total time</p></div></div><div className="mt-6 space-y-2">{ranking.map((p,i)=><div key={p.id} className={`flex items-center gap-3 rounded-2xl border p-4 ${p.id===player.id?'border-primary bg-primary/10':''}`}><span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-black">{i+1}</span><span className="min-w-0 flex-1 truncate font-bold">{p.nickname}</span><span className="text-xs font-bold text-muted-foreground">{p.correct_answers} correct</span></div>)}</div><Button className="mt-6 h-11 w-full rounded-xl" onClick={()=>router.push('/dashboard/student')}>Back to Dashboard</Button></CardContent></Card></div></main>;
   if(results)return <main className={`fixed inset-0 z-[100] flex min-h-screen items-center justify-center overflow-hidden px-5 text-white ${result===true?'bg-green-500':'bg-red-500'}`}><div className="relative w-full max-w-3xl text-center animate-in fade-in zoom-in-90 duration-500"><div className="mx-auto flex size-36 items-center justify-center rounded-[2.5rem] bg-white/20 shadow-2xl animate-in zoom-in duration-500 sm:size-48">{result?<Check className="size-24 sm:size-32"/>:<X className="size-24 sm:size-32"/>}</div><p className="mt-7 text-sm font-black uppercase tracking-[.4em]">{result?'Correct answer':'Not this time'}</p><h1 className="mt-2 text-6xl font-black sm:text-8xl">{result?'CORRECT':'WRONG'}</h1><div className="mx-auto mt-7 max-w-sm rounded-[2rem] bg-white/15 p-6 backdrop-blur"><p className="text-xs font-black uppercase tracking-[.2em] opacity-80">Response time</p><p className="mt-2 text-5xl font-black tabular-nums">{fmt(responseTime)}</p><p className="mt-3 text-sm font-semibold opacity-90">{answer?`Your answer: ${answer}`:'No answer submitted'}</p></div><p className="mt-7 text-sm font-bold opacity-75">Next question coming up…</p></div></main>;
   if(intermission)return <main className="fixed inset-0 z-[100] flex min-h-screen items-center justify-center overflow-hidden bg-background px-6 text-center"><div className="animate-in fade-in zoom-in-95 duration-500"><div className="mx-auto flex size-24 items-center justify-center rounded-[2rem] bg-primary/10"><Sparkles className="size-12 animate-pulse text-primary"/></div><p className="mt-7 text-[11px] font-black uppercase tracking-[.4em] text-primary">Intermission</p><h1 className="mt-2 text-5xl font-black tracking-tight sm:text-7xl">Get ready!</h1><p className="mt-4 text-muted-foreground">The next question is coming up.</p></div></main>;
   if(quiz.status==='question_reveal')return <main className="fixed inset-0 z-[100] flex min-h-screen items-center justify-center overflow-hidden bg-background px-6 text-center"><div className="animate-in fade-in zoom-in-95 duration-500"><div className="mx-auto flex size-24 items-center justify-center rounded-[2rem] bg-primary text-primary-foreground shadow-xl"><Zap className="size-12"/></div><p className="mt-7 text-[11px] font-black uppercase tracking-[.4em] text-primary">Question {idx+1} of {questions.length}</p><h1 className="mt-2 text-5xl font-black sm:text-7xl">Get ready!</h1><p className="mt-4 text-muted-foreground">Answers will open in a moment.</p></div></main>;
