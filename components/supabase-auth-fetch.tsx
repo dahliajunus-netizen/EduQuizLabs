@@ -4,9 +4,6 @@ let installed = false
 let storageIsolated = false
 let refreshPromise: Promise<string | null> | null = null
 
-// Auth state is tab-scoped while the last successful sign-in is remembered
-// persistently. This lets multiple tabs use different accounts, while a new
-// visit can restore the most recently signed-in account automatically.
 const TAB_AUTH_KEYS = new Set([
   'current_user',
   'supabase_access_token',
@@ -183,12 +180,15 @@ function rewriteStudentQuizRead(requestUrl: string, method: string) {
       else if (parsed.pathname === '/rest/v1/test_questions') parsed.pathname = '/rest/v1/student_visible_test_questions'
     }
 
-    // Live Quiz participants are allowed to enter without an account. The
-    // public player page therefore receives only safe quiz/question columns.
-    // The teacher host page continues to read the protected base tables.
     if (!isTeacherLiveQuizPage()) {
       if (parsed.pathname === '/rest/v1/live_quizzes') parsed.pathname = '/rest/v1/live_quiz_public'
       else if (parsed.pathname === '/rest/v1/live_quiz_questions') parsed.pathname = '/rest/v1/live_quiz_public_questions'
+      else if (
+        parsed.pathname === '/rest/v1/live_quiz_players' &&
+        (parsed.searchParams.get('order') || '').trim().startsWith('correct_answers')
+      ) {
+        parsed.pathname = '/rest/v1/live_quiz_finished_players'
+      }
     }
 
     return parsed.toString()
