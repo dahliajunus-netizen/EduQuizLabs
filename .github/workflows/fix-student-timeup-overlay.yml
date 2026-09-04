@@ -1,0 +1,50 @@
+name: Fix student live quiz time-up overlay
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-student-timeup-overlay.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move time-up overlay into quiz UI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('app/dashboard/student/live-quiz/[code]/page.tsx')
+          s=p.read_text()
+          overlay=re.compile(r'\{timeUp&&<div className="pointer-events-none fixed inset-0 z-\[100\][\s\S]*?</div></div>\}')
+          m=overlay.search(s)
+          if not m:
+              raise SystemExit('Existing time-up overlay not found')
+          block=m.group(0)
+          s=s[:m.start()]+s[m.end():]
+          pos=s.rfind('return <main')
+          if pos < 0:
+              raise SystemExit('Final quiz return not found')
+          tag_end=s.find('>',pos)
+          if tag_end < 0:
+              raise SystemExit('Final main tag not found')
+          s=s[:tag_end+1]+block+s[tag_end+1:]
+          p.write_text(s)
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/dashboard/student/live-quiz/'[code]'/page.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix student live quiz time up animation'
+          git push
+      - name: Remove temporary workflow
+        if: always()
+        run: |
+          git rm -f .github/workflows/fix-student-timeup-overlay.yml || true
+          git diff --cached --quiet && exit 0
+          git commit -m 'remove temporary time up fix workflow'
+          git push
