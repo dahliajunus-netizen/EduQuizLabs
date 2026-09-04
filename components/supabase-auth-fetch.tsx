@@ -164,15 +164,33 @@ export async function ensureFreshAuthSession() {
   return true
 }
 
+function isTeacherLiveQuizPage() {
+  if (typeof window === 'undefined') return false
+  return window.location.pathname.startsWith('/dashboard/teacher/live-quiz')
+}
+
 function rewriteStudentQuizRead(requestUrl: string, method: string) {
-  if (getCurrentRole() !== 'student' || !['GET', 'HEAD'].includes(method.toUpperCase())) return requestUrl
+  if (!['GET', 'HEAD'].includes(method.toUpperCase())) return requestUrl
+
   try {
     const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '')
     if (!base || !requestUrl.startsWith(`${base}/rest/v1/`)) return requestUrl
     const parsed = new URL(requestUrl)
-    if (parsed.pathname === '/rest/v1/tests') parsed.pathname = '/rest/v1/student_visible_tests'
-    else if (parsed.pathname === '/rest/v1/test_questions') parsed.pathname = '/rest/v1/student_visible_test_questions'
-    else return requestUrl
+    const role = getCurrentRole()
+
+    if (role === 'student') {
+      if (parsed.pathname === '/rest/v1/tests') parsed.pathname = '/rest/v1/student_visible_tests'
+      else if (parsed.pathname === '/rest/v1/test_questions') parsed.pathname = '/rest/v1/student_visible_test_questions'
+    }
+
+    // Live Quiz participants are allowed to enter without an account. The
+    // public player page therefore receives only safe quiz/question columns.
+    // The teacher host page continues to read the protected base tables.
+    if (!isTeacherLiveQuizPage()) {
+      if (parsed.pathname === '/rest/v1/live_quizzes') parsed.pathname = '/rest/v1/live_quiz_public'
+      else if (parsed.pathname === '/rest/v1/live_quiz_questions') parsed.pathname = '/rest/v1/live_quiz_public_questions'
+    }
+
     return parsed.toString()
   } catch {
     return requestUrl
