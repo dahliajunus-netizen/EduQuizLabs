@@ -93,10 +93,17 @@ end;
 $$;
 
 
+-- The fourth argument is a trusted server-only switch used solely when
+-- the server itself detects that the attempt timer expired and performs
+-- the expected automatic final submission. Normal/manual submissions
+-- pass false and remain subject to the deadline checks.
+drop function if exists public.submit_test_attempt(uuid, uuid, jsonb);
+
 create or replace function public.submit_test_attempt(
   p_attempt_id uuid,
   p_student_id uuid,
-  p_answers jsonb
+  p_answers jsonb,
+  p_auto_submit boolean default false
 )
 returns jsonb
 language plpgsql
@@ -148,15 +155,26 @@ begin
     raise exception 'TEST_NOT_FOUND';
   end if;
 
-  if v_test.due_date is not null and now() >= v_test.due_date then
-    raise exception 'DUE_DATE_PASSED';
-  end if;
+  -- Manual submissions must respect both deadline and timer. The only
+  -- exception is the trusted server-triggered expiry auto-submit.
+  if not p_auto_submit then
+    if v_test.due_date is not null and now() >= v_test.due_date then
+      raise exception 'DUE_DATE_PASSED';
+    end if;
 
-  if v_test.time_limit_minutes is not null
-     and v_test.time_limit_minutes > 0
-     and now() >= v_attempt.started_at + make_interval(mins => v_test.time_limit_minutes)
-  then
-    raise exception 'TIME_LIMIT_EXPIRED';
+    if v_test.time_limit_minutes is not null
+       and v_test.time_limit_minutes > 0
+       and now() >= v_attempt.started_at + make_interval(mins => v_test.time_limit_minutes)
+    then
+      raise exception 'TIME_LIMIT_EXPIRED';
+    end if;
+  else
+    if v_test.time_limit_minutes is null
+       or v_test.time_limit_minutes <= 0
+       or now() < v_attempt.started_at + make_interval(mins => v_test.time_limit_minutes)
+    then
+      raise exception 'AUTO_SUBMIT_NOT_EXPIRED';
+    end if;
   end if;
 
   select count(*)
@@ -266,8 +284,8 @@ from public, anon, authenticated;
 grant execute on function public.start_test_attempt(uuid, uuid)
 to service_role;
 
-revoke all on function public.submit_test_attempt(uuid, uuid, jsonb)
+revoke all on function public.submit_test_attempt(uuid, uuid, jsonb, boolean)
 from public, anon, authenticated;
 
-grant execute on function public.submit_test_attempt(uuid, uuid, jsonb)
+grant execute on function public.submit_test_attempt(uuid, uuid, jsonb, boolean)
 to service_role;
