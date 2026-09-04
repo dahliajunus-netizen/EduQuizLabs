@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Navbar } from '@/components/Navbar';
 
 type Test = { id: string; title: string; description?: string | null; class_code?: string; time_limit_minutes?: number | null; max_attempts?: number | null; allow_review?: boolean | null; requires_password?: boolean };
-type Question = { id: string; question_order: number; question: string; question_type?: string | null; option_a?: string | null; option_b?: string | null; option_c?: string | null; option_d?: string | null; points?: number | null };
+type Question = { id: string; test_id: string; question_order: number; question: string; question_type?: string | null; option_a?: string | null; option_b?: string | null; option_c?: string | null; option_d?: string | null; points?: number | null };
 type Submission = { id: string; score: number; answers?: Record<string, string> | null };
 type Attempt = { id: string; answers?: Record<string, string> | null; started_at?: string | null };
 type Pair = { left: string; right: string };
@@ -36,10 +36,27 @@ function requestHeaders(json = false) {
   return { Authorization: `Bearer ${getToken()}`, Accept: 'application/json', ...(json ? { 'Content-Type': 'application/json' } : {}) };
 }
 
-function typeOf(q: Question) { return String(q.question_type || 'multiple_choice').toLowerCase().replace(/-/g, '_'); }
-function pairs(q: Question): Pair[] { try { const x = JSON.parse(String(q.option_a || '[]')); return Array.isArray(x) ? x.map((p: any) => ({ left: String(p?.left || ''), right: String(p?.right || '') })).filter((p: Pair) => p.left && p.right) : []; } catch { return []; } }
+function typeOf(q: Question) { return String(q.question_type || 'multiple_choice').toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_'); }
+function parseJson<T>(value: unknown, fallback: T): T { try { const parsed = JSON.parse(String(value || '')); return parsed as T; } catch { return fallback; } }
+function pairs(q: Question): Pair[] {
+  const raw = parseJson<Array<{ left?: unknown; right?: unknown }>>(q.option_a, []);
+  return raw.map(p => ({ left: String(p?.left || '').trim(), right: String(p?.right || '').trim() })).filter(p => p.left);
+}
+function matchingOptions(q: Question): string[] {
+  const safeOptions = parseJson<unknown[]>(q.option_b, []);
+  if (Array.isArray(safeOptions) && safeOptions.every(v => typeof v === 'string')) return Array.from(new Set(safeOptions.map(v => String(v).trim()).filter(Boolean)));
+  return pairs(q).map(p => p.right).filter(Boolean);
+}
 function matchingMap(value: string): Record<string, string> { try { const x = JSON.parse(value || '{}'); return x && typeof x === 'object' && !Array.isArray(x) ? x : {}; } catch { return {}; } }
-function isAnswered(q: Question, answers: Record<string, string>) { const value = answers[q.id] || ''; if (typeOf(q) === 'matching') return pairs(q).every(p => Boolean(matchingMap(value)[p.left])); return Boolean(value.trim()); }
+function isAnswered(q: Question, answers: Record<string, string>) {
+  const value = answers[q.id] || '';
+  if (typeOf(q) === 'matching' || typeOf(q) === 'match') {
+    const lefts = pairs(q).map(p => p.left);
+    const selected = matchingMap(value);
+    return lefts.length > 0 && lefts.every(left => Boolean(String(selected[left] || '').trim()));
+  }
+  return Boolean(value.trim());
+}
 
 export default function TakeTestPage() {
   const { id: raw } = useParams<{ id: string }>();
@@ -86,7 +103,6 @@ export default function TakeTestPage() {
   const attemptsLeft = Math.max(0, maxAttempts - submissions.length);
   const answeredCount = questions.filter(q => isAnswered(q, answers)).length;
   const progress = questions.length ? Math.round(answeredCount / questions.length * 100) : 0;
-  const matchingOptions = useMemo(() => Array.from(new Set(questions.flatMap(q => typeOf(q) === 'matching' ? pairs(q).map(p => p.right) : []))), [questions]);
 
   const save = useCallback(async (next = answersRef.current) => {
     if (!attempt?.id || savingRef.current || complete) return;
@@ -96,6 +112,10 @@ export default function TakeTestPage() {
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data?.error || 'Save failed.');
       setSaved(true); setError('');
+      if (data?.auto_submitted) {
+        setSubmissions(s => data.submission ? [data.submission, ...s] : s);
+        setComplete(true); setAttempt(null); setRemaining(null);
+      }
     } catch (e) { setError(e instanceof Error ? e.message : 'Your latest answer could not be saved.'); }
     finally { savingRef.current = false; }
   }, [attempt?.id, complete, id]);
@@ -165,12 +185,12 @@ export default function TakeTestPage() {
     <div><div className="mb-2 flex justify-between text-sm"><span className="font-semibold">{test.title}</span><span className="text-muted-foreground">{answeredCount}/{questions.length} answered</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }}/></div></div>
     <Card className="overflow-hidden rounded-3xl"><CardHeader><div className="text-xs font-bold uppercase tracking-wider text-primary">Question {current + 1} of {questions.length}</div><CardTitle className="text-2xl leading-tight">{q.question}</CardTitle></CardHeader><CardContent className="space-y-4 pb-8">
       {qType === 'multiple_choice' && ['A','B','C','D'].map(letter => { const value = (q as any)[`option_${letter.toLowerCase()}`] || ''; if (!value) return null; const selectedAnswer = answer === letter; return <button key={letter} type="button" onClick={() => setAnswer(q.id, letter)} className={`flex w-full items-center gap-4 rounded-2xl border-2 p-4 text-left ${selectedAnswer ? 'border-primary bg-primary/10' : 'hover:bg-muted'}`}><span className="font-bold">{letter}</span><span className="flex-1">{value}</span>{selectedAnswer && <Check className="size-5 text-primary"/>}</button>; })}
-      {qType === 'true_false' && [['A','True'],['B','False']].map(([letter,label]) => <button key={letter} onClick={() => setAnswer(q.id, letter)} className={`w-full rounded-2xl border-2 p-5 text-lg font-semibold ${answer === letter ? 'border-primary bg-primary/10' : 'hover:bg-muted'}`}>{label}</button>)}
+      {(qType === 'true_false' || qType === 'truefalse' || qType === 'boolean') && [['A','True'],['B','False']].map(([letter,label]) => <button key={letter} type="button" onClick={() => setAnswer(q.id, letter)} className={`w-full rounded-2xl border-2 p-5 text-lg font-semibold ${answer === letter ? 'border-primary bg-primary/10' : 'hover:bg-muted'}`}>{label}</button>)}
       {(qType === 'fill_blank' || qType === 'fill_in_blank') && <Input autoComplete="off" value={answer} onChange={e => setAnswer(q.id, e.target.value)} placeholder="Type your answer"/>}
-      {qType === 'matching' && <div className="space-y-3">{pairs(q).map(pair => <div key={pair.left} className="grid gap-2 sm:grid-cols-2 sm:items-center"><div className="rounded-xl border p-3 font-medium">{pair.left}</div><select className="h-11 rounded-xl border bg-background px-3" value={selected[pair.left] || ''} onChange={e => setAnswer(q.id, JSON.stringify({ ...selected, [pair.left]: e.target.value }))}><option value="">Choose a match</option>{matchingOptions.map(option => <option key={option} value={option}>{option}</option>)}</select></div>)}</div>}
+      {(qType === 'matching' || qType === 'match') && <div className="space-y-3">{pairs(q).map(pair => <div key={pair.left} className="grid gap-2 sm:grid-cols-2 sm:items-center"><div className="rounded-xl border p-3 font-medium">{pair.left}</div><select className="h-11 rounded-xl border bg-background px-3" value={selected[pair.left] || ''} onChange={e => setAnswer(q.id, JSON.stringify({ ...selected, [pair.left]: e.target.value }))}><option value="">Choose a match</option>{matchingOptions(q).map(option => <option key={option} value={option}>{option}</option>)}</select></div>)}</div>}
     </CardContent></Card>
     {confirm && <Card className="border-amber-300 bg-amber-50"><CardContent className="flex flex-wrap items-center justify-between gap-4 p-5"><div><p className="font-bold">Submit this assessment?</p><p className="text-sm text-muted-foreground">You answered {answeredCount} of {questions.length} questions.</p></div><div className="flex gap-2"><Button variant="outline" onClick={() => setConfirm(false)}>Continue</Button><Button onClick={() => void submit()} disabled={busy}>{busy ? 'Submitting…' : 'Confirm submit'}</Button></div></CardContent></Card>}
     <div className="flex items-center justify-between gap-3"><Button variant="outline" onClick={() => setCurrent(v => Math.max(0, v - 1))} disabled={current === 0}>Previous</Button><div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">{current + 1}/{questions.length}</span>{current < questions.length - 1 ? <Button onClick={() => setCurrent(v => v + 1)}>Next</Button> : <Button onClick={() => void submit()} disabled={busy}>Submit test</Button>}</div></div>
-    <Card><CardContent className="p-4"><div className="mb-3 flex items-center gap-2 font-semibold"><Menu className="size-4"/>Question navigator</div><div className="flex flex-wrap gap-2">{questions.map((question,i) => <button key={question.id} onClick={() => setCurrent(i)} className={`flex size-9 items-center justify-center rounded-lg text-xs font-bold ${current === i ? 'bg-primary text-primary-foreground' : isAnswered(question, answers) ? 'bg-emerald-100 text-emerald-700' : 'bg-muted'}`}>{i+1}</button>)}</div></CardContent></Card>
+    <Card><CardContent className="p-4"><div className="mb-3 flex items-center gap-2 font-semibold"><Menu className="size-4"/>Question navigator</div><div className="flex flex-wrap gap-2">{questions.map((question,i) => <button key={question.id} type="button" onClick={() => setCurrent(i)} className={`flex size-9 items-center justify-center rounded-lg text-xs font-bold ${current === i ? 'bg-primary text-primary-foreground' : isAnswered(question, answers) ? 'bg-emerald-100 text-emerald-700' : 'bg-muted'}`}>{i+1}</button>)}</div></CardContent></Card>
   </main></div>;
 }
