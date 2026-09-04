@@ -1,0 +1,35 @@
+name: Fix waiting room game code size
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resize game code card to match QR
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/dashboard/teacher/live-quiz/page.tsx')
+          s=p.read_text()
+          old='flex min-w-[220px] flex-col justify-center rounded-3xl border bg-background px-5 py-4 text-left shadow-lg'
+          new='flex size-[242px] shrink-0 flex-col items-center justify-center rounded-3xl border bg-background px-5 py-4 text-center shadow-lg'
+          if old not in s:
+              raise SystemExit('target not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add app/dashboard/teacher/live-quiz/page.tsx
+          git diff --cached --quiet || git commit -m "Make waiting room game code card same size as QR"
+          git push
+      - name: Remove temporary workflow
+        if: success()
+        run: |
+          git rm .github/workflows/fix-waiting-room-code-size.yml
+          git commit -m "Remove temporary waiting room fix workflow"
+          git push
