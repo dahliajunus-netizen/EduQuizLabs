@@ -1,0 +1,48 @@
+name: Fix teacher live quiz status position
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/fix-teacher-live-status-position.yml
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move status area down
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/dashboard/teacher/live-quiz/page.tsx')
+          s=p.read_text()
+          targets=('Question reveal','Answering now','Results')
+          for target in targets:
+              pos=s.find(target)
+              if pos<0:
+                  continue
+              start=max(0,pos-2500)
+              chunk=s[start:pos]
+              import re
+              matches=list(re.finditer(r'className="([^"]*rounded-full[^"]*)"',chunk))
+              if matches:
+                  m=matches[-1]
+                  old=m.group(1)
+                  new=re.sub(r'\btranslate-y-\d+\b','',old).replace('  ',' ').strip()
+                  new=(new+' translate-y-10').strip()
+                  s=s[:start+m.start(1)]+new+s[start+m.end(1):]
+          p.write_text(s)
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/dashboard/teacher/live-quiz/page.tsx
+          git diff --cached --quiet || git commit -m 'move live quiz status text farther from top edge'
+          git push
+      - name: Remove temporary workflow
+        run: |
+          git rm .github/workflows/fix-teacher-live-status-position.yml
+          git commit -m 'remove temporary teacher live status fix workflow'
+          git push
