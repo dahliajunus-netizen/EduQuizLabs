@@ -35,3 +35,11 @@ export async function supabaseDb(path: string, init: RequestInit = {}) {
   if (!response.ok) throw new Error(text || `Supabase request failed (${response.status}).`);
   return data;
 }
+
+export async function supabaseRpc(name: string, args: Record<string, unknown>) {
+  return supabaseDb(`rpc/${encodeURIComponent(name)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(args),
+  });
+}
