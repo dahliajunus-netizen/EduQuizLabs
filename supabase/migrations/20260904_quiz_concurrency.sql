@@ -22,9 +22,6 @@ declare
   v_submission_count integer;
   v_test public.tests%rowtype;
 begin
-  -- Serialize all attempt creation/submission operations for this
-  -- exact student+test pair. This closes the max-attempt race even
-  -- after an older attempt has just been completed.
   perform pg_advisory_xact_lock(
     hashtextextended(p_test_id::text || ':' || p_student_id::text, 0)
   );
@@ -69,20 +66,10 @@ begin
   end if;
 
   insert into public.test_attempts (
-    test_id,
-    student_id,
-    status,
-    answers,
-    started_at,
-    updated_at
+    test_id, student_id, status, answers, started_at, updated_at
   )
   values (
-    p_test_id,
-    p_student_id,
-    'in_progress',
-    '{}'::jsonb,
-    now(),
-    now()
+    p_test_id, p_student_id, 'in_progress', '{}'::jsonb, now(), now()
   )
   returning * into v_attempt;
 
@@ -147,8 +134,6 @@ begin
     raise exception 'ALREADY_SUBMITTED';
   end if;
 
-  -- Lock the same student+test key used by start_test_attempt so a
-  -- completed attempt cannot race a brand-new attempt.
   perform pg_advisory_xact_lock(
     hashtextextended(v_attempt.test_id::text || ':' || p_student_id::text, 0)
   );
@@ -185,48 +170,22 @@ begin
     where test_id = v_attempt.test_id
     order by question_order asc, id asc
   loop
-    qtype := lower(
-      replace(
-        replace(coalesce(q.question_type, 'multiple_choice'), '-', '_'),
-        ' ',
-        '_'
-      )
-    );
-
-    submitted := lower(
-      regexp_replace(
-        trim(coalesce(p_answers ->> q.id::text, '')),
-        '\s+',
-        ' ',
-        'g'
-      )
-    );
-
-    correct := lower(
-      regexp_replace(
-        trim(coalesce(q.correct_answer, '')),
-        '\s+',
-        ' ',
-        'g'
-      )
-    );
+    qtype := lower(replace(replace(coalesce(q.question_type, 'multiple_choice'), '-', '_'), ' ', '_'));
+    submitted := lower(regexp_replace(trim(coalesce(p_answers ->> q.id::text, '')), '\s+', ' ', 'g'));
+    correct := lower(regexp_replace(trim(coalesce(q.correct_answer, '')), '\s+', ' ', 'g'));
 
     if qtype in ('fill_blank', 'fill_in_blank') then
       accepted := regexp_split_to_array(
         lower(coalesce(nullif(trim(q.option_a), ''), q.correct_answer)),
         '\s*(\|\||;)\s*'
       );
-
       if submitted <> '' and submitted = any(accepted) then
         v_correct := v_correct + 1;
       end if;
 
     elsif qtype in ('true_false', 'truefalse', 'boolean') then
-      if (
-        submitted in ('a', 'true') and correct in ('a', 'true')
-      ) or (
-        submitted in ('b', 'false') and correct in ('b', 'false')
-      ) then
+      if (submitted in ('a', 'true') and correct in ('a', 'true'))
+         or (submitted in ('b', 'false') and correct in ('b', 'false')) then
         v_correct := v_correct + 1;
       end if;
 
@@ -241,24 +200,18 @@ begin
         end if;
 
         if p_answers ? q.id::text then
-          submitted_match := (p_answers -> q.id::text);
+          submitted_match := p_answers -> q.id::text;
           if jsonb_typeof(submitted_match) <> 'object' then
             submitted_match := '{}'::jsonb;
           end if;
         end if;
 
         if jsonb_typeof(matching_pairs) = 'array'
-           and jsonb_array_length(matching_pairs) > 0
-        then
+           and jsonb_array_length(matching_pairs) > 0 then
           matching_ok := true;
-
-          for pair in
-            select value
-            from jsonb_array_elements(matching_pairs)
-          loop
+          for pair in select value from jsonb_array_elements(matching_pairs) loop
             if lower(trim(coalesce(submitted_match ->> (pair.value ->> 'left'), '')))
-               <> lower(trim(coalesce(pair.value ->> 'right', '')))
-            then
+               <> lower(trim(coalesce(pair.value ->> 'right', ''))) then
               matching_ok := false;
               exit;
             end if;
@@ -281,33 +234,21 @@ begin
   if v_questions = 0 then
     v_score := 0;
   else
-    v_score := round(
-      (v_correct::numeric / v_questions::numeric) * 100,
-      2
-    );
+    v_score := round((v_correct::numeric / v_questions::numeric) * 100, 2);
   end if;
 
-  -- These two writes are one transaction: either both succeed or
-  -- PostgreSQL rolls both back.
   update public.test_attempts
-  set
-    answers = p_answers,
-    status = 'completed',
-    completed_at = now(),
-    updated_at = now()
+  set answers = p_answers,
+      status = 'completed',
+      completed_at = now(),
+      updated_at = now()
   where id = p_attempt_id;
 
   insert into public.test_submissions (
-    test_id,
-    student_id,
-    answers,
-    score
+    test_id, student_id, answers, score
   )
   values (
-    v_attempt.test_id,
-    p_student_id,
-    p_answers,
-    v_score
+    v_attempt.test_id, p_student_id, p_answers, v_score
   )
   returning * into v_submission;
 
@@ -319,15 +260,14 @@ end;
 $$;
 
 
--- RPCs are intended to be called only by the trusted server path.
 revoke all on function public.start_test_attempt(uuid, uuid)
 from public, anon, authenticated;
 
-grants execute on function public.start_test_attempt(uuid, uuid)
+grant execute on function public.start_test_attempt(uuid, uuid)
 to service_role;
 
 revoke all on function public.submit_test_attempt(uuid, uuid, jsonb)
 from public, anon, authenticated;
 
-grants execute on function public.submit_test_attempt(uuid, uuid, jsonb)
+grant execute on function public.submit_test_attempt(uuid, uuid, jsonb)
 to service_role;
