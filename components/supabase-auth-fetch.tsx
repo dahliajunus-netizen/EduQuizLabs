@@ -48,9 +48,7 @@ function installTabScopedAuthStorage() {
   const originalClear = proto.clear
 
   proto.getItem = function (key: string) {
-    if (this === window.localStorage && TAB_AUTH_KEYS.has(key)) {
-      return originalGetItem.call(window.sessionStorage, key)
-    }
+    if (this === window.localStorage && TAB_AUTH_KEYS.has(key)) return originalGetItem.call(window.sessionStorage, key)
     return originalGetItem.call(this, key)
   }
 
@@ -81,25 +79,68 @@ function installTabScopedAuthStorage() {
 
 function getAccessToken() { try { return localStorage.getItem('supabase_access_token')?.trim() || null } catch { return null } }
 function getRefreshToken() { try { return localStorage.getItem('supabase_refresh_token')?.trim() || null } catch { return null } }
+function getCurrentRole() {
+  try {
+    const raw = localStorage.getItem('current_user')
+    if (!raw) return ''
+    const user = JSON.parse(raw)
+    return String(user?.role ?? user?.user?.role ?? '').trim().toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
 function setTokens(accessToken: string, refreshToken?: string) {
   try {
     localStorage.setItem('supabase_access_token', accessToken)
     if (refreshToken) localStorage.setItem('supabase_refresh_token', refreshToken)
-    const raw=localStorage.getItem('current_user')
-    if(raw){const user=JSON.parse(raw);user.accessToken=accessToken;localStorage.setItem('current_user',JSON.stringify(user))}
-    const remembered=window.localStorage.getItem(REMEMBERED_SESSION_KEY)
-    if(remembered){const session=JSON.parse(remembered);session.access_token=accessToken;if(refreshToken)session.refresh_token=refreshToken;session.current_user={...(session.current_user||{}),accessToken};window.localStorage.setItem(REMEMBERED_SESSION_KEY,JSON.stringify(session))}
+    const raw = localStorage.getItem('current_user')
+    if (raw) {
+      const user = JSON.parse(raw)
+      user.accessToken = accessToken
+      localStorage.setItem('current_user', JSON.stringify(user))
+    }
+    const remembered = window.localStorage.getItem(REMEMBERED_SESSION_KEY)
+    if (remembered) {
+      const session = JSON.parse(remembered)
+      session.access_token = accessToken
+      if (refreshToken) session.refresh_token = refreshToken
+      session.current_user = { ...(session.current_user || {}), accessToken }
+      window.localStorage.setItem(REMEMBERED_SESSION_KEY, JSON.stringify(session))
+    }
   } catch {}
 }
-function hasExplicitAuthorization(init?: RequestInit,input?:RequestInfo|URL){ if(init?.headers&&new Headers(init.headers).has('Authorization')) return true; if(input instanceof Request) return input.headers.has('Authorization'); return false }
 
-async function refreshAccessToken(): Promise<string|null> {
+function hasExplicitAuthorization(init?: RequestInit, input?: RequestInfo | URL) {
+  if (init?.headers && new Headers(init.headers).has('Authorization')) return true
+  if (input instanceof Request) return input.headers.has('Authorization')
+  return false
+}
+
+async function refreshAccessToken(): Promise<string | null> {
   if (refreshPromise) return refreshPromise
-  const base=process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/,'')
-  const key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
-  const refreshToken=getRefreshToken()
-  if(!base||!key||!refreshToken) return null
-  refreshPromise=(async()=>{ try { const r=await fetch(`${base}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:key,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:refreshToken}),cache:'no-store'}); const data=await r.json().catch(()=>null); if(!r.ok||!data?.access_token) return null; setTokens(String(data.access_token),data.refresh_token?String(data.refresh_token):undefined); return String(data.access_token) } catch { return null } finally { refreshPromise=null } })()
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '')
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
+  const refreshToken = getRefreshToken()
+  if (!base || !key || !refreshToken) return null
+  refreshPromise = (async () => {
+    try {
+      const r = await fetch(`${base}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: { apikey: key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+        cache: 'no-store',
+      })
+      const data = await r.json().catch(() => null)
+      if (!r.ok || !data?.access_token) return null
+      setTokens(String(data.access_token), data.refresh_token ? String(data.refresh_token) : undefined)
+      return String(data.access_token)
+    } catch {
+      return null
+    } finally {
+      refreshPromise = null
+    }
+  })()
   return refreshPromise
 }
 
@@ -123,28 +164,54 @@ export async function ensureFreshAuthSession() {
   return true
 }
 
-function installAuthenticatedFetch(){
-  if(installed||typeof window==='undefined') return
-  const supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/,''); if(!supabaseUrl) return
-  installed=true
-  const originalFetch=window.fetch.bind(window)
-  window.fetch=async(input:RequestInfo|URL,init?:RequestInit)=>{
-    const requestUrl=typeof input==='string'?input:input instanceof URL?input.toString():input.url
-    if(!requestUrl.startsWith(`${supabaseUrl}/rest/v1/`)) return originalFetch(input,init)
-    if(hasExplicitAuthorization(init,input)) return originalFetch(input,init)
-    let token=getAccessToken()
-    if(!token) return originalFetch(input,init)
-    const headers=new Headers(init?.headers||(input instanceof Request?input.headers:undefined));headers.set('Authorization',`Bearer ${token}`)
-    const response=await originalFetch(input,{...init,headers})
-    if(response.status!==401) return response
-    const fresh=await refreshAccessToken()
-    if(!fresh) return response
-    const retryHeaders=new Headers(init?.headers||(input instanceof Request?input.headers:undefined));retryHeaders.set('Authorization',`Bearer ${fresh}`)
-    return originalFetch(input,{...init,headers:retryHeaders})
+function rewriteStudentQuizRead(requestUrl: string, method: string) {
+  if (getCurrentRole() !== 'student' || !['GET', 'HEAD'].includes(method.toUpperCase())) return requestUrl
+  try {
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '')
+    if (!base || !requestUrl.startsWith(`${base}/rest/v1/`)) return requestUrl
+    const parsed = new URL(requestUrl)
+    if (parsed.pathname === '/rest/v1/tests') parsed.pathname = '/rest/v1/student_visible_tests'
+    else if (parsed.pathname === '/rest/v1/test_questions') parsed.pathname = '/rest/v1/student_visible_test_questions'
+    else return requestUrl
+    return parsed.toString()
+  } catch {
+    return requestUrl
+  }
+}
+
+function installAuthenticatedFetch() {
+  if (installed || typeof window === 'undefined') return
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '')
+  if (!supabaseUrl) return
+  installed = true
+  const originalFetch = window.fetch.bind(window)
+
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const originalUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    const method = init?.method || (input instanceof Request ? input.method : 'GET')
+    const requestUrl = rewriteStudentQuizRead(originalUrl, method)
+
+    if (!originalUrl.startsWith(`${supabaseUrl}/rest/v1/`) && requestUrl === originalUrl) return originalFetch(input, init)
+
+    let token = getAccessToken()
+    const shouldUseAuthHeader = !hasExplicitAuthorization(init, input) || requestUrl !== originalUrl
+    if (!token && !shouldUseAuthHeader) return originalFetch(requestUrl, init)
+    if (!token) return originalFetch(requestUrl, init)
+
+    const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))
+    headers.set('Authorization', `Bearer ${token}`)
+    const response = await originalFetch(requestUrl, { ...init, headers })
+    if (response.status !== 401) return response
+
+    const fresh = await refreshAccessToken()
+    if (!fresh) return response
+    const retryHeaders = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))
+    retryHeaders.set('Authorization', `Bearer ${fresh}`)
+    return originalFetch(requestUrl, { ...init, headers: retryHeaders })
   }
 }
 
 installTabScopedAuthStorage()
 restoreRememberedSession()
 installAuthenticatedFetch()
-export function SupabaseAuthFetch(){return null}
+export function SupabaseAuthFetch() { return null }
