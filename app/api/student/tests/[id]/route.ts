@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { calculateScore } from '@/lib/quiz/scoring';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -66,7 +67,6 @@ const safeQuestions = (rows: any[]) => rows.map(q => ({
   option_c: q.option_c,
   option_d: q.option_d,
   points: q.points,
-  answer_data: q.answer_data,
 }));
 
 async function authorizeStudent(userId: string, test: any) {
@@ -82,7 +82,7 @@ async function getTest(id: string) {
 }
 
 async function getQuestions(id: string) {
-  return await fetchJson(`test_questions?test_id=eq.${encodeURIComponent(id)}&select=*&order=question_order.asc,id.asc`);
+  return await fetchJson(`test_questions?test_id=eq.${encodeURIComponent(id)}&select=id,test_id,question_order,question,question_type,option_a,option_b,option_c,option_d,correct_answer,points&order=question_order.asc,id.asc`);
 }
 
 async function getSubmissions(id: string, userId: string) {
@@ -105,30 +105,9 @@ async function ensureAttempt(id: string, userId: string, existing: any) {
   return Array.isArray(rows) ? rows[0] : rows;
 }
 
-function normalized(value: unknown) {
-  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-function isCorrect(q: any, value: unknown) {
-  const type = String(q.question_type || 'multiple_choice').toLowerCase().replace(/-/g, '_');
-  if (type === 'fill_blank' || type === 'fill_in_blank') {
-    const accepted = String(q.option_a || q.correct_answer || '').split(/\s*(?:\|\||;|,)\s*/).map(normalized).filter(Boolean);
-    return accepted.includes(normalized(value));
-  }
-  if (type === 'matching' || type === 'match') {
-    try {
-      const submitted = JSON.parse(String(value || '{}'));
-      const pairs = JSON.parse(String(q.option_a || '[]'));
-      return Array.isArray(pairs) && pairs.length > 0 && pairs.every((pair: any) => normalized(submitted?.[pair.left]) === normalized(pair.right));
-    } catch { return false; }
-  }
-  const v = normalized(value);
-  const correct = normalized(q.correct_answer);
-  if (type === 'true_false') {
-    const map = (x: string) => x === 'a' || x === 'true' ? 'a' : x === 'b' || x === 'false' ? 'b' : x;
-    return map(v) === map(correct);
-  }
-  return v === correct;
+function expired(attempt: any, test: any) {
+  if (!attempt?.started_at || !test?.time_limit_minutes) return false;
+  return Date.now() >= new Date(attempt.started_at).getTime() + Number(test.time_limit_minutes) * 60000;
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -168,6 +147,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (expected && String(body?.password || '') !== expected) return NextResponse.json({ error: 'Incorrect assessment password.' }, { status: 401 });
       if (submissions.length >= maxAttempts) return NextResponse.json({ error: 'You have used all available attempts.' }, { status: 409 });
       const attempt = await ensureAttempt(id, user.id, await getAttempt(id, user.id));
+      if (expired(attempt, test)) return NextResponse.json({ error: 'This test attempt has expired.' }, { status: 409 });
       return NextResponse.json({ test: safeTest(test), questions: safeQuestions(await getQuestions(id)), submissions, attempt });
     }
 
@@ -176,6 +156,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (action === 'save') {
       const answers = body?.answers && typeof body.answers === 'object' ? body.answers : {};
+      if (expired(attempt, test)) {
+        const questions = await getQuestions(id);
+        const score = calculateScore(questions, answers);
+        const created = await fetchJson('test_submissions', {
+          method: 'POST',
+          headers: { ...adminHeaders(true), Prefer: 'return=representation' },
+          body: JSON.stringify({ test_id: id, student_id: user.id, answers, score }),
+        });
+        const now = new Date().toISOString();
+        await fetchJson(`test_attempts?id=eq.${encodeURIComponent(attempt.id)}`, {
+          method: 'PATCH',
+          headers: { ...adminHeaders(true), Prefer: 'return=minimal' },
+          body: JSON.stringify({ answers, status: 'completed', updated_at: now, completed_at: now }),
+        });
+        return NextResponse.json({ ok: true, auto_submitted: true, submission: Array.isArray(created) ? created[0] : created, score });
+      }
       const now = new Date().toISOString();
       await fetchJson(`test_attempts?id=eq.${encodeURIComponent(attempt.id)}`, {
         method: 'PATCH',
@@ -189,9 +185,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (submissions.length >= maxAttempts) return NextResponse.json({ error: 'You have used all available attempts.' }, { status: 409 });
       const answers = body?.answers && typeof body.answers === 'object' ? body.answers : {};
       const questions = await getQuestions(id);
-      const totalPoints = questions.reduce((sum: number, q: any) => sum + Number(q.points || 0), 0) || 100;
-      const earned = questions.reduce((sum: number, q: any) => sum + (isCorrect(q, answers[q.id]) ? Number(q.points || 0) : 0), 0);
-      const score = Math.round((earned / totalPoints) * 10000) / 100;
+      const score = calculateScore(questions, answers);
       const created = await fetchJson('test_submissions', {
         method: 'POST',
         headers: { ...adminHeaders(true), Prefer: 'return=representation' },
