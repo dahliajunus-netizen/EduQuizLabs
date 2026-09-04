@@ -16,9 +16,41 @@ const safeTest = (test: any) => ({
   requires_password: Boolean(String(test.test_password || '').trim()),
 });
 
+function safeImageUrl(value: unknown): string | null {
+  const url = String(value || '').trim();
+  if (!url) return null;
+  if (url.startsWith('data:image/')) {
+    return url.length <= 2_000_000 ? url : null;
+  }
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function getImageUrl(question: any): string | null {
+  const answerData = question?.answer_data;
+  if (answerData && typeof answerData === 'object' && !Array.isArray(answerData)) {
+    return safeImageUrl(answerData.image_url);
+  }
+  if (typeof answerData === 'string') {
+    try {
+      const parsed = JSON.parse(answerData);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return safeImageUrl(parsed.image_url);
+      }
+    } catch {}
+  }
+  return null;
+}
+
 function safeQuestions(rows: any[]) {
   return rows.map(q => {
     const type = String(q.question_type || 'multiple_choice').toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
+    const image_url = getImageUrl(q);
+
     if (type === 'matching' || type === 'match') {
       let pairs: any[] = [];
       try {
@@ -37,6 +69,7 @@ function safeQuestions(rows: any[]) {
         option_b: JSON.stringify(rights),
         option_c: null,
         option_d: null,
+        image_url,
       };
     }
 
@@ -50,6 +83,7 @@ function safeQuestions(rows: any[]) {
       option_b: q.option_b,
       option_c: q.option_c,
       option_d: q.option_d,
+      image_url,
     };
   });
 }
@@ -83,7 +117,7 @@ async function getTest(id: string) {
 
 async function getQuestions(id: string) {
   return supabaseDb(
-    `test_questions?test_id=eq.${encodeURIComponent(id)}&select=id,test_id,question_order,question,question_type,option_a,option_b,option_c,option_d,correct_answer&order=question_order.asc,id.asc`
+    `test_questions?test_id=eq.${encodeURIComponent(id)}&select=id,test_id,question_order,question,question_type,option_a,option_b,option_c,option_d,correct_answer,answer_data&order=question_order.asc,id.asc`
   );
 }
 
@@ -149,6 +183,11 @@ function rpcErrorResponse(error: unknown) {
   return null;
 }
 
+function operationError(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     if (!serverConfigOk()) return NextResponse.json({ error: 'Server configuration is missing.' }, { status: 500 });
@@ -166,7 +205,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json({ test: safeTest(test), submissions, attempt, questions });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to load test.' }, { status: 500 });
+    return NextResponse.json({ error: operationError(error, 'Failed to load test.') }, { status: 500 });
   }
 }
 
@@ -269,12 +308,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       } catch (error) {
         const response = rpcErrorResponse(error);
         if (response) return response;
-        throw error;
+        console.error('[Student Test API] Submit failed:', error);
+        return NextResponse.json({ error: operationError(error, 'Failed to submit test.') }, { status: 500 });
       }
     }
 
     return NextResponse.json({ error: 'Unknown test action.' }, { status: 400 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Test operation failed.' }, { status: 500 });
+    console.error('[Student Test API] Test operation failed:', error);
+    return NextResponse.json({ error: operationError(error, 'Test operation failed.') }, { status: 500 });
   }
 }
