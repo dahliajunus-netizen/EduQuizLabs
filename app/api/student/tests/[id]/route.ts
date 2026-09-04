@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { calculateScore } from '@/lib/quiz/scoring';
-import { authenticatedUser, serverConfigOk, supabaseDb } from '@/lib/server/supabase';
+import { authenticatedUser, serverConfigOk, supabaseDb, supabaseRpc } from '@/lib/server/supabase';
 import { hashAssessmentPassword, verifyAssessmentPassword } from '@/lib/server/password';
 import { assessmentPasswordRateLimited } from '@/lib/server/rate-limit';
 
@@ -27,31 +26,22 @@ async function getAttempt(id: string, userId: string) {
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 function expired(attempt: any, test: any) { return Boolean(attempt?.started_at && test?.time_limit_minutes && Date.now() >= new Date(attempt.started_at).getTime() + Number(test.time_limit_minutes) * 60000); }
+
 async function createAttempt(id: string, userId: string) {
-  const now = new Date().toISOString();
-  const rows = await supabaseDb('test_attempts', { method: 'POST', headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify({ test_id: id, student_id: userId, status: 'in_progress', answers: {}, started_at: now, updated_at: now }) });
-  return Array.isArray(rows) ? rows[0] : rows;
+  return supabaseRpc('start_test_attempt', { p_test_id: id, p_student_id: userId });
 }
 
-/** Atomically claims the in-progress attempt before creating a submission. This prevents two concurrent submit requests from both scoring the same attempt. */
-async function completeAttempt(attempt: any, answers: Record<string, unknown>, testId: string) {
-  const now = new Date().toISOString();
-  const claimed = await supabaseDb(`test_attempts?id=eq.${encodeURIComponent(attempt.id)}&status=eq.in_progress`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify({ answers, status: 'completed', updated_at: now, completed_at: now }),
-  });
-  if (!Array.isArray(claimed) || !claimed[0]) return null;
-  const questions = await getQuestions(testId); const score = calculateScore(questions, answers);
-  try {
-    const created = await supabaseDb('test_submissions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
-      body: JSON.stringify({ test_id: testId, student_id: attempt.student_id, answers, score }),
-    });
-    return { submission: Array.isArray(created) ? created[0] : created, score };
-  } catch (error) {
-    await supabaseDb(`test_attempts?id=eq.${encodeURIComponent(attempt.id)}&status=eq.completed`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'in_progress', updated_at: new Date().toISOString(), completed_at: null }) }).catch(() => undefined);
-    throw error;
-  }
+async function completeAttempt(attempt: any, answers: Record<string, unknown>) {
+  return supabaseRpc('submit_test_attempt', { p_attempt_id: attempt.id, p_student_id: attempt.student_id, p_answers: answers });
+}
+
+function rpcErrorCode(error: unknown) {
+  const text = error instanceof Error ? error.message : String(error || '');
+  if (text.includes('MAX_ATTEMPTS')) return 'MAX_ATTEMPTS';
+  if (text.includes('ALREADY_SUBMITTED')) return 'ALREADY_SUBMITTED';
+  if (text.includes('ATTEMPT_NOT_FOUND')) return 'ATTEMPT_NOT_FOUND';
+  if (text.includes('TEST_NOT_FOUND')) return 'TEST_NOT_FOUND';
+  return null;
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -87,7 +77,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (result.legacy) await supabaseDb(`tests?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ test_password: await hashAssessmentPassword(expected) }) });
       }
       if (submissions.length >= maxAttempts) return NextResponse.json({ error: 'You have used all available attempts.' }, { status: 409 });
-      let attempt = await getAttempt(id, user.id); if (!attempt) attempt = await createAttempt(id, user.id);
+      let attempt = await getAttempt(id, user.id);
+      if (!attempt) {
+        try { attempt = await createAttempt(id, user.id); }
+        catch (error) {
+          const code = rpcErrorCode(error);
+          if (code === 'MAX_ATTEMPTS') return NextResponse.json({ error: 'You have used all available attempts.' }, { status: 409 });
+          throw error;
+        }
+      }
       if (expired(attempt, test)) return NextResponse.json({ error: 'This test attempt has expired.' }, { status: 409 });
       return NextResponse.json({ test: safeTest(test), questions: safeQuestions(await getQuestions(id)), submissions, attempt });
     }
@@ -96,18 +94,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const answers = body?.answers && typeof body.answers === 'object' ? body.answers : {};
     if (action === 'save') {
       if (expired(attempt, test)) {
-        const result = await completeAttempt(attempt, answers, id);
-        if (!result) return NextResponse.json({ error: 'This attempt has already been submitted.' }, { status: 409 });
-        return NextResponse.json({ ok: true, auto_submitted: true, ...result });
+        try {
+          const result = await completeAttempt(attempt, answers);
+          return NextResponse.json({ ok: true, auto_submitted: true, ...result });
+        } catch (error) {
+          if (rpcErrorCode(error) === 'ALREADY_SUBMITTED') return NextResponse.json({ error: 'This attempt has already been submitted.' }, { status: 409 });
+          throw error;
+        }
       }
       const now = new Date().toISOString();
-      await supabaseDb(`test_attempts?id=eq.${encodeURIComponent(attempt.id)}&status=eq.in_progress`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers, updated_at: now }) });
+      await supabaseDb(`test_attempts?id=eq.${encodeURIComponent(attempt.id)}&student_id=eq.${encodeURIComponent(user.id)}&status=eq.in_progress`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers, updated_at: now }) });
       return NextResponse.json({ ok: true, saved_at: now });
     }
     if (action === 'submit') {
-      const result = await completeAttempt(attempt, answers, id);
-      if (!result) return NextResponse.json({ error: 'This attempt has already been submitted.' }, { status: 409 });
-      return NextResponse.json(result);
+      try {
+        const result = await completeAttempt(attempt, answers);
+        return NextResponse.json(result);
+      } catch (error) {
+        const code = rpcErrorCode(error);
+        if (code === 'ALREADY_SUBMITTED') return NextResponse.json({ error: 'This attempt has already been submitted.' }, { status: 409 });
+        if (code === 'ATTEMPT_NOT_FOUND') return NextResponse.json({ error: 'No active test attempt was found.' }, { status: 409 });
+        throw error;
+      }
     }
     return NextResponse.json({ error: 'Unknown test action.' }, { status: 400 });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Test operation failed.' }, { status: 500 }); }
