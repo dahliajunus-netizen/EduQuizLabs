@@ -1,0 +1,43 @@
+name: Fix country search autofill
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/fix-country-autofill.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch country picker
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/settings/page.tsx')
+          s = p.read_text()
+          old = '''<Input ref={countrySearchRef} type="search" name="country-search" value={countrySearch} onChange={e=>setCountrySearch(e.target.value)} placeholder="Search country..." className="h-10 bg-background pl-9 pr-9" aria-label="Search country" autoComplete="new-password" autoCorrect="off" autoCapitalize="none" spellCheck={false} data-1p-ignore="true" data-lpignore="true"/>'''
+          new = '''<Input ref={countrySearchRef} type="text" name="country_picker_query" value={countrySearch} onChange={e=>setCountrySearch(e.target.value)} placeholder="Search country..." className="h-10 bg-background pl-9 pr-9" aria-label="Search country" autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} data-form-type="other" data-1p-ignore="true" data-lpignore="true" data-bwignore="true" data-protonpass-ignore="true" onFocus={e=>{e.currentTarget.setAttribute('autocomplete','off');e.currentTarget.setAttribute('name','country_picker_query');}}/>'''
+          if old not in s:
+              raise SystemExit('country search block not found')
+          s = s.replace(old, new, 1)
+          old2 = '''<Input value={email} disabled className="pl-9" autoComplete="off"/>'''
+          new2 = '''<Input value={email} disabled readOnly name="profile_email_display" className="pl-9" autoComplete="off" data-1p-ignore="true" data-lpignore="true" data-form-type="other"/>'''
+          if old2 in s:
+              s = s.replace(old2, new2, 1)
+          s = s.replace('''<Input value={(user?.role||'student').replace(/^./,c=>c.toUpperCase())} disabled autoComplete="off"/>''', '''<Input value={(user?.role||'student').replace(/^./,c=>c.toUpperCase())} disabled readOnly name="profile_role_display" autoComplete="off" data-1p-ignore="true" data-lpignore="true" data-form-type="other"/>''', 1)
+          p.write_text(s)
+          PY
+      - name: Commit patch and remove workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/settings/page.tsx
+          git diff --cached --quiet && { echo 'No changes needed'; exit 0; }
+          git commit -m 'fix country picker browser autofill'
+          git push
+          git rm .github/workflows/fix-country-autofill.yml
+          git commit -m 'chore remove temporary autofill patch workflow'
+          git push
