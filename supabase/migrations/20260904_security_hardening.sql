@@ -71,6 +71,101 @@ from public, anon, authenticated;
 grant execute on function public.check_assessment_password_rate_limit(text, integer, integer)
 to service_role;
 
+-- Prevent students from selecting the secret-bearing base rows directly.
+-- Existing teacher policies remain the mechanism that permits teacher access.
+alter table public.tests enable row level security;
+alter table public.test_questions enable row level security;
+
+drop policy if exists "Teachers only direct test reads" on public.tests;
+create policy "Teachers only direct test reads"
+on public.tests
+as restrictive
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.teacher_classes tc
+    where tc.code = tests.class_code
+      and tc.teacher_id = auth.uid()
+  )
+);
+
+drop policy if exists "Teachers only direct question reads" on public.test_questions;
+create policy "Teachers only direct question reads"
+on public.test_questions
+as restrictive
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.tests t
+    join public.teacher_classes tc on tc.code = t.class_code
+    where t.id = test_questions.test_id
+      and tc.teacher_id = auth.uid()
+  )
+);
+
+-- Students use these views instead of direct reads. They contain no password
+-- or answer-key columns, and they are limited to the caller's enrolled classes.
+drop view if exists public.student_visible_test_questions;
+drop view if exists public.student_visible_tests;
+
+create view public.student_visible_tests
+with (security_barrier = true)
+as
+select
+  t.id,
+  t.class_code,
+  t.course_id,
+  t.title,
+  t.description,
+  t.published,
+  t.created_at,
+  t.due_date,
+  t.time_limit_minutes,
+  t.max_attempts,
+  t.allow_review
+from public.tests t
+where t.published = true
+  and exists (
+    select 1
+    from public.student_classes sc
+    where sc.student_id = auth.uid()
+      and sc.code = t.class_code
+  );
+
+create view public.student_visible_test_questions
+with (security_barrier = true)
+as
+select
+  q.id,
+  q.test_id,
+  q.question_order,
+  q.question,
+  q.question_type,
+  case
+    when lower(replace(replace(coalesce(q.question_type, 'multiple_choice'), '-', '_'), ' ', '_'))
+      in ('fill_blank', 'fill_in_blank', 'matching', 'match') then null
+    else q.option_a
+  end as option_a,
+  q.option_b,
+  q.option_c,
+  q.option_d
+from public.test_questions q
+join public.tests t on t.id = q.test_id
+where t.published = true
+  and exists (
+    select 1
+    from public.student_classes sc
+    where sc.student_id = auth.uid()
+      and sc.code = t.class_code
+  );
+
+grant select on public.student_visible_tests to authenticated;
+grant select on public.student_visible_test_questions to authenticated;
+
 -- Recreate the active submission RPC with one consistent lock order:
 -- advisory lock -> attempt row lock. This prevents start/submit deadlocks.
 drop function if exists public.submit_test_attempt(uuid, uuid, jsonb, boolean);
@@ -136,15 +231,13 @@ begin
     end if;
     if v_test.time_limit_minutes is not null
        and v_test.time_limit_minutes > 0
-       and now() >= v_attempt.started_at
-         + make_interval(mins => v_test.time_limit_minutes) then
+       and now() >= v_attempt.started_at + make_interval(mins => v_test.time_limit_minutes) then
       raise exception 'TIME_LIMIT_EXPIRED';
     end if;
   else
     if v_test.time_limit_minutes is null
        or v_test.time_limit_minutes <= 0
-       or now() < v_attempt.started_at
-         + make_interval(mins => v_test.time_limit_minutes) then
+       or now() < v_attempt.started_at + make_interval(mins => v_test.time_limit_minutes) then
       raise exception 'AUTO_SUBMIT_NOT_EXPIRED';
     end if;
   end if;
@@ -237,4 +330,5 @@ grant execute on function public.start_test_attempt(uuid, uuid) to service_role;
 
 revoke all on function public.submit_test_attempt(uuid, uuid, jsonb, boolean)
 from public, anon, authenticated;
-grant execute on function public.submit_test_attempt(uuid, uuid, jsonb, boolean) to service_role;
+grant execute on function public.submit_test_attempt(uuid, uuid, jsonb, boolean)
+to service_role;
