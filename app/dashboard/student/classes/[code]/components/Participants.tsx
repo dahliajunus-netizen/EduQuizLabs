@@ -16,7 +16,9 @@ function getHeaders() {
   return { apikey: key, Authorization: `Bearer ${token || key}` };
 }
 
-type Participant = { student_id: string; full_name: string | null };
+type Participant = { student_id: string; full_name: string | null; avatar_url?: string | null };
+
+type UserProfile = { id: string; full_name: string | null; avatar_url: string | null };
 
 export default function Participants() {
   const params = useParams();
@@ -64,7 +66,34 @@ export default function Participants() {
       const text = await response.text();
       if (!response.ok) throw new Error(text || `Request failed (${response.status})`);
       const rows = text ? JSON.parse(text) : [];
-      setParticipants(Array.isArray(rows) ? rows : []);
+      const base = Array.isArray(rows) ? rows : [];
+
+      // The participants RPC supplies the student IDs/names. Fetch the matching
+      // public profile fields separately so teachers can see each student's avatar.
+      const ids = base.map((p: any) => String(p.student_id || '')).filter(Boolean);
+      let profiles: UserProfile[] = [];
+      if (ids.length) {
+        const inFilter = `(${ids.map((id: string) => encodeURIComponent(id)).join(',')})`;
+        const profileResponse = await fetch(
+          `${url}/rest/v1/users?id=in.${inFilter}&select=id,full_name,avatar_url`,
+          { headers: getHeaders(), cache: 'no-store' },
+        );
+        if (profileResponse.ok) {
+          const profileText = await profileResponse.text();
+          const parsed = profileText ? JSON.parse(profileText) : [];
+          if (Array.isArray(parsed)) profiles = parsed;
+        }
+      }
+
+      const profileMap = new Map(profiles.map(profile => [String(profile.id), profile]));
+      setParticipants(base.map((participant: any) => {
+        const profile = profileMap.get(String(participant.student_id));
+        return {
+          student_id: String(participant.student_id),
+          full_name: profile?.full_name ?? participant.full_name ?? null,
+          avatar_url: profile?.avatar_url ?? participant.avatar_url ?? null,
+        };
+      }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load participants.');
       setParticipants([]);
@@ -99,10 +128,17 @@ export default function Participants() {
           {!loading && error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
           {!loading && !error && participants.length === 0 && <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No students have joined this class yet.</div>}
           {!loading && !error && participants.length > 0 && <div className="space-y-2">
-            {participants.map((participant, index) => <div key={participant.student_id} className="flex items-center gap-3 rounded-xl border p-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">{index + 1}</div>
-              <span className="font-medium">{participant.full_name?.trim() || 'Unnamed student'}</span>
-            </div>)}
+            {participants.map((participant, index) => {
+              const displayName = participant.full_name?.trim() || 'Unnamed student';
+              const initial = displayName.charAt(0).toUpperCase();
+              return <div key={participant.student_id} className="flex items-center gap-3 rounded-xl border p-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">{index + 1}</div>
+                <div className="size-11 shrink-0 overflow-hidden rounded-full border bg-primary/10">
+                  {participant.avatar_url ? <img src={participant.avatar_url} alt={`${displayName} profile picture`} className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-base font-black text-primary">{initial}</div>}
+                </div>
+                <span className="min-w-0 truncate font-medium">{displayName}</span>
+              </div>;
+            })}
           </div>}
         </CardContent>
       </Card>
