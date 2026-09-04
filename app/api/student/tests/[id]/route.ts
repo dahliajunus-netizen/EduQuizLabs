@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticatedUser, serverConfigOk, supabaseDb, supabaseRpc } from '@/lib/server/supabase';
 import { hashAssessmentPassword, verifyAssessmentPassword } from '@/lib/server/password';
-import { assessmentPasswordRateLimited } from '@/lib/server/rate-limit';
 
 const safeTest = (test: any) => ({
   id: test.id,
@@ -28,6 +27,17 @@ const safeQuestions = (rows: any[]) => rows.map(q => ({
   option_c: q.option_c,
   option_d: q.option_d,
 }));
+
+const normalizedAnswerPayload = (value: unknown) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  try {
+    const json = JSON.stringify(value);
+    if (json.length > 256_000) return null;
+  } catch {
+    return null;
+  }
+  return value as Record<string, unknown>;
+};
 
 async function authorizeStudent(userId: string, test: any) {
   const code = String(test.class_code || '').trim();
@@ -98,6 +108,7 @@ function rpcErrorCode(error: unknown) {
   if (text.includes('DUE_DATE_PASSED')) return 'DUE_DATE_PASSED';
   if (text.includes('TIME_LIMIT_EXPIRED')) return 'TIME_LIMIT_EXPIRED';
   if (text.includes('AUTO_SUBMIT_NOT_EXPIRED')) return 'AUTO_SUBMIT_NOT_EXPIRED';
+  if (text.includes('RATE_LIMIT')) return 'RATE_LIMIT';
   return null;
 }
 
@@ -153,9 +164,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       const expected = String(test.test_password || '').trim();
       if (expected) {
-        if (assessmentPasswordRateLimited(`${user.id}:${id}`)) {
-          return NextResponse.json({ error: 'Too many password attempts. Please wait a minute and try again.' }, { status: 429 });
+        let limited = false;
+        try {
+          limited = Boolean(await supabaseRpc('check_assessment_password_rate_limit', {
+            p_rate_key: `${user.id}:${id}`,
+            p_max_attempts: 8,
+            p_window_seconds: 60,
+          }));
+        } catch (error) {
+          console.error('[Student Test API] Rate limiter failed:', error);
         }
+        if (limited) return NextResponse.json({ error: 'Too many password attempts. Please wait a minute and try again.' }, { status: 429 });
+
         const result = await verifyAssessmentPassword(String(body?.password || ''), expected);
         if (!result.valid) return NextResponse.json({ error: 'Incorrect assessment password.' }, { status: 401 });
         if (result.legacy) {
@@ -186,7 +206,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const attempt = await getAttempt(id, user.id);
     if (!attempt) return NextResponse.json({ error: 'No active test attempt was found.' }, { status: 409 });
-    const answers = body?.answers && typeof body.answers === 'object' ? body.answers : {};
+    const answers = normalizedAnswerPayload(body?.answers);
+    if (!answers) return NextResponse.json({ error: 'Answers must be a JSON object smaller than 256 KB.' }, { status: 400 });
 
     if (action === 'save') {
       if (expired(attempt, test)) {
