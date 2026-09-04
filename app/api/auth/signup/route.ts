@@ -15,37 +15,6 @@ async function createSession(email: string, password: string) {
   return { response, data };
 }
 
-async function updateAuthUser(userId: string, payload: Record<string, unknown>) {
-  return fetch(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
-    method: 'PUT',
-    headers: {
-      apikey: supabaseAdminKey!,
-      Authorization: `Bearer ${supabaseAdminKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-    cache: 'no-store',
-  });
-}
-
-async function findExistingUser(email: string) {
-  const response = await fetch(`${supabaseUrl}/auth/v1/admin/users?page=1&per_page=1000`, {
-    method: 'GET',
-    headers: {
-      apikey: supabaseAdminKey!,
-      Authorization: `Bearer ${supabaseAdminKey}`,
-    },
-    cache: 'no-store',
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) return null;
-
-  return Array.isArray(data?.users)
-    ? data.users.find((user: any) => String(user?.email || '').trim().toLowerCase() === email)
-    : null;
-}
-
 function calculateExactAge(birthday: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthday);
   if (!match) return null;
@@ -75,7 +44,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Supabase public environment variables are missing.' }, { status: 500 });
     }
     if (!supabaseAdminKey) {
-      return NextResponse.json({ error: 'Supabase admin key is missing. Add SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SECRET_KEY to Vercel Environment Variables, then redeploy.' }, { status: 500 });
+      return NextResponse.json({ error: 'Supabase admin key is missing.' }, { status: 500 });
     }
 
     const body = await request.json();
@@ -96,8 +65,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 });
     }
 
-    // Never trust the age supplied by the browser. Derive it from the
-    // birthday on the server so teacher eligibility cannot be bypassed.
     const age = calculateExactAge(birthday);
     if (age === null) {
       return NextResponse.json({ error: 'Please enter a valid birthday.' }, { status: 400 });
@@ -126,53 +93,9 @@ export async function POST(request: Request) {
       const lower = message.toLowerCase();
 
       if (createResponse.status === 422 || lower.includes('already') || lower.includes('registered') || lower.includes('exists')) {
-        const existingUser = await findExistingUser(email);
-
-        if (existingUser?.id) {
-          const wasConfirmed = Boolean(existingUser.email_confirmed_at);
-
-          // Password login is blocked while email confirmation is missing.
-          // Temporarily confirm only to verify the submitted password.
-          if (!wasConfirmed) {
-            const confirmResponse = await updateAuthUser(existingUser.id, { email_confirm: true });
-            if (!confirmResponse.ok) {
-              console.error('[Signup API] Could not temporarily confirm existing user:', await confirmResponse.text());
-              return NextResponse.json({ error: 'The existing account could not be verified. Please use Sign in or Forgot password.' }, { status: 409 });
-            }
-          }
-
-          const session = await createSession(email, password);
-
-          if (session.response.ok && session.data?.access_token && session.data?.user?.id) {
-            const updateResponse = await updateAuthUser(existingUser.id, {
-              email_confirm: true,
-              user_metadata: metadata,
-            });
-
-            if (!updateResponse.ok) {
-              console.error('[Signup API] Existing user metadata update failed:', await updateResponse.text());
-            }
-
-            return NextResponse.json({
-              access_token: session.data.access_token,
-              refresh_token: session.data.refresh_token,
-              user: session.data.user,
-              existing_account: true,
-            });
-          }
-
-          if (!wasConfirmed) {
-            const restoreResponse = await updateAuthUser(existingUser.id, { email_confirm: false });
-            if (!restoreResponse.ok) {
-              console.error('[Signup API] Failed to restore unconfirmed state:', await restoreResponse.text());
-            }
-          }
-
-          return NextResponse.json({
-            error: 'An account with this email already exists. The password you entered does not match that account. Please sign in with the existing password or use Forgot password.',
-          }, { status: 409 });
-        }
-
+        // Do not enumerate existing accounts or temporarily modify their
+        // verification state to test a password. Existing users should sign in
+        // or use the normal password-recovery flow.
         return NextResponse.json({ error: 'An account with this email already exists. Please sign in instead.' }, { status: 409 });
       }
 
