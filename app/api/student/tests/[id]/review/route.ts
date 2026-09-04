@@ -1,19 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticatedUser, serverConfigOk, supabaseDb } from '@/lib/server/supabase';
 
-function safeQuestions(rows: any[]) {
-  return rows.map(q => ({
-    id: q.id,
-    question_order: q.question_order,
-    question: q.question,
-    question_type: q.question_type,
-    option_a: q.option_a,
-    option_b: q.option_b,
-    option_c: q.option_c,
-    option_d: q.option_d,
-    correct_answer: q.correct_answer,
-    points: q.points,
-  }));
+function typeOf(value: unknown) {
+  return String(value || 'multiple_choice').toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
+}
+
+function normalize(value: unknown) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function isCorrect(q: any, answer: unknown) {
+  const type = typeOf(q.question_type);
+  const submitted = normalize(answer);
+  if (!submitted) return false;
+
+  if (type === 'matching' || type === 'match') {
+    let pairs: any[] = [];
+    let submittedMap: Record<string, unknown> = {};
+    try {
+      const rawPairs = JSON.parse(String(q.option_a || '[]'));
+      if (Array.isArray(rawPairs)) pairs = rawPairs;
+      const rawAnswer = JSON.parse(String(answer || '{}'));
+      if (rawAnswer && typeof rawAnswer === 'object' && !Array.isArray(rawAnswer)) submittedMap = rawAnswer;
+    } catch {
+      return false;
+    }
+    return pairs.length > 0 && pairs.every(pair => normalize(submittedMap[String(pair?.left || '')]) === normalize(pair?.right));
+  }
+
+  if (type === 'fill_blank' || type === 'fill_in_blank') {
+    const accepted = normalize(q.option_a || q.correct_answer)
+      .split(/\s*(?:\|\||;)\s*/)
+      .map(normalize)
+      .filter(Boolean);
+    return accepted.includes(submitted);
+  }
+
+  const correct = normalize(q.correct_answer);
+  if (type === 'true_false' || type === 'truefalse' || type === 'boolean') {
+    return (submitted === 'a' && ['a', 'true'].includes(correct))
+      || (submitted === 'b' && ['b', 'false'].includes(correct))
+      || submitted === correct;
+  }
+
+  return submitted === correct;
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -34,12 +64,27 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const submissions = await supabaseDb(`test_submissions?test_id=eq.${encodeURIComponent(id)}&student_id=eq.${encodeURIComponent(current.id)}&select=id,test_id,student_id,answers,score&order=id.desc`);
     if (!submissions?.length) return NextResponse.json({ error: 'No completed attempt was found.' }, { status: 404 });
 
-    const questions = await supabaseDb(`test_questions?test_id=eq.${encodeURIComponent(id)}&select=id,question_order,question,question_type,option_a,option_b,option_c,option_d,correct_answer,points&order=question_order.asc,id.asc`);
+    const questions = await supabaseDb(`test_questions?test_id=eq.${encodeURIComponent(id)}&select=id,question_order,question,question_type,option_a,option_b,option_c,option_d&order=question_order.asc,id.asc`);
+    const submission = submissions[0];
+    const answers = submission.answers && typeof submission.answers === 'object' ? submission.answers : {};
+
+    const safeQuestions = (Array.isArray(questions) ? questions : []).map((q: any) => ({
+      id: q.id,
+      question_order: q.question_order,
+      question: q.question,
+      question_type: q.question_type,
+      option_a: q.option_a,
+      option_b: q.option_b,
+      option_c: q.option_c,
+      option_d: q.option_d,
+      is_correct: isCorrect(q, answers?.[q.id]),
+    }));
+
     return NextResponse.json({
       test: { id: test.id, title: test.title, max_attempts: test.max_attempts, allow_review: test.allow_review },
-      submission: submissions[0],
+      submission,
       attempts_used: submissions.length,
-      questions: safeQuestions(questions),
+      questions: safeQuestions,
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to load review.' }, { status: 500 });
