@@ -1,0 +1,49 @@
+name: Fix live quiz skip button click area
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-live-quiz-skip-click.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make skip control clickable
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('app/dashboard/teacher/live-quiz/page.tsx')
+          s=p.read_text()
+          pos=s.find('<SkipForward')
+          if pos < 0:
+            raise SystemExit('SkipForward control not found')
+          # Find the Button opening tag containing the SkipForward icon and ensure it
+          # sits above any decorative/status layers and accepts pointer input.
+          start=s.rfind('<Button',0,pos)
+          end=s.find('>',pos)
+          if start < 0 or end < 0:
+            raise SystemExit('Skip button opening tag not found')
+          tag=s[start:end+1]
+          if 'z-50' not in tag:
+            tag=tag.replace('className="','className="relative z-50 pointer-events-auto ')
+          elif 'pointer-events-auto' not in tag:
+            tag=tag.replace('className="','className="pointer-events-auto ')
+          s=s[:start]+tag+s[end+1:]
+          p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/dashboard/teacher/live-quiz/page.tsx
+          git diff --cached --quiet || git commit -m 'Fix live quiz skip button click area'
+          git push
+      - name: Remove temporary workflow
+        run: |
+          rm -f .github/workflows/fix-live-quiz-skip-click.yml
+          git add -A
+          git diff --cached --quiet || git commit -m 'Remove temporary skip click workflow'
+          git push
