@@ -80,11 +80,12 @@ async function createAttempt(id: string, userId: string) {
   return supabaseRpc('start_test_attempt', { p_test_id: id, p_student_id: userId });
 }
 
-async function completeAttempt(attempt: any, answers: Record<string, unknown>) {
+async function completeAttempt(attempt: any, answers: Record<string, unknown>, autoSubmit = false) {
   return supabaseRpc('submit_test_attempt', {
     p_attempt_id: attempt.id,
     p_student_id: attempt.student_id,
     p_answers: answers,
+    p_auto_submit: autoSubmit,
   });
 }
 
@@ -96,6 +97,7 @@ function rpcErrorCode(error: unknown) {
   if (text.includes('TEST_NOT_FOUND')) return 'TEST_NOT_FOUND';
   if (text.includes('DUE_DATE_PASSED')) return 'DUE_DATE_PASSED';
   if (text.includes('TIME_LIMIT_EXPIRED')) return 'TIME_LIMIT_EXPIRED';
+  if (text.includes('AUTO_SUBMIT_NOT_EXPIRED')) return 'AUTO_SUBMIT_NOT_EXPIRED';
   return null;
 }
 
@@ -106,6 +108,7 @@ function rpcErrorResponse(error: unknown) {
   if (code === 'TIME_LIMIT_EXPIRED') return NextResponse.json({ error: 'This test attempt has expired.' }, { status: 409 });
   if (code === 'ALREADY_SUBMITTED') return NextResponse.json({ error: 'This attempt has already been submitted.' }, { status: 409 });
   if (code === 'ATTEMPT_NOT_FOUND') return NextResponse.json({ error: 'No active test attempt was found.' }, { status: 409 });
+  if (code === 'AUTO_SUBMIT_NOT_EXPIRED') return NextResponse.json({ error: 'This attempt has not reached its time limit.' }, { status: 409 });
   return null;
 }
 
@@ -188,7 +191,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (action === 'save') {
       if (expired(attempt, test)) {
         try {
-          const result = await completeAttempt(attempt, answers);
+          const result = await completeAttempt(attempt, answers, true);
           return NextResponse.json({ ok: true, auto_submitted: true, ...result });
         } catch (error) {
           const response = rpcErrorResponse(error);
@@ -213,7 +216,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (action === 'submit') {
       try {
-        const result = await completeAttempt(attempt, answers);
+        const result = await completeAttempt(attempt, answers, false);
         return NextResponse.json(result);
       } catch (error) {
         const response = rpcErrorResponse(error);
