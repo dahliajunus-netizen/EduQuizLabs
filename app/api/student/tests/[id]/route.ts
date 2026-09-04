@@ -16,17 +16,43 @@ const safeTest = (test: any) => ({
   requires_password: Boolean(String(test.test_password || '').trim()),
 });
 
-const safeQuestions = (rows: any[]) => rows.map(q => ({
-  id: q.id,
-  test_id: q.test_id,
-  question_order: q.question_order,
-  question: q.question,
-  question_type: q.question_type,
-  option_a: q.option_a,
-  option_b: q.option_b,
-  option_c: q.option_c,
-  option_d: q.option_d,
-}));
+function safeQuestions(rows: any[]) {
+  return rows.map(q => {
+    const type = String(q.question_type || 'multiple_choice').toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
+    if (type === 'matching' || type === 'match') {
+      let pairs: any[] = [];
+      try {
+        const parsed = JSON.parse(String(q.option_a || '[]'));
+        if (Array.isArray(parsed)) pairs = parsed;
+      } catch {}
+      const lefts = pairs.map(pair => String(pair?.left || '').trim()).filter(Boolean);
+      const rights = Array.from(new Set(pairs.map(pair => String(pair?.right || '').trim()).filter(Boolean)));
+      return {
+        id: q.id,
+        test_id: q.test_id,
+        question_order: q.question_order,
+        question: q.question,
+        question_type: q.question_type,
+        option_a: JSON.stringify(lefts.map(left => ({ left }))),
+        option_b: JSON.stringify(rights),
+        option_c: null,
+        option_d: null,
+      };
+    }
+
+    return {
+      id: q.id,
+      test_id: q.test_id,
+      question_order: q.question_order,
+      question: q.question,
+      question_type: q.question_type,
+      option_a: q.option_a,
+      option_b: q.option_b,
+      option_c: q.option_c,
+      option_d: q.option_d,
+    };
+  });
+}
 
 const normalizedAnswerPayload = (value: unknown) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -164,7 +190,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       const expected = String(test.test_password || '').trim();
       if (expected) {
-        let limited = false;
+        let limited: boolean;
         try {
           limited = Boolean(await supabaseRpc('check_assessment_password_rate_limit', {
             p_rate_key: `${user.id}:${id}`,
@@ -172,7 +198,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             p_window_seconds: 60,
           }));
         } catch (error) {
-          console.error('[Student Test API] Rate limiter failed:', error);
+          console.error('[Student Test API] Rate limiter failed closed:', error);
+          return NextResponse.json({ error: 'Password verification is temporarily unavailable. Please try again shortly.' }, { status: 503 });
         }
         if (limited) return NextResponse.json({ error: 'Too many password attempts. Please wait a minute and try again.' }, { status: 429 });
 
