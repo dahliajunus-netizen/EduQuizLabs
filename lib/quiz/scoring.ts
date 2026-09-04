@@ -1,8 +1,8 @@
 export type QuizQuestion = {
+  id?: string;
   question_type?: string | null;
   option_a?: string | null;
   correct_answer?: string | null;
-  points?: number | null;
 };
 
 function normalize(value: unknown) {
@@ -10,7 +10,7 @@ function normalize(value: unknown) {
 }
 
 function questionType(q: QuizQuestion) {
-  return String(q.question_type || 'multiple_choice').toLowerCase().replace(/-/g, '_');
+  return String(q.question_type || 'multiple_choice').toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
 }
 
 export function isCorrect(q: QuizQuestion, value: unknown) {
@@ -29,7 +29,7 @@ export function isCorrect(q: QuizQuestion, value: unknown) {
       const submitted = JSON.parse(String(value || '{}'));
       const pairs = JSON.parse(String(q.option_a || '[]'));
       return Array.isArray(pairs) && pairs.length > 0 && pairs.every((pair: any) =>
-        normalizedPairValue(submitted?.[pair.left]) === normalize(pair.right)
+        normalize(submitted?.[pair.left]) === normalize(pair.right)
       );
     } catch {
       return false;
@@ -39,7 +39,7 @@ export function isCorrect(q: QuizQuestion, value: unknown) {
   const submitted = normalize(value);
   const correct = normalize(q.correct_answer);
 
-  if (type === 'true_false') {
+  if (type === 'true_false' || type === 'truefalse' || type === 'boolean') {
     const map = (x: string) =>
       x === 'a' || x === 'true' ? 'a' : x === 'b' || x === 'false' ? 'b' : x;
     return map(submitted) === map(correct);
@@ -48,16 +48,12 @@ export function isCorrect(q: QuizQuestion, value: unknown) {
   return submitted === correct;
 }
 
-function normalizedPairValue(value: unknown) {
-  return normalize(value);
-}
-
+/** Every question has equal weight. A complete test is always worth 100 points. */
 export function calculateScore(questions: QuizQuestion[], answers: Record<string, unknown>) {
-  const totalPoints = questions.reduce((sum, q) => sum + Number(q.points || 0), 0) || 100;
-  const earned = questions.reduce(
-    (sum, q: QuizQuestion & { id?: string }) =>
-      sum + (isCorrect(q, q.id ? answers[q.id] : undefined) ? Number(q.points || 0) : 0),
+  if (!questions.length) return 0;
+  const correct = questions.reduce(
+    (count, question) => count + (isCorrect(question, question.id ? answers[question.id] : undefined) ? 1 : 0),
     0,
   );
-  return Math.round((earned / totalPoints) * 10000) / 100;
+  return Math.round((correct / questions.length) * 10000) / 100;
 }
