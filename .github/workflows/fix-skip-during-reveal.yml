@@ -1,0 +1,37 @@
+name: Fix skip during question reveal
+on:
+  push:
+    branches: [main]
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable skip during reveal
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/dashboard/teacher/live-quiz/page.tsx')
+          s=p.read_text()
+          old='disabled={isResults||isReveal}'
+          if old not in s:
+              raise SystemExit('Expected skip disabled condition not found')
+          s=s.replace(old,'disabled={isResults}',1)
+          p.write_text(s)
+          PY
+      - name: Commit and push
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/dashboard/teacher/live-quiz/page.tsx
+          git commit -m "allow skip during question reveal"
+          git push
+      - name: Remove temporary workflows
+        if: success()
+        run: |
+          git rm -f .github/workflows/fix-skip-button.yml .github/workflows/repair-skip-button.yml .github/workflows/inspect-skip-button.yml .github/workflows/fix-skip-during-reveal.yml || true
+          git commit -m "remove temporary skip workflows" || true
+          git push
