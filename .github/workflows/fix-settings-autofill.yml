@@ -1,0 +1,61 @@
+name: Fix settings autofill
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-settings-autofill.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch autofill-resistant fields
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('app/settings/page.tsx')
+          s = p.read_text()
+
+          # Country search: readonly until a real user focus prevents browsers/password
+          # managers from treating the field as an email/login field during page load.
+          s = s.replace('name="country-search"', 'name="country-picker-query"')
+          s = s.replace('autoComplete="new-password"', 'autoComplete="off"', 1)
+          s = s.replace('type="search"', 'type="text"', 1)
+          marker = 'name="country-picker-query"'
+          if marker in s and 'onFocus={(e)=>e.currentTarget.removeAttribute(\'readonly\')}' not in s:
+              s = s.replace(marker, marker + ' readOnly onFocus={(e)=>e.currentTarget.removeAttribute(\'readonly\')}')
+
+          # Password inputs: do not expose them as current-password fields to browser
+          # autofill. They become editable only after the user focuses them.
+          import re
+          def patch_password(m):
+              tag = m.group(0)
+              if 'readOnly' not in tag:
+                  tag = tag.replace('<Input', '<Input readOnly onFocus={(e)=>e.currentTarget.removeAttribute(\'readonly\')}', 1)
+              tag = re.sub(r'autoComplete="[^"]*"', 'autoComplete="off"', tag)
+              return tag
+          s = re.sub(r'<Input[^>]*type="password"[^>]*/>', patch_password, s)
+          s = re.sub(r'<input[^>]*type="password"[^>]*/?>', patch_password, s)
+
+          p.write_text(s)
+          print('patched', p)
+      - name: Verify
+        run: |
+          grep -n "country-picker-query\|type=\"password\"\|readOnly" "app/settings/page.tsx" | head -80
+      - name: Commit and remove workflow
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/settings/page.tsx
+          git diff --cached --quiet || git commit -m 'fix settings autofill behavior'
+          git push
+          rm -f .github/workflows/fix-settings-autofill.yml
+          git add .github/workflows/fix-settings-autofill.yml
+          git commit -m 'remove temporary autofill patch workflow' || true
+          git push || true
