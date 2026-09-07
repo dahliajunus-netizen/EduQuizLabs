@@ -9,10 +9,18 @@ export function serverConfigOk() {
 }
 
 export async function authenticatedUser(request: NextRequest) {
+  if (!supabaseUrl || !anonKey) return null;
+
+  // Prefer the HttpOnly cookie. Keep Bearer support temporarily so existing
+  // clients can migrate without breaking in-flight sessions.
+  const cookieToken = request.cookies.get('eduquiz_access_token')?.value || '';
   const authorization = request.headers.get('authorization') || '';
-  if (!authorization.startsWith('Bearer ') || !supabaseUrl || !anonKey) return null;
+  const bearerToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+  const accessToken = cookieToken || bearerToken;
+  if (!accessToken) return null;
+
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: { apikey: anonKey, Authorization: authorization },
+    headers: { apikey: anonKey, Authorization: `Bearer ${accessToken}` },
     cache: 'no-store',
   });
   return response.ok ? response.json() : null;
