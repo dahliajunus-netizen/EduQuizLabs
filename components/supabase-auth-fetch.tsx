@@ -124,8 +124,22 @@ function rewriteStudentQuizRead(requestUrl: string, method: string) {
       return apiUrl.toString()
     }
     if (parsed.pathname === '/rest/v1/class_courses') {
+      if (method.toUpperCase() === 'DELETE') {
+        const apiUrl = new URL('/api/teacher/classes/resources', window.location.origin)
+        apiUrl.search = parsed.search
+        apiUrl.searchParams.set('_resource', 'class_courses')
+        return apiUrl.toString()
+      }
       const apiUrl = new URL('/api/teacher/classes/courses', window.location.origin)
       apiUrl.search = parsed.search
+      return apiUrl.toString()
+    }
+    const protectedDeleteResources = new Set(['course_materials', 'course_assignments', 'assignment_submissions', 'tests', 'test_questions', 'test_submissions', 'test_attempts'])
+    if (method.toUpperCase() === 'DELETE' && protectedDeleteResources.has(parsed.pathname.replace('/rest/v1/', ''))) {
+      const resource = parsed.pathname.replace('/rest/v1/', '')
+      const apiUrl = new URL('/api/teacher/classes/resources', window.location.origin)
+      apiUrl.search = parsed.search
+      apiUrl.searchParams.set('_resource', resource)
       return apiUrl.toString()
     }
     if (!['GET', 'HEAD'].includes(method.toUpperCase())) return requestUrl
