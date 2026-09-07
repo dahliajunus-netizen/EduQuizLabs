@@ -18,33 +18,25 @@ export function LoginForm() {
   async function handleSubmit(event:React.FormEvent<HTMLFormElement>){
     event.preventDefault();setError(null);setPasswordTouched(true);const cleanEmail=email.trim().toLowerCase();
     if(!cleanEmail)return setError('Please enter your email.');if(password.length<8)return setError('Password must be at least 8 characters.');
-    const supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/,''),supabaseAnonKey=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
-    if(!supabaseUrl||!supabaseAnonKey)return setError('Supabase configuration is missing. Please check the Vercel environment variables.');
     setSubmitting(true);
     try{
-      const authResponse=await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:supabaseAnonKey,'Content-Type':'application/json'},body:JSON.stringify({email:cleanEmail,password}),cache:'no-store'});
-      const authText=await authResponse.text();let authData:any={};try{authData=authText?JSON.parse(authText):{}}catch{}
-      if(!authResponse.ok||!authData.access_token||!authData.user?.id){const message=String(authData.error_description||authData.message||authData.msg||authData.error||'').trim(),lower=message.toLowerCase();if(lower.includes('email not confirmed')||lower.includes('confirm your email'))setError('Please confirm your email before signing in.');else if(lower.includes('invalid login credentials')||lower.includes('invalid email or password')||lower.includes('invalid_grant'))setError('Invalid email or password.');else if(message)setError(`Sign in failed: ${message}`);else setError(`Sign in failed (HTTP ${authResponse.status}). Please try again.`);return;}
-      const userId=String(authData.user.id),accessToken=String(authData.access_token),refreshToken=String(authData.refresh_token||'');
-      const authHeaders={apikey:supabaseAnonKey,Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'};
-      let profile:any=null;
-      const profileResponse=await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${encodeURIComponent(userId)}&select=id,full_name,email,role`,{headers:authHeaders,cache:'no-store'});const profileText=await profileResponse.text();let rows:any=[];try{rows=profileText?JSON.parse(profileText):[]}catch{}
-      if(profileResponse.ok&&Array.isArray(rows)&&rows[0])profile=rows[0];
-      if(!profile){console.error('[Login] Auth succeeded but public.users profile was not found:',profileText);setError('Your profile could not be loaded. Please try again.');return;}
-      const role=String(profile.role||'student').trim().toLowerCase(),validRole=role==='teacher'||role==='student'?role:'student';
-      const currentUser={id:userId,user_id:userId,student_id:validRole==='student'?userId:undefined,fullName:profile.full_name||authData.user.user_metadata?.full_name||'User',email:profile.email||authData.user.email||cleanEmail,role:validRole,accessToken};
-      localStorage.setItem('current_user',JSON.stringify(currentUser));localStorage.setItem('supabase_access_token',accessToken);if(refreshToken)localStorage.setItem('supabase_refresh_token',refreshToken);localStorage.setItem('supabase_user_id',userId);
-      localStorage.setItem('eduquizlabs_remembered_session',JSON.stringify({current_user:currentUser,access_token:accessToken,refresh_token:refreshToken,user_id:userId}));
-      router.replace(`/dashboard/${validRole}`);
-    }catch(err){console.error('[Login] Login error:',err);setError('Could not connect to Supabase. Please try again.');}finally{setSubmitting(false);}
+      const response=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:cleanEmail,password}),cache:'no-store'});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok||!data?.user?.id){throw new Error(String(data?.error||'Unable to sign in.'));}
+      // Keep only non-secret profile information in browser storage. The
+      // access/refresh tokens are now HttpOnly cookies and are inaccessible to JS.
+      localStorage.setItem('current_user',JSON.stringify(data.user));
+      localStorage.setItem('supabase_user_id',String(data.user.id));
+      localStorage.removeItem('supabase_access_token');
+      localStorage.removeItem('supabase_refresh_token');
+      localStorage.removeItem('eduquizlabs_remembered_session');
+      const role=String(data.user.role||'student').trim().toLowerCase();
+      router.replace(`/dashboard/${role==='teacher'?'teacher':'student'}`);
+    }catch(err){console.error('[Login] Login error:',err);setError(err instanceof Error?err.message:'Could not connect to the authentication service.');}finally{setSubmitting(false);}
   }
   return <div className="relative">
     <div className="mb-5 flex items-center justify-between">
-      <Link href="/join?from=signin" className="inline-flex">
-        <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 px-3 text-xs">
-          <Radio size={14}/> Join Live Quiz
-        </Button>
-      </Link>
+      <Link href="/join?from=signin" className="inline-flex"><Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 px-3 text-xs"><Radio size={14}/> Join Live Quiz</Button></Link>
       <Button type="button" variant="ghost" size="sm" onClick={()=>setIsCreditsOpen(true)} className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"><Award size={14}/> Credits</Button>
     </div>
     {error&&<div role="alert" className="mb-5 break-words rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm font-medium text-red-500">{error}</div>}
