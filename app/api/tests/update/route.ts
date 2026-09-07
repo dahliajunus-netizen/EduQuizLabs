@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireTeacher, requireTeacherClassOwnership } from '@/lib/server/auth';
+import { csrfResponse } from '@/lib/server/csrf';
 import { serverConfigOk, supabaseDb } from '@/lib/server/supabase';
 import { hashAssessmentPassword } from '@/lib/server/password';
 
 export async function PATCH(request: NextRequest) {
+  const blocked = csrfResponse(request);
+  if (blocked) return blocked;
   try {
     if (!serverConfigOk()) return NextResponse.json({ error: 'Server configuration is missing.' }, { status: 500 });
     const user = await requireTeacher(request);
