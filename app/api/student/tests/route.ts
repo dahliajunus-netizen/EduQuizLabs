@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticatedUser, serverConfigOk, supabaseDb } from '@/lib/server/supabase';
+import { requireStudent } from '@/lib/server/auth';
+import { serverConfigOk, supabaseDb } from '@/lib/server/supabase';
 
 export async function GET(request: NextRequest) {
   try {
     if (!serverConfigOk()) return NextResponse.json({ error: 'Server configuration is missing.' }, { status: 500 });
-    const user = await authenticatedUser(request);
-    if (!user?.id) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+    const user = await requireStudent(request);
+    if (!user) return NextResponse.json({ error: 'Student authentication required.' }, { status: 401 });
 
     const classes = await supabaseDb(`student_classes?student_id=eq.${encodeURIComponent(user.id)}&select=code`);
     const codes = [...new Set(
