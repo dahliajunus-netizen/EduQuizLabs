@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthenticatedUser, requireTeacher, requireTeacherClassOwnership } from '@/lib/server/auth';
 import { supabaseDb } from '@/lib/server/supabase';
 
+function readClassCode(request: NextRequest) {
+  const raw = request.nextUrl.searchParams.get('class_code')?.trim() || '';
+  const match = raw.match(/^eq\.([A-Za-z0-9]+)$/);
+  return (match?.[1] || raw).trim().toUpperCase();
+}
+
 export async function GET(request: NextRequest) {
   const user = await requireAuthenticatedUser(request);
   if (!user) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
-  const classCode = request.nextUrl.searchParams.get('class_code')?.trim().toUpperCase() || '';
+  const classCode = readClassCode(request);
   if (!classCode) return NextResponse.json({ error: 'Class code is required.' }, { status: 400 });
 
   try {
