@@ -167,12 +167,22 @@ function isTeacherLiveQuizPage() {
 }
 
 function rewriteStudentQuizRead(requestUrl: string, method: string) {
-  if (!['GET', 'HEAD'].includes(method.toUpperCase())) return requestUrl
-
   try {
     const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '')
     if (!base || !requestUrl.startsWith(`${base}/rest/v1/`)) return requestUrl
     const parsed = new URL(requestUrl)
+
+    // Sensitive teacher class data now goes through the authenticated
+    // Next.js API, because browser JavaScript no longer has the auth token.
+    if (parsed.pathname === '/rest/v1/teacher_classes') {
+      parsed.pathname = '/api/teacher/classes'
+      parsed.searchParams.delete('select')
+      parsed.searchParams.delete('order')
+      parsed.searchParams.delete('teacher_id')
+      return parsed.toString()
+    }
+
+    if (!['GET', 'HEAD'].includes(method.toUpperCase())) return requestUrl
     const role = getCurrentRole()
 
     if (role === 'student') {
