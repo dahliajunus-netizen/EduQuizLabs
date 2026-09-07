@@ -8,11 +8,10 @@ create table if not exists public.signup_rate_limits (
 );
 
 alter table public.signup_rate_limits enable row level security;
+alter table public.signup_rate_limits owner to postgres;
 
 revoke all on table public.signup_rate_limits from anon, authenticated;
 revoke all on function public.consume_signup_rate_limit(text, integer, integer) from public, anon, authenticated;
-
-after table public.signup_rate_limits owner to postgres;
 
 create or replace function public.consume_signup_rate_limit(
   p_key text,
