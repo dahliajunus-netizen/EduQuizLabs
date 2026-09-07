@@ -1,26 +1,21 @@
 import { NextRequest } from 'next/server';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '';
+const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 export function serverConfigOk() {
-  return Boolean(supabaseUrl && anonKey && serviceKey);
+  return Boolean(supabaseUrl && publishableKey && serviceKey);
 }
 
 export async function authenticatedUser(request: NextRequest) {
-  if (!supabaseUrl || !anonKey) return null;
+  if (!supabaseUrl || !publishableKey) return null;
 
-  // Prefer the HttpOnly cookie. Keep Bearer support temporarily so existing
-  // clients can migrate without breaking in-flight sessions.
-  const cookieToken = request.cookies.get('eduquiz_access_token')?.value || '';
-  const authorization = request.headers.get('authorization') || '';
-  const bearerToken = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
-  const accessToken = cookieToken || bearerToken;
+  const accessToken = request.cookies.get('eduquiz_access_token')?.value || '';
   if (!accessToken) return null;
 
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: { apikey: anonKey, Authorization: `Bearer ${accessToken}` },
+    headers: { apikey: publishableKey, Authorization: `Bearer ${accessToken}` },
     cache: 'no-store',
   });
   return response.ok ? response.json() : null;
