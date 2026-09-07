@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { csrfResponse } from '@/lib/server/csrf';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 function setAuthCookies(response: NextResponse, accessToken: string, refreshToken: string) {
   response.cookies.set('eduquiz_access_token', accessToken, {
@@ -23,7 +24,9 @@ function setAuthCookies(response: NextResponse, accessToken: string, refreshToke
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const blocked = csrfResponse(request);
+  if (blocked) return blocked;
   try {
     if (!supabaseUrl || !supabaseAnonKey) {
       return NextResponse.json({ error: 'Supabase configuration is missing.' }, { status: 500 });
