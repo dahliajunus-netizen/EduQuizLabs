@@ -30,11 +30,7 @@ function setGoogleTranslateCookie(language: Language) {
   if (typeof document === 'undefined') return
   const value = language === 'en' ? '' : `/en/${language}`
   const expires = language === 'en' ? '; expires=Thu, 01 Jan 1970 00:00:00 GMT' : '; max-age=31536000'
-
-  // Host-only cookie works reliably on localhost and production domains.
   document.cookie = `googtrans=${value}; path=/${expires}`
-
-  // Also set the domain cookie when possible for Google Translate compatibility.
   if (window.location.hostname.includes('.')) {
     document.cookie = `googtrans=${value}; path=/; domain=${window.location.hostname}${expires}`
   }
@@ -48,19 +44,15 @@ function loadGoogleTranslate() {
     const GoogleTranslate = (window as any).google?.translate?.TranslateElement
     const target = document.getElementById('google_translate_element')
     if (!GoogleTranslate || !target || target.getAttribute('data-loaded') === 'true') return
-
     target.setAttribute('data-loaded', 'true')
     new GoogleTranslate({
       pageLanguage: 'en',
-      includedLanguages: SUPPORTED_LANGUAGES.filter(({ code }) => code !== 'en')
-        .map(({ code }) => code)
-        .join(','),
+      includedLanguages: SUPPORTED_LANGUAGES.filter(({ code }) => code !== 'en').map(({ code }) => code).join(','),
       autoDisplay: false,
     }, 'google_translate_element')
   }
 
   if (document.querySelector('script[data-google-translate]')) return
-
   const script = document.createElement('script')
   script.src = 'https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit'
   script.async = true
@@ -78,7 +70,6 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Error loading language preference:', error)
     }
-
     loadGoogleTranslate()
   }, [])
 
@@ -92,14 +83,10 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   const setLanguage = (newLanguage: Language) => {
     if (!isSupportedLanguage(newLanguage) || newLanguage === language) return
-
     try {
       localStorage.setItem('language', newLanguage)
       setGoogleTranslateCookie(newLanguage)
       setLanguageState(newLanguage)
-
-      // Google Translate reads the googtrans cookie when the page loads.
-      // Reloading ensures the whole app is translated, not just the next render.
       window.location.reload()
     } catch (error) {
       console.error('Error saving language preference:', error)
@@ -107,8 +94,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   }
 
   const t = (key: TranslationKey) => {
-    const selected = translations[language]
-    return selected?.[key] ?? translations.en[key] ?? key
+    const selected = translations[language] as Partial<typeof translations.en>
+    return selected[key] ?? translations.en[key] ?? key
   }
 
   const value = useMemo(() => ({ language, setLanguage, t, languages: SUPPORTED_LANGUAGES }), [language])
