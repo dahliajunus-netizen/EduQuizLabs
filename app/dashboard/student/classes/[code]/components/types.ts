@@ -1,18 +1,18 @@
 export type Course = {
-  id?: string;
+  id: string;
   course_name: string;
   class_code: string;
 };
 
 export type Material = {
-  id?: string;
+  id: string;
   course_id: string;
   name: string;
   link: string;
 };
 
 export type Assignment = {
-  id?: string;
+  id: string;
   course_id: string;
   name: string;
   description: string;
@@ -20,7 +20,7 @@ export type Assignment = {
 };
 
 export type Submission = {
-  id?: string;
+  id: string;
   assignment_id: string;
   student_id?: string | null;
   nickname: string;
@@ -47,11 +47,11 @@ export type QuestionType =
   | 'matching';
 
 export type Question = {
-  id?: string;
+  id: string;
   test_id: string;
   question_order: number;
   question: string;
-  question_type?: QuestionType | null;
+  question_type: QuestionType;
   option_a: string;
   option_b: string;
   option_c: string;
