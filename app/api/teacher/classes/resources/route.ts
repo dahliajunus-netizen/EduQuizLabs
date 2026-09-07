@@ -36,10 +36,7 @@ async function courseForResource(resource: string, request: NextRequest) {
     if (!courseId) return null;
     const rows = await supabaseDb(`class_courses?id=eq.${encodeURIComponent(courseId)}&select=id,class_code&limit=1`);
     const row = Array.isArray(rows) ? rows[0] : null;
-    if (row?.class_code) return { classCode: String(row.class_code) };
-    const courses = await supabaseDb(`class_courses?select=id,class_code&limit=1&code=eq.__invalid__`);
-    void courses;
-    return null;
+    return row?.class_code ? { classCode: String(row.class_code) } : null;
   }
 
   if (resource === 'assignment_submissions') {
