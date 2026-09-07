@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticatedUser, serverConfigOk, supabaseDb } from '@/lib/server/supabase';
+import { requireStudent } from '@/lib/server/auth';
+import { serverConfigOk, supabaseDb } from '@/lib/server/supabase';
 
 function typeOf(value: unknown) {
   return String(value || 'multiple_choice').toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
@@ -49,8 +50,8 @@ function isCorrect(q: any, answer: unknown) {
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     if (!serverConfigOk()) return NextResponse.json({ error: 'Server configuration is missing.' }, { status: 500 });
-    const current = await authenticatedUser(request);
-    if (!current?.id) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+    const current = await requireStudent(request);
+    if (!current) return NextResponse.json({ error: 'Student authentication required.' }, { status: 401 });
 
     const { id } = await params;
     const tests = await supabaseDb(`tests?id=eq.${encodeURIComponent(id)}&published=eq.true&select=id,title,class_code,max_attempts,allow_review&limit=1`);
