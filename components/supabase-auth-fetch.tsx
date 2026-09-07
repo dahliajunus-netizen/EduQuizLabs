@@ -5,14 +5,9 @@ let storageIsolated = false
 let refreshPromise: Promise<string | null> | null = null
 
 const TAB_AUTH_KEYS = new Set([
-  'current_user',
-  'supabase_access_token',
-  'supabase_refresh_token',
-  'supabase_user_id',
-  'access_token',
-  'supabase.auth.token',
+  'current_user', 'supabase_access_token', 'supabase_refresh_token', 'supabase_user_id',
+  'access_token', 'supabase.auth.token',
 ])
-
 const REMEMBERED_SESSION_KEY = 'eduquizlabs_remembered_session'
 
 function restoreRememberedSession() {
@@ -21,12 +16,10 @@ function restoreRememberedSession() {
     const hasTabUser = !!window.sessionStorage.getItem('current_user')
     const hasTabToken = !!window.sessionStorage.getItem('supabase_access_token')
     if (hasTabUser && hasTabToken) return
-
     const raw = window.localStorage.getItem(REMEMBERED_SESSION_KEY)
     if (!raw) return
     const remembered = JSON.parse(raw)
     if (!remembered?.current_user) return
-
     window.sessionStorage.setItem('current_user', JSON.stringify(remembered.current_user))
     if (remembered.access_token) window.sessionStorage.setItem('supabase_access_token', String(remembered.access_token))
     if (remembered.refresh_token) window.sessionStorage.setItem('supabase_refresh_token', String(remembered.refresh_token))
@@ -37,39 +30,25 @@ function restoreRememberedSession() {
 function installTabScopedAuthStorage() {
   if (storageIsolated || typeof window === 'undefined') return
   storageIsolated = true
-
   const proto = Storage.prototype
   const originalGetItem = proto.getItem
   const originalSetItem = proto.setItem
   const originalRemoveItem = proto.removeItem
   const originalClear = proto.clear
-
   proto.getItem = function (key: string) {
     if (this === window.localStorage && TAB_AUTH_KEYS.has(key)) return originalGetItem.call(window.sessionStorage, key)
     return originalGetItem.call(this, key)
   }
-
   proto.setItem = function (key: string, value: string) {
-    if (this === window.localStorage && TAB_AUTH_KEYS.has(key)) {
-      originalSetItem.call(window.sessionStorage, key, value)
-      return
-    }
+    if (this === window.localStorage && TAB_AUTH_KEYS.has(key)) { originalSetItem.call(window.sessionStorage, key, value); return }
     originalSetItem.call(this, key, value)
   }
-
   proto.removeItem = function (key: string) {
-    if (this === window.localStorage && TAB_AUTH_KEYS.has(key)) {
-      originalRemoveItem.call(window.sessionStorage, key)
-      return
-    }
+    if (this === window.localStorage && TAB_AUTH_KEYS.has(key)) { originalRemoveItem.call(window.sessionStorage, key); return }
     originalRemoveItem.call(this, key)
   }
-
   proto.clear = function () {
-    if (this === window.localStorage) {
-      for (const key of TAB_AUTH_KEYS) originalRemoveItem.call(window.sessionStorage, key)
-      return
-    }
+    if (this === window.localStorage) { for (const key of TAB_AUTH_KEYS) originalRemoveItem.call(window.sessionStorage, key); return }
     originalClear.call(this)
   }
 }
@@ -82,38 +61,28 @@ function getCurrentRole() {
     if (!raw) return ''
     const user = JSON.parse(raw)
     return String(user?.role ?? user?.user?.role ?? '').trim().toLowerCase()
-  } catch {
-    return ''
-  }
+  } catch { return '' }
 }
-
 function setTokens(accessToken: string, refreshToken?: string) {
   try {
     localStorage.setItem('supabase_access_token', accessToken)
     if (refreshToken) localStorage.setItem('supabase_refresh_token', refreshToken)
     const raw = localStorage.getItem('current_user')
-    if (raw) {
-      const user = JSON.parse(raw)
-      user.accessToken = accessToken
-      localStorage.setItem('current_user', JSON.stringify(user))
-    }
+    if (raw) { const user = JSON.parse(raw); user.accessToken = accessToken; localStorage.setItem('current_user', JSON.stringify(user)) }
     const remembered = window.localStorage.getItem(REMEMBERED_SESSION_KEY)
     if (remembered) {
-      const session = JSON.parse(remembered)
-      session.access_token = accessToken
+      const session = JSON.parse(remembered); session.access_token = accessToken
       if (refreshToken) session.refresh_token = refreshToken
       session.current_user = { ...(session.current_user || {}), accessToken }
       window.localStorage.setItem(REMEMBERED_SESSION_KEY, JSON.stringify(session))
     }
   } catch {}
 }
-
 function hasExplicitAuthorization(init?: RequestInit, input?: RequestInfo | URL) {
   if (init?.headers && new Headers(init.headers).has('Authorization')) return true
   if (input instanceof Request) return input.headers.has('Authorization')
   return false
 }
-
 async function refreshAccessToken(): Promise<string | null> {
   if (refreshPromise) return refreshPromise
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '')
@@ -122,118 +91,76 @@ async function refreshAccessToken(): Promise<string | null> {
   if (!base || !key || !refreshToken) return null
   refreshPromise = (async () => {
     try {
-      const r = await fetch(`${base}/auth/v1/token?grant_type=refresh_token`, {
-        method: 'POST',
-        headers: { apikey: key, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-        cache: 'no-store',
-      })
+      const r = await fetch(`${base}/auth/v1/token?grant_type=refresh_token`, { method: 'POST', headers: { apikey: key, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: refreshToken }), cache: 'no-store' })
       const data = await r.json().catch(() => null)
       if (!r.ok || !data?.access_token) return null
       setTokens(String(data.access_token), data.refresh_token ? String(data.refresh_token) : undefined)
       return String(data.access_token)
-    } catch {
-      return null
-    } finally {
-      refreshPromise = null
-    }
+    } catch { return null } finally { refreshPromise = null }
   })()
   return refreshPromise
 }
-
 function tokenNeedsRefresh(token: string | null) {
   if (!token) return true
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
-    const exp = Number(payload?.exp)
-    return !Number.isFinite(exp) || exp * 1000 - Date.now() < 60_000
-  } catch {
-    return true
-  }
+  try { const payload = JSON.parse(atob(token.split('.')[1])); const exp = Number(payload?.exp); return !Number.isFinite(exp) || exp * 1000 - Date.now() < 60_000 } catch { return true }
 }
-
 export async function ensureFreshAuthSession() {
   if (typeof window === 'undefined') return false
-  restoreRememberedSession()
-  const token = getAccessToken()
+  restoreRememberedSession(); const token = getAccessToken()
   if (!token) return !!getRefreshToken() && !!(await refreshAccessToken())
   if (tokenNeedsRefresh(token)) return !!(await refreshAccessToken())
   return true
 }
-
-function isTeacherLiveQuizPage() {
-  if (typeof window === 'undefined') return false
-  return window.location.pathname.startsWith('/dashboard/teacher/live-quiz')
-}
-
+function isTeacherLiveQuizPage() { return typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/teacher/live-quiz') }
 function rewriteStudentQuizRead(requestUrl: string, method: string) {
   try {
     const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '')
     if (!base || !requestUrl.startsWith(`${base}/rest/v1/`)) return requestUrl
     const parsed = new URL(requestUrl)
-
-    // Teacher class data is served by the authenticated Next.js API. The
-    // previous implementation only changed the pathname, which left the
-    // Supabase origin attached (Supabase URL + /api/teacher/classes). That
-    // request never reached the Next.js app and surfaced as "Failed to fetch".
     if (parsed.pathname === '/rest/v1/teacher_classes') {
       const apiUrl = new URL('/api/teacher/classes', window.location.origin)
       apiUrl.search = parsed.search
-      apiUrl.searchParams.delete('select')
-      apiUrl.searchParams.delete('order')
-      apiUrl.searchParams.delete('teacher_id')
+      apiUrl.searchParams.delete('select'); apiUrl.searchParams.delete('order'); apiUrl.searchParams.delete('teacher_id')
       return apiUrl.toString()
     }
-
+    if (parsed.pathname === '/rest/v1/class_courses') {
+      const apiUrl = new URL('/api/teacher/classes/courses', window.location.origin)
+      apiUrl.search = parsed.search
+      return apiUrl.toString()
+    }
     if (!['GET', 'HEAD'].includes(method.toUpperCase())) return requestUrl
     const role = getCurrentRole()
-
     if (role === 'student') {
       if (parsed.pathname === '/rest/v1/tests') parsed.pathname = '/rest/v1/student_visible_tests'
       else if (parsed.pathname === '/rest/v1/test_questions') parsed.pathname = '/rest/v1/student_visible_test_questions'
     }
-
     if (!isTeacherLiveQuizPage()) {
       if (parsed.pathname === '/rest/v1/live_quizzes') parsed.pathname = '/rest/v1/live_quiz_public'
       else if (parsed.pathname === '/rest/v1/live_quiz_questions') parsed.pathname = '/rest/v1/live_quiz_public_questions'
-      else if (
-        parsed.pathname === '/rest/v1/live_quiz_players' &&
-        (parsed.searchParams.get('order') || '').trim().startsWith('correct_answers')
-      ) {
-        parsed.pathname = '/rest/v1/live_quiz_finished_players'
-      }
+      else if (parsed.pathname === '/rest/v1/live_quiz_players' && (parsed.searchParams.get('order') || '').trim().startsWith('correct_answers')) parsed.pathname = '/rest/v1/live_quiz_finished_players'
     }
-
     return parsed.toString()
-  } catch {
-    return requestUrl
-  }
+  } catch { return requestUrl }
 }
-
 function installAuthenticatedFetch() {
   if (installed || typeof window === 'undefined') return
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '')
   if (!supabaseUrl) return
   installed = true
   const originalFetch = window.fetch.bind(window)
-
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const originalUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     const method = init?.method || (input instanceof Request ? input.method : 'GET')
     const requestUrl = rewriteStudentQuizRead(originalUrl, method)
-
     if (!originalUrl.startsWith(`${supabaseUrl}/rest/v1/`) && requestUrl === originalUrl) return originalFetch(input, init)
-
     let token = getAccessToken()
     const shouldUseAuthHeader = !hasExplicitAuthorization(init, input) || requestUrl !== originalUrl
     if (!token && !shouldUseAuthHeader) return originalFetch(requestUrl, init)
     if (!token) return originalFetch(requestUrl, init)
-
     const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))
     headers.set('Authorization', `Bearer ${token}`)
     const response = await originalFetch(requestUrl, { ...init, headers })
     if (response.status !== 401) return response
-
     const fresh = await refreshAccessToken()
     if (!fresh) return response
     const retryHeaders = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))
@@ -241,8 +168,5 @@ function installAuthenticatedFetch() {
     return originalFetch(requestUrl, { ...init, headers: retryHeaders })
   }
 }
-
-installTabScopedAuthStorage()
-restoreRememberedSession()
-installAuthenticatedFetch()
+installTabScopedAuthStorage(); restoreRememberedSession(); installAuthenticatedFetch()
 export function SupabaseAuthFetch() { return null }
