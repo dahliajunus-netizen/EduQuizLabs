@@ -297,7 +297,7 @@ export default function TeacherTestsPage() {
         <Link href="/dashboard/teacher"><Button variant="ghost" className="gap-2"><ArrowLeft className="size-4" />Back to Dashboard</Button></Link>
         <div><h1 className="text-3xl font-bold">🧪 Tests</h1><p className="text-muted-foreground">Create tests with all four question types.</p></div>
         {error && <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive whitespace-pre-wrap">{error}</div>}
-        <Card><CardHeader><CardTitle>{editingId ? 'Edit Test Details' : 'Create Test'}</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" autoComplete="off">
+        <Card><CardHeader><CardTitle>{editingId ? 'Edit Test Details' : 'Create Test'}</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Input name="test-class-code" autoComplete="off" value={classCode} onChange={e => setClassCode(e.target.value)} placeholder="Class code" className="uppercase" />
           <Input name="test-title" autoComplete="off" value={title} onChange={e => setTitle(e.target.value)} placeholder="Test title" />
           <Input name="test-description" autoComplete="off" value={description} onChange={e => setDescription(e.target.value)} placeholder="Description (optional)" />
