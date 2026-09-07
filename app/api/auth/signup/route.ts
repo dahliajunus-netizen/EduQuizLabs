@@ -15,6 +15,29 @@ async function createSession(email: string, password: string) {
   return { response, data };
 }
 
+async function consumeRateLimit(key: string, limit: number, windowSeconds = 3600) {
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/consume_signup_rate_limit`, {
+    method: 'POST',
+    headers: {
+      apikey: supabaseAdminKey!,
+      Authorization: `Bearer ${supabaseAdminKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ p_key: key, p_limit: limit, p_window_seconds: windowSeconds }),
+    cache: 'no-store',
+  });
+  if (!response.ok) return false;
+  return (await response.json().catch(() => false)) === true;
+}
+
+function getClientIp(request: Request) {
+  // Vercel supplies x-forwarded-for. This value is only used as a
+  // rate-limit bucket, never for authorization.
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim().slice(0, 100);
+  return (request.headers.get('x-real-ip') || 'unknown').trim().slice(0, 100);
+}
+
 function calculateExactAge(birthday: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthday);
   if (!match) return null;
@@ -47,6 +70,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Supabase admin key is missing.' }, { status: 500 });
     }
 
+    const contentLength = Number(request.headers.get('content-length') || 0);
+    if (contentLength > 16_384) {
+      return NextResponse.json({ error: 'Request is too large.' }, { status: 413 });
+    }
+
+    const clientIp = getClientIp(request);
+    if (!(await consumeRateLimit(`ip:${clientIp || 'unknown'}`, 10))) {
+      return NextResponse.json({ error: 'Too many signup attempts. Please try again later.' }, { status: 429 });
+    }
+
     const body = await request.json();
     const email = String(body?.email ?? '').trim().toLowerCase();
     const password = String(body?.password ?? '');
@@ -58,11 +91,19 @@ export async function POST(request: Request) {
     if (!email || !password || !fullName || !birthday || !country) {
       return NextResponse.json({ error: 'Missing required signup information.' }, { status: 400 });
     }
-    if (password.length < 8) {
-      return NextResponse.json({ error: 'Password must be at least 8 characters long.' }, { status: 400 });
+    if (email.length > 254 || fullName.length > 120 || country.length > 100) {
+      return NextResponse.json({ error: 'One or more signup fields are too long.' }, { status: 400 });
+    }
+    if (password.length < 8 || password.length > 128) {
+      return NextResponse.json({ error: 'Password must be between 8 and 128 characters long.' }, { status: 400 });
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 });
+    }
+
+    // A second bucket prevents one IP from cycling through unlimited addresses.
+    if (!(await consumeRateLimit(`email:${email}`, 5))) {
+      return NextResponse.json({ error: 'Too many signup attempts for this email. Please try again later.' }, { status: 429 });
     }
 
     const age = calculateExactAge(birthday);
@@ -93,9 +134,6 @@ export async function POST(request: Request) {
       const lower = message.toLowerCase();
 
       if (createResponse.status === 422 || lower.includes('already') || lower.includes('registered') || lower.includes('exists')) {
-        // Do not enumerate existing accounts or temporarily modify their
-        // verification state to test a password. Existing users should sign in
-        // or use the normal password-recovery flow.
         return NextResponse.json({ error: 'An account with this email already exists. Please sign in instead.' }, { status: 409 });
       }
 
