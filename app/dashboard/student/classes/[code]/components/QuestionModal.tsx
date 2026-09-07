@@ -131,6 +131,7 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
   }, [open]);
 
   const matchingAnswers = useMemo(() => pairs.map(p => p.right.trim()).filter(Boolean), [pairs]);
+  void matchingAnswers;
   if (!open) return null;
 
   const setType = (type: QuestionType) => {
@@ -189,12 +190,15 @@ export default function QuestionModal({ open, editing, form, setForm, onSubmit, 
     setImageUrl(''); setImageDataUrl(''); setForm(prev => ({ ...prev, imageUrl: '' })); onClose();
   };
 
+  const optionValue = (letter: 'A' | 'B' | 'C' | 'D') => form[`option${letter}` as 'optionA' | 'optionB' | 'optionC' | 'optionD'];
+  const setOptionValue = (letter: 'A' | 'B' | 'C' | 'D', value: string) => setForm(prev => ({ ...prev, [`option${letter}`]: value }));
+
   return <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4"><div className="mx-auto my-6 w-full max-w-3xl"><Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle>{editing ? 'Edit Question' : 'Add Question'}</CardTitle><Button type="button" variant="ghost" size="icon" onClick={close}><X className="size-4"/></Button></CardHeader><CardContent><form onSubmit={handleSubmit} className="space-y-5">
     <div><label className="mb-2 block text-sm font-medium">Question type</label><div className="grid grid-cols-2 gap-2 md:grid-cols-4">{(['multiple-choice','true-false','fill-blank','matching'] as QuestionType[]).map(type=><Button key={type} type="button" variant={form.questionType===type?'default':'outline'} onClick={()=>setType(type)}>{type==='multiple-choice'?'Multiple Choice':type==='true-false'?'True / False':type==='fill-blank'?'Fill in the Blank':'Matching'}</Button>)}</div></div>
     <div><label className="mb-2 block text-sm font-medium">Question</label><textarea className="min-h-28 w-full rounded border bg-background p-3" value={form.questionText} onChange={e=>setForm(prev=>({...prev,questionText:e.target.value}))} placeholder="Write the question..." required/></div>
     <div className="rounded-lg border p-4"><div className="mb-3 flex items-center gap-2"><ImageIcon className="size-4"/><span className="font-medium">Question image</span></div><Input value={imageUrl} onChange={e=>handleImageUrlChange(e.target.value)} placeholder="Paste image URL (optional)"/><div className="mt-2 flex items-center gap-2"><label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm"><Upload className="size-4"/>Upload image<input type="file" accept="image/*" className="hidden" onChange={e=>void handleImageFile(e.target.files?.[0])}/></label>{imageBusy&&<Loader2 className="size-4 animate-spin"/>}{imageDataUrl&&<FileImage className="size-4 text-green-600"/>}</div>{imageMessage&&<p className="mt-2 text-sm text-destructive">{imageMessage}</p>}{(imageDataUrl||imageUrl)&&<img src={imageDataUrl||imageUrl} alt="Question preview" className="mt-3 max-h-64 max-w-full rounded border object-contain" onError={()=>setImageError(true)}/>} {imageError&&<p className="mt-2 text-sm text-destructive">Image could not be loaded.</p>}</div>
     {form.questionType==='multiple-choice'&&<>
-      <div className="grid gap-3 md:grid-cols-2">{(['A','B','C','D'] as const).map(letter=><div key={letter}><label className="mb-1 block text-sm font-medium">Option {letter}</label><Input value={form[`option${letter}`]} onChange={e=>setForm(prev=>({...prev,[`option${letter}`]:e.target.value}))} required placeholder={`Option ${letter}`}/></div>)}</div>
+      <div className="grid gap-3 md:grid-cols-2">{(['A','B','C','D'] as const).map(letter=><div key={letter}><label className="mb-1 block text-sm font-medium">Option {letter}</label><Input value={optionValue(letter)} onChange={e=>setOptionValue(letter,e.target.value)} required placeholder={`Option ${letter}`}/></div>)}</div>
       <div className="rounded-lg border bg-muted/20 p-4">
         <label htmlFor="multiple-choice-correct-answer" className="mb-2 block text-sm font-medium">Correct answer</label>
         <select id="multiple-choice-correct-answer" value={form.correctAnswer} onChange={e=>setCorrect(e.target.value as CorrectAnswer)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">
