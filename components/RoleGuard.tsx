@@ -1,9 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { usePathname } from 'next/navigation';
-import { ensureFreshAuthSession } from '@/components/supabase-auth-fetch';
+import { useRouter, usePathname } from 'next/navigation';
 
 export type AppRole = 'teacher' | 'student';
 
@@ -27,13 +25,14 @@ export function RoleGuard({
   useEffect(() => {
     let cancelled = false;
 
-    async function checkAccess() {
+    function checkAccess() {
       try {
-        const sessionReady = await ensureFreshAuthSession();
-        if (cancelled) return;
-
+        // Authentication is now stored in HttpOnly cookies, so the browser
+        // cannot read the access token. The profile in current_user is only
+        // used here for client-side routing/UI gating; protected API routes
+        // perform the real server-side authentication and authorization.
         const raw = localStorage.getItem('current_user');
-        if (!raw || !sessionReady) {
+        if (!raw) {
           router.replace('/');
           return;
         }
@@ -55,7 +54,7 @@ export function RoleGuard({
           return;
         }
 
-        setAllowed(true);
+        if (!cancelled) setAllowed(true);
       } catch {
         if (cancelled) return;
         localStorage.removeItem('current_user');
@@ -63,7 +62,7 @@ export function RoleGuard({
       }
     }
 
-    void checkAccess();
+    checkAccess();
     return () => {
       cancelled = true;
     };
