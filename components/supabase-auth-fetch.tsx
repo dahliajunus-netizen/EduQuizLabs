@@ -172,14 +172,17 @@ function rewriteStudentQuizRead(requestUrl: string, method: string) {
     if (!base || !requestUrl.startsWith(`${base}/rest/v1/`)) return requestUrl
     const parsed = new URL(requestUrl)
 
-    // Sensitive teacher class data now goes through the authenticated
-    // Next.js API, because browser JavaScript no longer has the auth token.
+    // Teacher class data is served by the authenticated Next.js API. The
+    // previous implementation only changed the pathname, which left the
+    // Supabase origin attached (Supabase URL + /api/teacher/classes). That
+    // request never reached the Next.js app and surfaced as "Failed to fetch".
     if (parsed.pathname === '/rest/v1/teacher_classes') {
-      parsed.pathname = '/api/teacher/classes'
-      parsed.searchParams.delete('select')
-      parsed.searchParams.delete('order')
-      parsed.searchParams.delete('teacher_id')
-      return parsed.toString()
+      const apiUrl = new URL('/api/teacher/classes', window.location.origin)
+      apiUrl.search = parsed.search
+      apiUrl.searchParams.delete('select')
+      apiUrl.searchParams.delete('order')
+      apiUrl.searchParams.delete('teacher_id')
+      return apiUrl.toString()
     }
 
     if (!['GET', 'HEAD'].includes(method.toUpperCase())) return requestUrl
