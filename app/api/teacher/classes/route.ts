@@ -14,12 +14,17 @@ export async function GET(request: NextRequest) {
   const user = await requireTeacher(request);
   if (!user) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
+  const requestedCode = request.nextUrl.searchParams.get('code')?.trim() || '';
+
   try {
+    const codeFilter = requestedCode.match(/^eq\.([A-Za-z0-9]+)$/)?.[1] || '';
+    const queryCode = codeFilter ? `&code=eq.${encodeURIComponent(codeFilter.toUpperCase())}` : '';
+
     let rows = await supabaseDb(
-      `teacher_classes?teacher_id=eq.${encodeURIComponent(user.id)}&select=id,class_name,school_name,code,teacher_id&order=class_name.asc`,
+      `teacher_classes?teacher_id=eq.${encodeURIComponent(user.id)}${queryCode}&select=id,class_name,school_name,code,teacher_id&order=class_name.asc`,
     );
 
-    if (Array.isArray(rows) && rows.length === 0 && user.id !== LEGACY_TEACHER_ID) {
+    if (Array.isArray(rows) && rows.length === 0 && !codeFilter && user.id !== LEGACY_TEACHER_ID) {
       const legacyRows = await supabaseDb(
         `teacher_classes?teacher_id=eq.${LEGACY_TEACHER_ID}&select=id,class_name,school_name,code,teacher_id&order=class_name.asc`,
       );
