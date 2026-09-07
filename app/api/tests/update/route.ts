@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticatedUser, serverConfigOk, supabaseDb } from '@/lib/server/supabase';
+import { requireTeacher, requireTeacherClassOwnership } from '@/lib/server/auth';
+import { serverConfigOk, supabaseDb } from '@/lib/server/supabase';
 import { hashAssessmentPassword } from '@/lib/server/password';
 
 export async function PATCH(request: NextRequest) {
   try {
     if (!serverConfigOk()) return NextResponse.json({ error: 'Server configuration is missing.' }, { status: 500 });
-    const user = await authenticatedUser(request);
-    if (!user?.id) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+    const user = await requireTeacher(request);
+    if (!user) return NextResponse.json({ error: 'Teacher authentication required.' }, { status: 401 });
 
     const body = await request.json().catch(() => ({}));
     const { testId, title, description, dueDate, testPassword, maxAttempts, allowReview } = body || {};
@@ -18,8 +19,9 @@ export async function PATCH(request: NextRequest) {
 
     const classCode = String(test.class_code || '').trim();
     if (!classCode) return NextResponse.json({ error: 'This test is not linked to a class.' }, { status: 400 });
-    const classes = await supabaseDb(`teacher_classes?code=eq.${encodeURIComponent(classCode)}&teacher_id=eq.${encodeURIComponent(String(user.id))}&select=id&limit=1`);
-    if (!Array.isArray(classes) || !classes[0]) return NextResponse.json({ error: 'You are not authorized to edit this test.' }, { status: 403 });
+    if (!(await requireTeacherClassOwnership(user.id, classCode))) {
+      return NextResponse.json({ error: 'You are not authorized to edit this test.' }, { status: 403 });
+    }
 
     const cleanTitle = String(title ?? '').trim();
     if (!cleanTitle) return NextResponse.json({ error: 'Test title is required.' }, { status: 400 });
