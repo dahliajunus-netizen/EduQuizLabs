@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { csrfResponse } from '@/lib/server/csrf';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const supabaseAdminKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 
 async function createSession(email: string, password: string) {
@@ -50,7 +51,9 @@ function setAuthCookies(response: NextResponse, accessToken: string, refreshToke
   if (refreshToken) response.cookies.set('eduquiz_refresh_token', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 });
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const blocked = csrfResponse(request);
+  if (blocked) return blocked;
   try {
     if (!supabaseUrl || !supabaseAnonKey) return NextResponse.json({ error: 'Supabase public environment variables are missing.' }, { status: 500 });
     if (!supabaseAdminKey) return NextResponse.json({ error: 'Supabase admin key is missing.' }, { status: 500 });
@@ -101,8 +104,6 @@ export async function POST(request: Request) {
     }
 
     const response = NextResponse.json({
-      // Legacy signup UI still checks this property. It is deliberately NOT
-      // the real token; the real credential is only delivered as an HttpOnly cookie.
       access_token: 'cookie-managed',
       user: tokenSession.data.user,
     });
