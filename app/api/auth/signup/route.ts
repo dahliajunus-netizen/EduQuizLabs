@@ -18,11 +18,7 @@ async function createSession(email: string, password: string) {
 async function consumeRateLimit(key: string, limit: number, windowSeconds = 3600) {
   const response = await fetch(`${supabaseUrl}/rest/v1/rpc/consume_signup_rate_limit`, {
     method: 'POST',
-    headers: {
-      apikey: supabaseAdminKey!,
-      Authorization: `Bearer ${supabaseAdminKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { apikey: supabaseAdminKey!, Authorization: `Bearer ${supabaseAdminKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ p_key: key, p_limit: limit, p_window_seconds: windowSeconds }),
     cache: 'no-store',
   });
@@ -39,9 +35,7 @@ function getClientIp(request: Request) {
 function calculateExactAge(birthday: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthday);
   if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
   const birthDate = new Date(year, month - 1, day);
   if (!Number.isFinite(birthDate.getTime()) || birthDate.getFullYear() !== year || birthDate.getMonth() !== month - 1 || birthDate.getDate() !== day) return null;
   const today = new Date();
@@ -52,29 +46,14 @@ function calculateExactAge(birthday: string) {
 }
 
 function setAuthCookies(response: NextResponse, accessToken: string, refreshToken: string) {
-  response.cookies.set('eduquiz_access_token', accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60,
-  });
-  if (refreshToken) {
-    response.cookies.set('eduquiz_refresh_token', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 30,
-    });
-  }
+  response.cookies.set('eduquiz_access_token', accessToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 60 * 60 });
+  if (refreshToken) response.cookies.set('eduquiz_refresh_token', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 });
 }
 
 export async function POST(request: Request) {
   try {
     if (!supabaseUrl || !supabaseAnonKey) return NextResponse.json({ error: 'Supabase public environment variables are missing.' }, { status: 500 });
     if (!supabaseAdminKey) return NextResponse.json({ error: 'Supabase admin key is missing.' }, { status: 500 });
-
     const contentLength = Number(request.headers.get('content-length') || 0);
     if (contentLength > 16_384) return NextResponse.json({ error: 'Request is too large.' }, { status: 413 });
 
@@ -99,11 +78,10 @@ export async function POST(request: Request) {
     if (age === null) return NextResponse.json({ error: 'Please enter a valid birthday.' }, { status: 400 });
     if (role === 'teacher' && age < 21) return NextResponse.json({ error: 'Teachers must be at least 21 years old.' }, { status: 400 });
 
-    const metadata = { full_name: fullName, age, birthday, country, role };
     const createResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
       method: 'POST',
       headers: { apikey: supabaseAdminKey, Authorization: `Bearer ${supabaseAdminKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, email_confirm: true, user_metadata: metadata }),
+      body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { full_name: fullName, age, birthday, country, role } }),
       cache: 'no-store',
     });
     const createData = await createResponse.json().catch(() => ({}));
@@ -123,6 +101,9 @@ export async function POST(request: Request) {
     }
 
     const response = NextResponse.json({
+      // Legacy signup UI still checks this property. It is deliberately NOT
+      // the real token; the real credential is only delivered as an HttpOnly cookie.
+      access_token: 'cookie-managed',
       user: tokenSession.data.user,
     });
     setAuthCookies(response, String(tokenSession.data.access_token), String(tokenSession.data.refresh_token || ''));
