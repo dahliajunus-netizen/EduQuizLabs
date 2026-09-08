@@ -13,44 +13,13 @@ type MatchPair = { left: string; right: string };
 type Test = { id: string; class_code: string; title: string; description: string | null; published: boolean; created_at: string; due_date?: string | null; test_password?: string | null; time_limit_minutes?: number | null };
 type Question = { id?: string; test_id: string; question_order: number; question: string; image_url?: string | null; option_a: string; option_b: string; option_c: string; option_d: string; correct_answer: string; points?: number; question_type?: QuestionType };
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const baseHeaders = { apikey: key || '', 'Content-Type': 'application/json' };
+const url = '/api/teacher/tests-proxy';
+const key = 'server-session';
+const baseHeaders = { 'Content-Type': 'application/json' };
 const typeLabels: Record<QuestionType, string> = { multiple_choice: 'Multiple Choice', true_false: 'True / False', fill_blank: 'Fill in the Blank', matching: 'Match' };
 
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const candidates = ['supabase.auth.token', 'supabase_access_token', 'access_token'];
-    for (const storage of [window.localStorage, window.sessionStorage]) {
-      for (const name of candidates) {
-        const value = storage.getItem(name);
-        if (value) {
-          try {
-            const parsed = JSON.parse(value);
-            if (typeof parsed === 'string') return parsed;
-            if (parsed?.access_token) return parsed.access_token;
-            if (parsed?.currentSession?.access_token) return parsed.currentSession.access_token;
-          } catch { return value; }
-        }
-      }
-    }
-    const currentUser = window.localStorage.getItem('current_user');
-    if (currentUser) {
-      try {
-        const parsed = JSON.parse(currentUser);
-        if (parsed?.access_token) return parsed.access_token;
-        if (parsed?.session?.access_token) return parsed.session.access_token;
-      } catch {}
-    }
-  } catch {}
-  return null;
-}
-
-function authHeaders() {
-  const token = getAccessToken();
-  return { ...baseHeaders, Authorization: `Bearer ${token || key || ''}` };
-}
+function getAccessToken(): string | null { return null; }
+function authHeaders() { return baseHeaders; }
 
 function typeOf(q: Question): QuestionType {
   const x = String(q.question_type || 'multiple_choice').toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
@@ -157,25 +126,14 @@ export default function TeacherTestsPage() {
       const requestHeaders = { ...authHeaders(), Prefer: 'return=representation' };
       let r: Response;
       if (editingId) {
-        r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(editingId)}&select=*`, {
-          method: 'PATCH',
-          headers: requestHeaders,
-          body: JSON.stringify(payload),
-        });
+        r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(editingId)}&select=*`, { method: 'PATCH', headers: requestHeaders, body: JSON.stringify(payload) });
       } else {
-        r = await fetch(`${url}/rest/v1/tests?select=*`, {
-          method: 'POST',
-          headers: requestHeaders,
-          body: JSON.stringify({ ...payload, published: false }),
-        });
+        r = await fetch(`${url}/rest/v1/tests?select=*`, { method: 'POST', headers: requestHeaders, body: JSON.stringify({ ...payload, published: false }) });
       }
       const responseText = await r.text();
       if (!r.ok) throw new Error(responseText || `Supabase returned HTTP ${r.status}.`);
       let returned: Test | null = null;
-      try {
-        const parsed = JSON.parse(responseText);
-        returned = Array.isArray(parsed) ? (parsed[0] || null) : parsed;
-      } catch {}
+      try { const parsed = JSON.parse(responseText); returned = Array.isArray(parsed) ? (parsed[0] || null) : parsed; } catch {}
       if (!editingId && !returned?.id) throw new Error('Supabase did not return the newly saved test.');
       if (editingId && !returned?.id) {
         const check = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(editingId)}&select=*`, { headers: authHeaders(), cache: 'no-store' });
@@ -184,16 +142,12 @@ export default function TeacherTestsPage() {
         returned = checked[0] || null;
       }
       if (!returned) throw new Error('The test was not found after saving.');
-      if (editingId) {
-        setTests(prev => prev.map(t => t.id === returned!.id ? returned! : t));
-      } else {
-        setTests(prev => [returned!, ...prev]);
-      }
+      if (editingId) setTests(prev => prev.map(t => t.id === returned!.id ? returned! : t));
+      else setTests(prev => [returned!, ...prev]);
       resetDetails();
       setError('');
-    } catch (e) {
-      setError(`Failed to save test details: ${e instanceof Error ? e.message : 'Unknown error'}`);
-    } finally { setBusy(false); }
+    } catch (e) { setError(`Failed to save test details: ${e instanceof Error ? e.message : 'Unknown error'}`); }
+    finally { setBusy(false); }
   }
 
   async function deleteTest(id: string) {
