@@ -4,8 +4,8 @@ import { supabaseDb } from '@/lib/server/supabase';
 import { csrfResponse } from '@/lib/server/csrf';
 
 export async function POST(request: NextRequest) {
-  const auth = await requireStudent(request);
-  if (!auth.ok) return auth.response;
+  const user = await requireStudent(request);
+  if (!user) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   const csrf = csrfResponse(request);
   if (csrf) return csrf;
 
