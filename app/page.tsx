@@ -18,6 +18,7 @@ export default function Page() {
   const [checkingSession, setCheckingSession] = useState(true)
 
   useEffect(() => {
+    void fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' }).catch(() => {});
     try {
       const raw = localStorage.getItem('current_user')
       if (raw) {
