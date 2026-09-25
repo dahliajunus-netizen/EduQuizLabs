@@ -49,8 +49,16 @@ export default function ClassDetailsPage() {
   const [submissions, setSubmissions] = useState<Record<string, Submission[]>>({});
   const [tests, setTests] = useState<Record<string, Test[]>>({});
   const [questions, setQuestions] = useState<Record<string, Question[]>>({});
-  const [teacher, setTeacher] = useState(false);
-  const [authReady, setAuthReady] = useState(false);
+  const [teacher, setTeacher] = useState(() => {
+    try {
+      const raw = localStorage.getItem('current_user');
+      if (!raw) return false;
+      const u = JSON.parse(raw);
+      return String(u.role ?? u.user?.role ?? '').trim().toLowerCase() === 'teacher';
+    } catch {
+      return false;
+    }
+  });
   const [studentId, setStudentId] = useState('');
   const [name, setName] = useState('');
   const [className, setClassName] = useState('');
@@ -108,33 +116,25 @@ export default function ClassDetailsPage() {
         const payload = await response.json().catch(() => ({}));
         if (!cancelled && response.ok && payload?.user) {
           const u = payload.user;
+          const nextTeacher = String(u.role ?? '').trim().toLowerCase() === 'teacher';
           setStudentId(String(u.id ?? ''));
           setName(String(u.fullName ?? u.full_name ?? u.email ?? ''));
-          setTeacher(String(u.role ?? '').trim().toLowerCase() === 'teacher');
           try {
             localStorage.setItem('current_user', JSON.stringify({ ...u, fullName: u.fullName ?? u.full_name ?? '' }));
             localStorage.setItem('supabase_user_id', String(u.id ?? ''));
           } catch {}
-          setAuthReady(true);
-          return;
+          setTeacher(current => {
+            if (current !== nextTeacher && code) {
+              setTimeout(() => { if (!cancelled) void load(); }, 0);
+            }
+            return nextTeacher;
+          });
         }
       } catch {}
-      if (!cancelled) {
-        try {
-          const raw = localStorage.getItem('current_user');
-          if (raw) {
-            const u = JSON.parse(raw);
-            setStudentId(String(u.student_id ?? u.id ?? u.user_id ?? u.uid ?? u.user?.student_id ?? u.user?.id ?? ''));
-            setName(String(u.fullName ?? u.full_name ?? u.name ?? u.user?.fullName ?? u.user?.full_name ?? ''));
-            setTeacher(String(u.role ?? u.user?.role ?? '').trim().toLowerCase() === 'teacher');
-          }
-        } catch {}
-        setAuthReady(true);
-      }
     }
     void resolveAuth();
     return () => { cancelled = true; };
-  }, []);
+  }, [code]);
 
   async function load() {
     if (!code) return;
@@ -169,7 +169,7 @@ export default function ClassDetailsPage() {
 
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load class'); } finally { setLoading(false); }
   }
-  useEffect(() => { if (code && authReady) void load(); }, [code, teacher, authReady]);
+  useEffect(() => { if (code) void load(); }, [code]);
 
   async function deleteItem(table: string, id: string) { if (!id || !confirm('Delete this item?')) return; try { await del(`${url}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`); await load(); } catch (e) { alert(e instanceof Error ? e.message : 'Failed to delete item.'); } }
   async function deleteCourse(course: Course) {
