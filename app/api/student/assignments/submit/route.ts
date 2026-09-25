@@ -59,8 +59,26 @@ export async function POST(request: NextRequest) {
   const existing = await supabaseDb(
     `assignment_submissions?assignment_id=eq.${encodeURIComponent(assignmentId)}&student_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`
   );
-  if (Array.isArray(existing) && existing[0]?.id) {
-    return NextResponse.json({ error: 'You have already submitted this assignment.' }, { status: 409 });
+  const existingSubmission = Array.isArray(existing) ? existing[0] : null;
+
+  if (existingSubmission?.id) {
+    const updated = await supabaseDb(
+      `assignment_submissions?id=eq.${encodeURIComponent(existingSubmission.id)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({
+          nickname,
+          class: className,
+          link,
+        }),
+      },
+    );
+
+    return NextResponse.json(
+      Array.isArray(updated) ? updated[0] || null : updated,
+      { status: 200 },
+    );
   }
 
   const created = await supabaseDb('assignment_submissions', {
