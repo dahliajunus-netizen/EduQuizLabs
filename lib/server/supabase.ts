@@ -18,8 +18,22 @@ export async function authenticatedUser(request: NextRequest) {
     headers: { apikey: publishableKey, Authorization: `Bearer ${accessToken}` },
     cache: 'no-store',
   });
-  return response.ok ? response.json() : null;
-}
+  if (response.ok) return response.json();
+
+  // Access tokens expire. Use the longer-lived refresh token when available.
+  const refreshToken = request.cookies.get('eduquiz_refresh_token')?.value || '';
+  if (!refreshToken) return null;
+
+  const refreshResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+    method: 'POST',
+    headers: { apikey: publishableKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+    cache: 'no-store',
+  });
+  if (!refreshResponse.ok) return null;
+
+  const refreshed = await refreshResponse.json().catch(() => null);
+  return refreshed?.user || null;
 
 export async function supabaseDb(path: string, init: RequestInit = {}) {
   if (!supabaseUrl || !serviceKey) throw new Error('Server database configuration is missing.');
