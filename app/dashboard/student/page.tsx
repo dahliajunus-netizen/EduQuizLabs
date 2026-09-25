@@ -32,8 +32,9 @@ export default function StudentDashboard(){
  const readCache=useCallback((sid:string)=>{try{const raw=sessionStorage.getItem(`student-dashboard:${sid}`);if(!raw)return false;const cached=JSON.parse(raw) as {expires:number;data:DashboardData};if(!cached?.data||cached.expires<=Date.now()){sessionStorage.removeItem(`student-dashboard:${sid}`);return false;}applyDashboardData(cached.data);return true;}catch{return false;}},[applyDashboardData]);
  const writeCache=useCallback((sid:string,data:DashboardData)=>{try{sessionStorage.setItem(`student-dashboard:${sid}`,JSON.stringify({expires:Date.now()+CACHE_TTL,data}));}catch{}},[]);
  const fetchDashboardData=useCallback(async(force=false)=>{
-  const sid=getStudentId();if(!sid){applyDashboardData(EMPTY);setLoading(false);return;}
-  const hasFreshCache=!force&&readCache(sid);if(hasFreshCache)setLoading(false);else setLoading(true);
+  const sid=getStudentId();
+  const hasFreshCache=Boolean(sid)&&!force&&readCache(sid!);
+  if(hasFreshCache)setLoading(false);else setLoading(true);
   try{
    const response=await fetch('/api/student/dashboard',{credentials:'include',cache:'no-store'});
    const body=await response.json().catch(()=>null);
@@ -46,7 +47,8 @@ export default function StudentDashboard(){
     tests:Array.isArray(body?.tests)?body.tests:[],
     testSubmissions:Array.isArray(body?.testSubmissions)?body.testSubmissions:[]
    };
-   applyDashboardData(data);writeCache(sid,data);
+   applyDashboardData(data);
+   if(sid)writeCache(sid,data);
   }catch(error){
    console.error('[Student Dashboard] Error loading dashboard:',error);
    if(!hasFreshCache)applyDashboardData(EMPTY);
