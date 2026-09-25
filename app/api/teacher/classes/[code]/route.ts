@@ -59,6 +59,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         questions[String(test.id)] = await supabaseDb(
           `test_questions?test_id=eq.${q(String(test.id))}&select=*&order=question_order.asc`,
         ).catch(() => []);
+        attempts[String(test.id)] = await supabaseDb(
+          `test_attempts?test_id=eq.${q(String(test.id))}&select=*`,
+        ).catch(() => []);
+        testSubmissions[String(test.id)] = await supabaseDb(
+          `test_submissions?test_id=eq.${q(String(test.id))}&select=*`,
+        ).catch(() => []);
       }
     }
 
