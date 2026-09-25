@@ -189,6 +189,14 @@ export default function TakeTestPage() {
   const answeredCount = questions.filter((q) => isAnswered(q, answers)).length;
   const progress = questions.length ? Math.round((answeredCount / questions.length) * 100) : 0;
 
+  // Keep this hook above all conditional returns. Password-protected tests
+  // render the lock screen first, then the test screen after access succeeds.
+  // Calling useMemo only on the second render breaks React's hook order.
+  const choiceQuestions = useMemo(
+    () => questions.map((question, index) => ({ question, index, answered: isAnswered(question, answers) })),
+    [questions, answers],
+  );
+
   const save = useCallback(
     async (next = answersRef.current) => {
       if (!attempt?.id || savingRef.current || complete) return;
@@ -462,11 +470,6 @@ export default function TakeTestPage() {
   const timeCritical = remaining !== null && remaining <= 60;
   const timeWarning = remaining !== null && remaining <= 300 && !timeCritical;
   const currentAnswered = isAnswered(q, answers);
-
-  const choiceQuestions = useMemo(
-    () => questions.map((question, index) => ({ question, index, answered: isAnswered(question, answers) })),
-    [questions, answers],
-  );
 
   return (
     <div className="min-h-screen bg-muted/20 pb-28">
