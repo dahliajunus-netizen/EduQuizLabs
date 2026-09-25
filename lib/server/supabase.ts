@@ -34,6 +34,7 @@ export async function authenticatedUser(request: NextRequest) {
 
   const refreshed = await refreshResponse.json().catch(() => null);
   return refreshed?.user || null;
+}
 
 export async function supabaseDb(path: string, init: RequestInit = {}) {
   if (!supabaseUrl || !serviceKey) throw new Error('Server database configuration is missing.');
