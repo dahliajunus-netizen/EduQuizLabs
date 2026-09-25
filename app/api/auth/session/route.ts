@@ -10,31 +10,58 @@ function setCookie(response: NextResponse, name: string, value: string, maxAge: 
 
 export async function GET(request: NextRequest) {
   if (!supabaseUrl || !supabaseKey) return NextResponse.json({ ok: false }, { status: 500 });
+
   const accessToken = request.cookies.get('eduquiz_access_token')?.value || '';
   const refreshToken = request.cookies.get('eduquiz_refresh_token')?.value || '';
   if (!accessToken && !refreshToken) return NextResponse.json({ ok: false }, { status: 401 });
+
   let authUser: any = null;
+  let newAccessToken = '';
+  let newRefreshToken = '';
+
   if (accessToken) {
-    const check = await fetch(supabaseUrl + '/auth/v1/user', { headers: { apikey: supabaseKey, Authorization: 'Bearer ' + accessToken }, cache: 'no-store' });
-    if (check.ok) authUser = await check.json().catch(() => null);
+    const check = await fetch(supabaseUrl + '/auth/v1/user', {
+      headers: { apikey: supabaseKey, Authorization: 'Bearer ' + accessToken },
+      cache: 'no-store',
+    });
+    if (check.ok) {
+      authUser = await check.json().catch(() => null);
+    }
   }
-  if (!refreshToken) return NextResponse.json({ ok: false }, { status: 401 });
-  const refreshed = await fetch(supabaseUrl + '/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { apikey: supabaseKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: refreshToken }), cache: 'no-store' });
-  if (!refreshed.ok) return NextResponse.json({ ok: false }, { status: 401 });
-  const data = await refreshed.json().catch(() => null);
-  if (!data?.access_token || !data?.user?.id) return NextResponse.json({ ok: false }, { status: 401 });
-  authUser = data.user;
-  if (!authUser?.id) return NextResponse.json({ ok: false }, { status: 401 });
+
+  if (!authUser?.id) {
+    if (!refreshToken) return NextResponse.json({ ok: false }, { status: 401 });
+
+    const refreshed = await fetch(supabaseUrl + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST',
+      headers: { apikey: supabaseKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      cache: 'no-store',
+    });
+    if (!refreshed.ok) return NextResponse.json({ ok: false }, { status: 401 });
+
+    const data = await refreshed.json().catch(() => null);
+    if (!data?.access_token || !data?.user?.id) return NextResponse.json({ ok: false }, { status: 401 });
+    authUser = data.user;
+    newAccessToken = String(data.access_token);
+    newRefreshToken = data.refresh_token ? String(data.refresh_token) : '';
+  }
+
   let profile: any = null;
   try {
-    const profileResponse = await fetch(supabaseUrl + '/rest/v1/users?id=eq.' + encodeURIComponent(String(authUser.id)) + '&select=id,email,role,full_name,avatar_url,country&limit=1', { headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey }, cache: 'no-store' });
+    const profileResponse = await fetch(
+      supabaseUrl + '/rest/v1/users?id=eq.' + encodeURIComponent(String(authUser.id)) + '&select=id,email,role,full_name,avatar_url,country&limit=1',
+      { headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey }, cache: 'no-store' },
+    );
     const rows = await profileResponse.json().catch(() => []);
     profile = Array.isArray(rows) ? rows[0] : null;
   } catch {}
+
   if (!profile?.role) return NextResponse.json({ ok: false }, { status: 401 });
+
   const response = NextResponse.json({ ok: true, user: { ...profile, fullName: profile.full_name } });
   const tenYears = 60 * 60 * 24 * 365 * 10;
-  setCookie(response, 'eduquiz_access_token', String(data.access_token), tenYears);
-  if (data.refresh_token) setCookie(response, 'eduquiz_refresh_token', String(data.refresh_token), tenYears);
+  if (newAccessToken) setCookie(response, 'eduquiz_access_token', newAccessToken, tenYears);
+  if (newRefreshToken) setCookie(response, 'eduquiz_refresh_token', newRefreshToken, tenYears);
   return response;
 }
