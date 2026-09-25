@@ -171,7 +171,20 @@ export default function ClassDetailsPage() {
   }
   useEffect(() => { if (code) void load(); }, [code]);
 
-  async function deleteItem(table: string, id: string) { if (!id || !confirm('Delete this item?')) return; try { await del(`${url}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`); await load(); } catch (e) { alert(e instanceof Error ? e.message : 'Failed to delete item.'); } }
+  async function deleteItem(table: string, id: string) {
+    if (!id || !teacher || !confirm('Delete this item?')) return;
+    try {
+      const response = await fetch(`/api/teacher/classes/${encodeURIComponent(code)}?table=${encodeURIComponent(table)}&id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload?.error || `Delete failed (${response.status})`));
+      await load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to delete item.');
+    }
+  }
   async function deleteCourse(course: Course) {
     if (!teacher || !course.id || busy) return;
     if (!confirm(`Delete the course "${course.course_name}"?\n\nThis will also delete its materials, assignments, assignment submissions, tests, test questions, test submissions, and test attempts.`)) return;
