@@ -100,10 +100,21 @@ const normalizedAnswerPayload = (value: unknown) => {
 };
 
 async function authorizeStudent(userId: string, test: any) {
-  const code = String(test.class_code || '').trim();
+  let code = String(test.class_code || '').trim().toUpperCase();
+
+  // Older tests may not have class_code populated. Resolve the class through
+  // the test's course instead of rejecting an otherwise enrolled student.
+  if (!code && test.course_id) {
+    const courses = await supabaseDb(
+      `class_courses?id=eq.${encodeURIComponent(String(test.course_id))}&select=class_code&limit=1`,
+    );
+    code = String(Array.isArray(courses) ? courses[0]?.class_code || '' : '').trim().toUpperCase();
+  }
+
   if (!code) return false;
+
   const rows = await supabaseDb(
-    `student_classes?student_id=eq.${encodeURIComponent(userId)}&code=eq.${encodeURIComponent(code)}&select=code&limit=1`
+    `student_classes?student_id=eq.${encodeURIComponent(userId)}&code=eq.${encodeURIComponent(code)}&select=code&limit=1`,
   );
   return Array.isArray(rows) && rows.length > 0;
 }
