@@ -94,7 +94,7 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
      setStudentAvatars(nextStudentAvatars);
      setSubmissionLoadError(loadError);
    }
-  }  };
+  };
   void load(); const timer = window.setInterval(load, 2000); return () => { cancelled = true; window.clearInterval(timer); };
  }, [teacher, classCode, tests.map(test => test.id).join('|')]);
  useEffect(() => { if (teacher || !studentId || !tests.length) return; }, [teacher, studentId, tests.length]);
