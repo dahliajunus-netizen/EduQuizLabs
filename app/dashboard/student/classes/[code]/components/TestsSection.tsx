@@ -42,26 +42,59 @@ export default function TestsSection({ tests, questions, teacher, open, busy, di
   if (!teacher || !classCode || !tests.length) { setAttempts({}); setSubmissions({}); setStudentNames({}); setStudentAvatars({}); setClassStudents([]); setSubmissionLoadError(''); return; }
   let cancelled = false;
   const load = async () => {
-   setSubmissionLoadError(''); const nextAttempts: Record<string, Attempt[]> = {}; const nextSubmissions: Record<string, Submission[]> = {}; const nextStudentNames: Record<string, string> = {}; const nextStudentAvatars: Record<string, string> = {}; let loadError = ''; let participants: Participant[] = [];
+   setSubmissionLoadError('');
+   const nextAttempts: Record<string, Attempt[]> = {};
+   const nextSubmissions: Record<string, Submission[]> = {};
+   const nextStudentNames: Record<string, string> = {};
+   const nextStudentAvatars: Record<string, string> = {};
+   let loadError = '';
+   let participants: Participant[] = [];
    try {
-    const r = await fetch(`${supabaseUrl}/rest/v1/rpc/get_class_participants`, { method: 'POST', headers: { ...getHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ p_class_code: classCode }), cache: 'no-store' });
-    const text = await r.text();
-    if (!r.ok) loadError = `Could not load class students (${r.status}). ${text}`;
-    else { const rows = text ? JSON.parse(text) : []; participants = Array.isArray(rows) ? rows.map((row: any) => ({ student_id: String(row.student_id ?? row.id ?? '').trim(), full_name: row.full_name ?? row.name ?? null, avatar_url: row.avatar_url ?? null })).filter((row: Participant) => Boolean(row.student_id)) : []; }
-   } catch (e) { loadError = e instanceof Error ? e.message : 'Failed to load class students.'; }
-   await Promise.all(tests.map(async test => {
-    try {
-     const [ar, sr] = await Promise.all([fetch(`${supabaseUrl}/rest/v1/test_attempts?test_id=eq.${encodeURIComponent(test.id)}&select=*`, { headers: getHeaders(), cache: 'no-store' }), fetch(`${supabaseUrl}/rest/v1/test_submissions?test_id=eq.${encodeURIComponent(test.id)}&select=*`, { headers: getHeaders(), cache: 'no-store' })]);
-     if (ar.ok) { const rows = await ar.json(); nextAttempts[test.id] = Array.isArray(rows) ? rows : []; } else { nextAttempts[test.id] = []; loadError ||= `Could not load test attempts (${ar.status}). ${await ar.text().catch(() => '')}`; }
-     if (sr.ok) { const rows = await sr.json(); nextSubmissions[test.id] = Array.isArray(rows) ? rows : []; } else { nextSubmissions[test.id] = []; loadError ||= `Could not load test submissions (${sr.status}). ${await sr.text().catch(() => '')}`; }
-    } catch (e) { nextAttempts[test.id] = []; nextSubmissions[test.id] = []; loadError ||= e instanceof Error ? e.message : 'Failed to load test submissions.'; }
-   }));
-   participants.forEach(p => { const name = String(p.full_name || '').trim(); if (name) nextStudentNames[p.student_id] = name; if (p.avatar_url) nextStudentAvatars[p.student_id] = p.avatar_url; });
-   const ids = Array.from(new Set([...participants.map(p => String(p.student_id || '').trim()), ...Object.values(nextAttempts).flat().map(a => String(a.student_id || '').trim()), ...Object.values(nextSubmissions).flat().map(s => String(s.student_id || '').trim())].filter(Boolean)));
+    const r = await fetch(`/api/teacher/classes/${encodeURIComponent(classCode)}`, { credentials: 'include', cache: 'no-store' });
+    const payload = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(String(payload?.error || `Request failed (${r.status})`));
+    participants = Array.isArray(payload.participants) ? payload.participants : [];
+    for (const test of tests) {
+      nextAttempts[test.id] = Array.isArray(payload.attempts?.[test.id]) ? payload.attempts[test.id] : [];
+      nextSubmissions[test.id] = Array.isArray(payload.testSubmissions?.[test.id]) ? payload.testSubmissions[test.id] : [];
+    }
+   } catch (e) {
+    loadError = e instanceof Error ? e.message : 'Failed to load test submissions.';
+   }
+   participants.forEach(p => {
+     const name = String(p.full_name || '').trim();
+     if (name) nextStudentNames[p.student_id] = name;
+     if (p.avatar_url) nextStudentAvatars[p.student_id] = p.avatar_url;
+   });
+   const ids = Array.from(new Set([
+     ...participants.map(p => String(p.student_id || '').trim()),
+     ...Object.values(nextAttempts).flat().map(a => String(a.student_id || '').trim()),
+     ...Object.values(nextSubmissions).flat().map(s => String(s.student_id || '').trim()),
+   ].filter(Boolean)));
    const missingIds = ids.filter(id => !nextStudentNames[id] || !nextStudentAvatars[id]);
-   if (missingIds.length) { try { const r = await fetch(`${supabaseUrl}/rest/v1/users?id=in.(${missingIds.map(encodeURIComponent).join(',')})&select=id,full_name,avatar_url`, { headers: getHeaders(), cache: 'no-store' }); if (r.ok) { const users = await r.json(); if (Array.isArray(users)) users.forEach((u: UserRecord) => { const name = String(u.full_name || '').trim(); if (u.id && name && !nextStudentNames[String(u.id)]) nextStudentNames[String(u.id)] = name; if (u.id && u.avatar_url) nextStudentAvatars[String(u.id)] = u.avatar_url; }); } } catch (e) { console.error('Failed to load student profiles:', e); } }
-   if (!cancelled) { setClassStudents(participants); setAttempts(nextAttempts); setSubmissions(nextSubmissions); setStudentNames(nextStudentNames); setStudentAvatars(nextStudentAvatars); setSubmissionLoadError(loadError); }
-  };
+   if (missingIds.length) {
+     try {
+       const r = await fetch(`/api/teacher/classes/${encodeURIComponent(classCode)}`, { credentials: 'include', cache: 'no-store' });
+       if (r.ok) {
+         const payload = await r.json();
+         for (const user of Array.isArray(payload.participants) ? payload.participants : []) {
+           const id = String(user.student_id || '');
+           const name = String(user.full_name || '').trim();
+           if (id && name) nextStudentNames[id] = name;
+           if (id && user.avatar_url) nextStudentAvatars[id] = user.avatar_url;
+         }
+       }
+     } catch {}
+   }
+   if (!cancelled) {
+     setClassStudents(participants);
+     setAttempts(nextAttempts);
+     setSubmissions(nextSubmissions);
+     setStudentNames(nextStudentNames);
+     setStudentAvatars(nextStudentAvatars);
+     setSubmissionLoadError(loadError);
+   }
+  }  };
   void load(); const timer = window.setInterval(load, 2000); return () => { cancelled = true; window.clearInterval(timer); };
  }, [teacher, classCode, tests.map(test => test.id).join('|')]);
  useEffect(() => { if (teacher || !studentId || !tests.length) return; }, [teacher, studentId, tests.length]);
