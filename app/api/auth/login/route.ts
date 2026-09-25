@@ -10,7 +10,7 @@ function setAuthCookies(response: NextResponse, accessToken: string, refreshToke
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 60,
+    maxAge: 60 * 60 * 24 * 365 * 10,
   });
 
   if (refreshToken) {
@@ -19,7 +19,7 @@ function setAuthCookies(response: NextResponse, accessToken: string, refreshToke
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 30,
+      maxAge: 60 * 60 * 24 * 365 * 10,
     });
   }
 }
