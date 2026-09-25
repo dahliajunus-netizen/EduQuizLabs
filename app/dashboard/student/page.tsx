@@ -54,6 +54,7 @@ export default function StudentDashboard(){
    if(!hasFreshCache)applyDashboardData(EMPTY);
   }finally{setLoading(false);}
  },[getStudentId,applyDashboardData,readCache,writeCache]);
+ useEffect(()=>{fetchDashboardData();},[fetchDashboardData]);
  const handleJoinClass=async(e:React.FormEvent)=>{e.preventDefault();setCodeError(null);const code=classCode.trim().toUpperCase();if(!code)return;setJoining(true);try{const response=await fetch('/api/student/classes/join',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({code}),cache:'no-store'});const body=await response.json().catch(()=>({}));if(!response.ok){if(response.status===404){setCodeError(text.codeInvalid);return;}if(response.status===409){setCodeError(text.alreadyJoined);return;}throw new Error(String(body?.error||`Failed to join class (${response.status})`));}setClassCode('');const sid=getStudentId();if(sid)try{sessionStorage.removeItem(`student-dashboard:${sid}`);}catch{}await fetchDashboardData(true);}catch(error){console.error('[Student Dashboard] Join error:',error);setCodeError(error instanceof Error?error.message:text.networkError);}finally{setJoining(false);}};
  const latestSubmissions=useMemo(()=>{const map=new Map<string,Submission>();for(const s of submissions){if(!map.has(s.assignment_id))map.set(s.assignment_id,s);}return map;},[submissions]);
  const courseById=useMemo(()=>new Map(courses.map(c=>[c.id,c])),[courses]);
