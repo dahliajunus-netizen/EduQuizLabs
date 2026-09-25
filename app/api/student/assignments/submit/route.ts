@@ -44,20 +44,20 @@ export async function POST(request: NextRequest) {
   }
 
   const membership = await supabaseDb(
-    `student_classes?student_id=eq.${encodeURIComponent(auth.user.id)}&code=eq.${encodeURIComponent(course.class_code)}&select=id&limit=1`
+    `student_classes?student_id=eq.${encodeURIComponent(user.id)}&code=eq.${encodeURIComponent(course.class_code)}&select=id&limit=1`
   );
   if (!Array.isArray(membership) || !membership[0]?.id) {
     return NextResponse.json({ error: 'You are not a member of this class.' }, { status: 403 });
   }
 
   const users = await supabaseDb(
-    `users?id=eq.${encodeURIComponent(auth.user.id)}&select=full_name,name&limit=1`
+    `users?id=eq.${encodeURIComponent(user.id)}&select=full_name,name&limit=1`
   ).catch(() => []);
-  const user = Array.isArray(users) ? users[0] : null;
-  const nickname = String(body?.nickname || user?.full_name || user?.name || 'Student').trim() || 'Student';
+  const profile = Array.isArray(users) ? users[0] : null;
+  const nickname = String(body?.nickname || profile?.full_name || profile?.name || 'Student').trim() || 'Student';
 
   const existing = await supabaseDb(
-    `assignment_submissions?assignment_id=eq.${encodeURIComponent(assignmentId)}&student_id=eq.${encodeURIComponent(auth.user.id)}&select=id&limit=1`
+    `assignment_submissions?assignment_id=eq.${encodeURIComponent(assignmentId)}&student_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`
   );
   if (Array.isArray(existing) && existing[0]?.id) {
     return NextResponse.json({ error: 'You have already submitted this assignment.' }, { status: 409 });
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
     body: JSON.stringify({
       assignment_id: assignmentId,
-      student_id: auth.user.id,
+      student_id: user.id,
       nickname,
       class: className,
       link,
