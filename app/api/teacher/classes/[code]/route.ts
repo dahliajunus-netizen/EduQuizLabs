@@ -6,6 +6,41 @@ function q(value: string) {
   return encodeURIComponent(value);
 }
 
+export async function POST(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+  const user = await requireTeacher(request);
+  if (!user) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+
+  const { code: rawCode } = await params;
+  const code = String(rawCode || '').trim().toUpperCase();
+  if (!code) return NextResponse.json({ error: 'Class code is required.' }, { status: 400 });
+
+  try {
+    const body = await request.json();
+    const courseName = typeof body?.course_name === 'string' ? body.course_name.trim() : '';
+    if (!courseName || courseName.length > 120) {
+      return NextResponse.json({ error: 'Invalid course name.' }, { status: 400 });
+    }
+
+    const classes = await supabaseDb(
+      `teacher_classes?code=eq.${q(code)}&teacher_id=eq.${q(user.id)}&select=id,code`,
+    );
+    if (!Array.isArray(classes) || !classes[0]) {
+      return NextResponse.json({ error: 'Class not found.' }, { status: 404 });
+    }
+
+    const rows = await supabaseDb('class_courses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ course_name: courseName, class_code: code }),
+    });
+
+    return NextResponse.json(Array.isArray(rows) ? rows : [], { status: 201 });
+  } catch (error) {
+    console.error('[Teacher Class Course API] POST failed:', error);
+    return NextResponse.json({ error: 'Unable to create course.' }, { status: 500 });
+  }
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const user = await requireTeacher(request);
   if (!user) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
@@ -109,3 +144,4 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'Unable to load teacher class data.' }, { status: 500 });
   }
 }
+
