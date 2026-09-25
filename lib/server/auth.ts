@@ -20,7 +20,7 @@ export async function requireTeacher(request: NextRequest): Promise<Authenticate
     `users?id=eq.${encodeURIComponent(user.id)}&select=id,role&limit=1`,
   );
   const profile = Array.isArray(rows) ? rows[0] : null;
-  return profile?.role === 'teacher' ? user : null;
+  return String(profile?.role || '').trim().toLowerCase() === 'teacher' ? user : null;
 }
 
 export async function requireStudent(request: NextRequest): Promise<AuthenticatedUser | null> {
@@ -31,7 +31,7 @@ export async function requireStudent(request: NextRequest): Promise<Authenticate
     `users?id=eq.${encodeURIComponent(user.id)}&select=id,role&limit=1`,
   );
   const profile = Array.isArray(rows) ? rows[0] : null;
-  return profile?.role === 'student' ? user : null;
+  return String(profile?.role || '').trim().toLowerCase() === 'student' ? user : null;
 }
 
 export async function requireTeacherClassOwnership(userId: string, classCode: string): Promise<boolean> {
