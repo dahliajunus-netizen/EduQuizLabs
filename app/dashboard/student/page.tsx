@@ -35,40 +35,23 @@ export default function StudentDashboard(){
   const sid=getStudentId();if(!sid){applyDashboardData(EMPTY);setLoading(false);return;}
   const hasFreshCache=!force&&readCache(sid);if(hasFreshCache)setLoading(false);else setLoading(true);
   try{
-   const classesResponse=await fetch(`${SUPABASE_URL}/rest/v1/student_classes?student_id=eq.${encodeURIComponent(sid)}&select=id,class_name,code,school,course_id,student_id`,{headers,cache:'no-store'});if(!classesResponse.ok)throw new Error(await classesResponse.text());
-   const classesData:StudentClass[]=await classesResponse.json();const codes=[...new Set(classesData.map(x=>x.code).filter(Boolean))];
-   if(!codes.length){const data={...EMPTY,myClasses:classesData};applyDashboardData(data);writeCache(sid,data);return;}
-   const filter=codes.map(x=>`\"${String(x).replace(/\"/g,'\\\"')}\"`).join(',');
-   const coursesResponse=await fetch(`${SUPABASE_URL}/rest/v1/class_courses?class_code=in.(${filter})&select=id,course_name,class_code&order=id.asc`,{headers,cache:'no-store'});if(!coursesResponse.ok)throw new Error(await coursesResponse.text());
-   const coursesData:Course[]=await coursesResponse.json();const courseIds=[...new Set(coursesData.map(x=>x.id).filter(Boolean))];
-   if(!courseIds.length){const data={...EMPTY,myClasses:classesData,courses:coursesData};applyDashboardData(data);writeCache(sid,data);return;}
-   const courseFilter=courseIds.map(x=>`\"${x}\"`).join(',');
-   const [assignmentsResponse,testsResponse]=await Promise.all([
-    fetch(`${SUPABASE_URL}/rest/v1/course_assignments?course_id=in.(${courseFilter})&select=id,course_id,name,description,created_at,due_date&order=due_date.asc.nullslast`,{headers,cache:'no-store'}),
-    fetch(`${SUPABASE_URL}/rest/v1/tests?course_id=in.(${courseFilter})&published=eq.true&select=id,course_id,title,created_at&order=created_at.asc`,{headers,cache:'no-store'})
-   ]);
-   if(!assignmentsResponse.ok)throw new Error(await assignmentsResponse.text());if(!testsResponse.ok)throw new Error(await testsResponse.text());
-   const [assignmentsData,courseTestsData]=await Promise.all([assignmentsResponse.json(),testsResponse.json()]) as [Assignment[],Test[]];
-   const assignmentFilter=assignmentsData.length?assignmentsData.map(x=>`\"${x.id}\"`).join(','):'';
-   const submissionRequests:Promise<Response>[]=[];
-   if(assignmentFilter)submissionRequests.push(fetch(`${SUPABASE_URL}/rest/v1/assignment_submissions?assignment_id=in.(${assignmentFilter})&student_id=eq.${encodeURIComponent(sid)}&select=id,assignment_id,student_id,grade,created_at&order=created_at.desc`,{headers,cache:'no-store'}));
-   const testSubmissionsResponse=await fetch(`${SUPABASE_URL}/rest/v1/test_submissions?student_id=eq.${encodeURIComponent(sid)}&select=id,test_id,student_id,score,submitted_at&order=submitted_at.desc`,{headers,cache:'no-store'});
-   let allTestSubmissions:TestSubmission[]=[];
-   if(testSubmissionsResponse.ok){const rows=await testSubmissionsResponse.json();if(Array.isArray(rows))allTestSubmissions=rows;}
-   const latestByTest=new Map<string,TestSubmission>();
-   for(const submission of allTestSubmissions){const testId=String(submission.test_id||'').trim();if(testId&&!latestByTest.has(testId))latestByTest.set(testId,submission);}
-   const testIds=[...latestByTest.keys()];
-   let submittedTests:Test[]=[];
-   if(testIds.length){const submittedTestFilter=testIds.map(id=>`\"${id}\"`).join(',');const submittedTestsResponse=await fetch(`${SUPABASE_URL}/rest/v1/tests?id=in.(${submittedTestFilter})&select=id,course_id,title,created_at`,{headers,cache:'no-store'});if(submittedTestsResponse.ok){const rows=await submittedTestsResponse.json();if(Array.isArray(rows))submittedTests=rows;}}
-   const testsById=new Map<string,Test>();for(const test of courseTestsData)testsById.set(test.id,test);for(const test of submittedTests)testsById.set(test.id,test);
-   const submissionsResponses=await Promise.all(submissionRequests);let submissionsData:Submission[]=[];
-   if(assignmentFilter){const r=submissionsResponses[0];if(!r.ok)throw new Error(await r.text());submissionsData=await r.json();}
-   const testSubmissionsData=Array.from(latestByTest.values());
-   const data={myClasses:classesData,courses:coursesData,assignments:assignmentsData,submissions:submissionsData,tests:Array.from(testsById.values()),testSubmissions:testSubmissionsData};
+   const response=await fetch('/api/student/dashboard',{credentials:'include',cache:'no-store'});
+   const body=await response.json().catch(()=>null);
+   if(!response.ok)throw new Error(String(body?.error||\`Failed to load dashboard (\${response.status})\`));
+   const data:DashboardData={
+    myClasses:Array.isArray(body?.myClasses)?body.myClasses:[],
+    courses:Array.isArray(body?.courses)?body.courses:[],
+    assignments:Array.isArray(body?.assignments)?body.assignments:[],
+    submissions:Array.isArray(body?.submissions)?body.submissions:[],
+    tests:Array.isArray(body?.tests)?body.tests:[],
+    testSubmissions:Array.isArray(body?.testSubmissions)?body.testSubmissions:[]
+   };
    applyDashboardData(data);writeCache(sid,data);
-  }catch(error){console.error('[Student Dashboard] Error loading dashboard:',error);if(!hasFreshCache)applyDashboardData(EMPTY);}finally{setLoading(false);}
- },[SUPABASE_URL,headers,getStudentId,applyDashboardData,readCache,writeCache]);
- useEffect(()=>{fetchDashboardData();},[fetchDashboardData]);
+  }catch(error){
+   console.error('[Student Dashboard] Error loading dashboard:',error);
+   if(!hasFreshCache)applyDashboardData(EMPTY);
+  }finally{setLoading(false);}
+ },[getStudentId,applyDashboardData,readCache,writeCache]);
  const handleJoinClass=async(e:React.FormEvent)=>{e.preventDefault();setCodeError(null);const code=classCode.trim().toUpperCase();if(!code)return;setJoining(true);try{const response=await fetch('/api/student/classes/join',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({code}),cache:'no-store'});const body=await response.json().catch(()=>({}));if(!response.ok){if(response.status===404){setCodeError(text.codeInvalid);return;}if(response.status===409){setCodeError(text.alreadyJoined);return;}throw new Error(String(body?.error||`Failed to join class (${response.status})`));}setClassCode('');const sid=getStudentId();if(sid)try{sessionStorage.removeItem(`student-dashboard:${sid}`);}catch{}await fetchDashboardData(true);}catch(error){console.error('[Student Dashboard] Join error:',error);setCodeError(error instanceof Error?error.message:text.networkError);}finally{setJoining(false);}};
  const latestSubmissions=useMemo(()=>{const map=new Map<string,Submission>();for(const s of submissions){if(!map.has(s.assignment_id))map.set(s.assignment_id,s);}return map;},[submissions]);
  const courseById=useMemo(()=>new Map(courses.map(c=>[c.id,c])),[courses]);
