@@ -159,9 +159,39 @@ export default function ClassDetailsPage() {
     } catch (e) { alert(e instanceof Error ? e.message : 'Failed to delete course.'); }
     finally { setBusy(false); }
   }
-  async function leaveClass() { if (teacher || !studentId || !code || busy) return; if (!confirm('Are you sure you want to leave this class?\n\nYou will need the class code to join again.')) return; setBusy(true); setMessage(''); try { await del(`${url}/rest/v1/student_classes?code=eq.${encodeURIComponent(code)}&student_id=eq.${encodeURIComponent(studentId)}`); window.location.href = '/dashboard/student'; } catch (e) { setMessage(e instanceof Error ? e.message : 'Failed to leave class.'); } finally { setBusy(false); } }
-  async function submitAssignment(e: React.FormEvent<HTMLFormElement>) { e.preventDefault(); if (!selectedAssignment?.id || !studentId || busy) return; if (!submissionClass.trim() || !validUrl(submissionLink)) { setMessage('Enter a class and a valid submission link.'); return; } setBusy(true); setMessage(''); try { const response = await fetch(`${url}/rest/v1/assignment_submissions`, { method: 'POST', headers: getJsonHeaders(), body: JSON.stringify({ assignment_id: selectedAssignment.id, student_id: studentId, nickname: name || 'Student', class: submissionClass.trim(), link: submissionLink.trim() }) }); if (!response.ok) throw new Error(await response.text()); setSubmissionModal(false); setSubmissionClass(''); setSubmissionLink(''); await load(); } catch (e) { setMessage(e instanceof Error ? e.message : 'Failed to submit assignment.'); } finally { setBusy(false); } }
-  async function createCourse(e: React.FormEvent<HTMLFormElement>) { e.preventDefault(); if (!courseName.trim() || busy) return; setBusy(true); setCourseError(''); try { const response = await fetch(`${url}/rest/v1/class_courses`, { method: 'POST', headers: getJsonHeaders(), body: JSON.stringify({ course_name: courseName.trim(), class_code: code }) }); if (!response.ok) throw new Error(await response.text()); setCourseName(''); setCourseModal(false); await load(); } catch (e) { setCourseError(e instanceof Error ? e.message : 'Failed to create course.'); } finally { setBusy(false); } }
+  async function leaveClass() {
+    if (teacher || !code || busy) return;
+    if (!confirm('Are you sure you want to leave this class?\n\nYou will need the class code to join again.')) return;
+    setBusy(true); setMessage('');
+    try {
+      const response = await fetch(`/api/student/classes/leave?code=${encodeURIComponent(code)}`, { method: 'DELETE', credentials: 'include' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload?.error || `Failed to leave class (${response.status})`));
+      window.location.href = '/dashboard/student';
+    } catch (e) { setMessage(e instanceof Error ? e.message : 'Failed to leave class.'); }
+    finally { setBusy(false); }
+  }
+
+  async function submitAssignment(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!selectedAssignment?.id || busy) return;
+    if (!submissionClass.trim() || !validUrl(submissionLink)) { setMessage('Enter a class and a valid submission link.'); return; }
+    setBusy(true); setMessage('');
+    try {
+      const response = await fetch('/api/student/assignments/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ assignment_id: selectedAssignment.id, nickname: name || 'Student', class: submissionClass.trim(), link: submissionLink.trim() }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload?.error || `Failed to submit assignment (${response.status})`));
+      setSubmissionModal(false); setSubmissionClass(''); setSubmissionLink(''); await load();
+    } catch (e) { setMessage(e instanceof Error ? e.message : 'Failed to submit assignment.'); }
+    finally { setBusy(false); }
+  }
+
+ async function createCourse(e: React.FormEvent<HTMLFormElement>) { e.preventDefault(); if (!courseName.trim() || busy) return; setBusy(true); setCourseError(''); try { const response = await fetch(`${url}/rest/v1/class_courses`, { method: 'POST', headers: getJsonHeaders(), body: JSON.stringify({ course_name: courseName.trim(), class_code: code }) }); if (!response.ok) throw new Error(await response.text()); setCourseName(''); setCourseModal(false); await load(); } catch (e) { setCourseError(e instanceof Error ? e.message : 'Failed to create course.'); } finally { setBusy(false); } }
 
   async function addItem(e: React.FormEvent<HTMLFormElement>) { e.preventDefault(); if (!selectedCourse?.id || busy) return; setBusy(true); setMessage(''); try { if (addType === 'material') { if (!materialName.trim() || !validUrl(materialLink)) throw new Error('Enter a valid material name and link.'); const response = await fetch(`${url}/rest/v1/course_materials`, { method: 'POST', headers: getJsonHeaders(), body: JSON.stringify({ course_id: selectedCourse.id, name: materialName.trim(), link: materialLink.trim() }) }); if (!response.ok) throw new Error(await response.text()); } else { const due = dbDateTime(assignmentDueDate); if (!assignmentName.trim() || !assignmentDescription.trim() || !due) throw new Error('Enter a valid due date and time.'); const response = await fetch(`${url}/rest/v1/course_assignments`, { method: 'POST', headers: getJsonHeaders(), body: JSON.stringify({ course_id: selectedCourse.id, name: assignmentName.trim(), description: assignmentDescription.trim(), due_date: due }) }); if (!response.ok) throw new Error(await response.text()); } setAddModal(false); setMaterialName(''); setMaterialLink(''); setAssignmentName(''); setAssignmentDescription(''); setAssignmentDueDate(''); await load(); } catch (e) { setMessage(e instanceof Error ? e.message : 'Failed to add item.'); } finally { setBusy(false); } }
 
