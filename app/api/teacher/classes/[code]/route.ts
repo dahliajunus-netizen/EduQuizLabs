@@ -72,6 +72,55 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 }
 
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+  const user = await requireTeacher(request);
+  if (!user) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+
+  const { code: rawCode } = await params;
+  const code = String(rawCode || '').trim().toUpperCase();
+  if (!code) return NextResponse.json({ error: 'Class code is required.' }, { status: 400 });
+
+  try {
+    const url = new URL(request.url);
+    const table = String(url.searchParams.get('table') || '').trim();
+    const id = String(url.searchParams.get('id') || '').trim();
+    if (table !== 'course_materials' && table !== 'course_assignments' && table !== 'tests') {
+      return NextResponse.json({ error: 'Unsupported resource.' }, { status: 400 });
+    }
+    if (!id) return NextResponse.json({ error: 'Resource id is required.' }, { status: 400 });
+
+    const classes = await supabaseDb(
+      `teacher_classes?code=eq.${q(code)}&teacher_id=eq.${q(user.id)}&select=id,code`,
+    );
+    if (!Array.isArray(classes) || !classes[0]) {
+      return NextResponse.json({ error: 'Class not found.' }, { status: 404 });
+    }
+
+    const rows = await supabaseDb(
+      `${table}?id=eq.${q(id)}&select=*`,
+    );
+    const resource = Array.isArray(rows) ? rows[0] : null;
+    if (!resource) return NextResponse.json({ error: 'Resource not found.' }, { status: 404 });
+
+    if (table === 'course_materials' || table === 'course_assignments' || table === 'tests') {
+      const courseId = String(resource.course_id || '').trim();
+      if (!courseId) return NextResponse.json({ error: 'Resource course was not found.' }, { status: 404 });
+      const courses = await supabaseDb(
+        `class_courses?id=eq.${q(courseId)}&class_code=eq.${q(code)}&select=id`,
+      );
+      if (!Array.isArray(courses) || !courses[0]) {
+        return NextResponse.json({ error: 'You do not own this class resource.' }, { status: 403 });
+      }
+    }
+
+    await supabaseDb(`${table}?id=eq.${q(id)}`, { method: 'DELETE' });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('[Teacher Class Course API] DELETE failed:', error);
+    return NextResponse.json({ error: 'Unable to delete resource.' }, { status: 500 });
+  }
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const user = await requireTeacher(request);
   if (!user) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
