@@ -38,7 +38,7 @@ export default function StudentDashboard(){
   try{
    const response=await fetch('/api/student/dashboard',{credentials:'include',cache:'no-store'});
    const body=await response.json().catch(()=>null);
-   if(!response.ok)throw new Error(String(body?.error||\`Failed to load dashboard (\${response.status})\`));
+   if(!response.ok)throw new Error(String(body?.error||`Failed to load dashboard (${response.status})`));
    const data:DashboardData={
     myClasses:Array.isArray(body?.myClasses)?body.myClasses:[],
     courses:Array.isArray(body?.courses)?body.courses:[],
