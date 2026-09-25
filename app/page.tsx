@@ -18,18 +18,33 @@ export default function Page() {
   const [checkingSession, setCheckingSession] = useState(true)
 
   useEffect(() => {
-    void fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' }).catch(() => {});
-    try {
-      const raw = localStorage.getItem('current_user')
-      if (raw) {
-        const user = JSON.parse(raw)
-        if (user?.role) {
-          router.replace(getDashboardPath(user))
-          return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const response = await fetch('/api/auth/session', { credentials: 'include', cache: 'no-store' })
+        if (response.ok) {
+          const data = await response.json()
+          if (data?.user?.role) {
+            localStorage.setItem('current_user', JSON.stringify(data.user))
+            localStorage.setItem('supabase_user_id', String(data.user.id))
+            if (!cancelled) {
+              router.replace(getDashboardPath(data.user))
+              return
+            }
+          }
         }
-      }
-    } catch {}
-    setCheckingSession(false)
+        const raw = localStorage.getItem('current_user')
+        if (raw) {
+          const user = JSON.parse(raw)
+          if (user?.role && !cancelled) {
+            router.replace(getDashboardPath(user))
+            return
+          }
+        }
+      } catch {}
+      if (!cancelled) setCheckingSession(false)
+    })()
+    return () => { cancelled = true }
   }, [router])
 
   if (checkingSession) {
