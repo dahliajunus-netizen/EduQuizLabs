@@ -57,43 +57,13 @@ export default function Participants() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${url}/rest/v1/rpc/get_class_participants`, {
-        method: 'POST',
-        headers: { ...getHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_class_code: classCode }),
+      const response = await fetch(`/api/teacher/classes/${encodeURIComponent(classCode)}`, {
+        credentials: 'include',
         cache: 'no-store',
       });
-      const text = await response.text();
-      if (!response.ok) throw new Error(text || `Request failed (${response.status})`);
-      const rows = text ? JSON.parse(text) : [];
-      const base = Array.isArray(rows) ? rows : [];
-
-      // The participants RPC supplies the student IDs/names. Fetch the matching
-      // public profile fields separately so teachers can see each student's avatar.
-      const ids = base.map((p: any) => String(p.student_id || '')).filter(Boolean);
-      let profiles: UserProfile[] = [];
-      if (ids.length) {
-        const inFilter = `(${ids.map((id: string) => encodeURIComponent(id)).join(',')})`;
-        const profileResponse = await fetch(
-          `${url}/rest/v1/users?id=in.${inFilter}&select=id,full_name,avatar_url`,
-          { headers: getHeaders(), cache: 'no-store' },
-        );
-        if (profileResponse.ok) {
-          const profileText = await profileResponse.text();
-          const parsed = profileText ? JSON.parse(profileText) : [];
-          if (Array.isArray(parsed)) profiles = parsed;
-        }
-      }
-
-      const profileMap = new Map(profiles.map(profile => [String(profile.id), profile]));
-      setParticipants(base.map((participant: any) => {
-        const profile = profileMap.get(String(participant.student_id));
-        return {
-          student_id: String(participant.student_id),
-          full_name: profile?.full_name ?? participant.full_name ?? null,
-          avatar_url: profile?.avatar_url ?? participant.avatar_url ?? null,
-        };
-      }));
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload?.error || `Request failed (${response.status})`));
+      setParticipants(Array.isArray(payload.participants) ? payload.participants : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load participants.');
       setParticipants([]);
