@@ -17,15 +17,46 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const body = await request.json();
     const courseName = typeof body?.course_name === 'string' ? body.course_name.trim() : '';
-    if (!courseName || courseName.length > 120) {
-      return NextResponse.json({ error: 'Invalid course name.' }, { status: 400 });
-    }
+    const itemType = body?.type === 'material' || body?.type === 'assignment' ? body.type : 'course';
 
     const classes = await supabaseDb(
       `teacher_classes?code=eq.${q(code)}&teacher_id=eq.${q(user.id)}&select=id,code`,
     );
     if (!Array.isArray(classes) || !classes[0]) {
       return NextResponse.json({ error: 'Class not found.' }, { status: 404 });
+    }
+
+    if (itemType === 'material') {
+      const courseId = typeof body?.course_id === 'string' ? body.course_id.trim() : '';
+      const name = typeof body?.name === 'string' ? body.name.trim() : '';
+      const link = typeof body?.link === 'string' ? body.link.trim() : '';
+      if (!courseId || !name || !link) return NextResponse.json({ error: 'Material details are required.' }, { status: 400 });
+      const courses = await supabaseDb(`class_courses?id=eq.${q(courseId)}&class_code=eq.${q(code)}&select=id`);
+      if (!Array.isArray(courses) || !courses[0]) return NextResponse.json({ error: 'Course not found.' }, { status: 404 });
+      const rows = await supabaseDb('course_materials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ course_id: courseId, name, link }),
+      });
+      return NextResponse.json(Array.isArray(rows) ? rows : [], { status: 201 });
+    }
+
+    if (itemType === 'assignment') {
+      const courseId = typeof body?.course_id === 'string' ? body.course_id.trim() : '';
+      const name = typeof body?.name === 'string' ? body.name.trim() : '';
+      const description = typeof body?.description === 'string' ? body.description.trim() : '';
+      const dueDate = typeof body?.due_date === 'string' ? body.due_date : '';
+      if (!courseId || !name || !description || !dueDate) return NextResponse.json({ error: 'Assignment details are required.' }, { status: 400 });
+      const courses = await supabaseDb(`class_courses?id=eq.${q(courseId)}&class_code=eq.${q(code)}&select=id`);
+      if (!Array.isArray(courses) || !courses[0]) return NextResponse.json({ error: 'Course not found.' }, { status: 404 });
+      const rows = await supabaseDb('course_assignments', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ course_id: courseId, name, description, due_date: dueDate }),
+      });
+      return NextResponse.json(Array.isArray(rows) ? rows : [], { status: 201 });
+    }
+
+    if (!courseName || courseName.length > 120) {
+      return NextResponse.json({ error: 'Invalid course name.' }, { status: 400 });
     }
 
     const rows = await supabaseDb('class_courses', {
