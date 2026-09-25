@@ -30,41 +30,53 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       `class_courses?class_code=eq.${q(code)}&select=*&order=created_at.asc,id.asc`,
     ) as any[];
 
+    const courseData = await Promise.all((Array.isArray(courses) ? courses : []).map(async (course) => {
+      if (!course?.id) return null;
+      const courseId = String(course.id);
+
+      const [materialRows, assignmentRows, testRows] = await Promise.all([
+        supabaseDb(`course_materials?course_id=eq.${q(courseId)}&select=*`).catch(() => []),
+        supabaseDb(`course_assignments?course_id=eq.${q(courseId)}&select=*&order=created_at.asc`).catch(() => []),
+        supabaseDb(`tests?course_id=eq.${q(courseId)}&published=eq.true&select=*&order=created_at.asc`).catch(() => []),
+      ]);
+
+      const courseAssignments = Array.isArray(assignmentRows) ? assignmentRows : [];
+      const courseTests = Array.isArray(testRows) ? testRows : [];
+
+      const [assignmentSubmissionPairs, questionPairs] = await Promise.all([
+        Promise.all(courseAssignments.filter((a: any) => a?.id).map(async (assignment: any) => [
+          String(assignment.id),
+          await supabaseDb(`assignment_submissions?assignment_id=eq.${q(String(assignment.id))}&student_id=eq.${q(user.id)}&select=*`).catch(() => []),
+        ] as const)),
+        Promise.all(courseTests.filter((t: any) => t?.id).map(async (test: any) => [
+          String(test.id),
+          await supabaseDb(`test_questions?test_id=eq.${q(String(test.id))}&select=*&order=question_order.asc`).catch(() => []),
+        ] as const)),
+      ]);
+
+      return {
+        courseId,
+        materials: Array.isArray(materialRows) ? materialRows : [],
+        assignments: courseAssignments,
+        tests: courseTests,
+        submissionPairs: assignmentSubmissionPairs,
+        questionPairs,
+      };
+    }));
+
     const materials: Record<string, any[]> = {};
     const assignments: Record<string, any[]> = {};
     const submissions: Record<string, any[]> = {};
     const tests: Record<string, any[]> = {};
     const questions: Record<string, any[]> = {};
 
-    for (const course of Array.isArray(courses) ? courses : []) {
-      if (!course?.id) continue;
-      const courseId = String(course.id);
-
-      materials[courseId] = await supabaseDb(
-        `course_materials?course_id=eq.${q(courseId)}&select=*`,
-      ).catch(() => []);
-
-      assignments[courseId] = await supabaseDb(
-        `course_assignments?course_id=eq.${q(courseId)}&select=*&order=created_at.asc`,
-      ).catch(() => []);
-
-      for (const assignment of assignments[courseId]) {
-        if (!assignment?.id) continue;
-        submissions[String(assignment.id)] = await supabaseDb(
-          `assignment_submissions?assignment_id=eq.${q(String(assignment.id))}&student_id=eq.${q(user.id)}&select=*`,
-        ).catch(() => []);
-      }
-
-      tests[courseId] = await supabaseDb(
-        `tests?course_id=eq.${q(courseId)}&published=eq.true&select=*&order=created_at.asc`,
-      ).catch(() => []);
-
-      for (const test of tests[courseId]) {
-        if (!test?.id) continue;
-        questions[String(test.id)] = await supabaseDb(
-          `test_questions?test_id=eq.${q(String(test.id))}&select=*&order=question_order.asc`,
-        ).catch(() => []);
-      }
+    for (const data of courseData) {
+      if (!data) continue;
+      materials[data.courseId] = data.materials;
+      assignments[data.courseId] = data.assignments;
+      tests[data.courseId] = data.tests;
+      for (const [id, rows] of data.submissionPairs) submissions[id] = rows;
+      for (const [id, rows] of data.questionPairs) questions[id] = rows;
     }
 
     return NextResponse.json({
