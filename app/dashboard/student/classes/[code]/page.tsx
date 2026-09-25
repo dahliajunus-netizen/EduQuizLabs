@@ -105,12 +105,27 @@ export default function ClassDetailsPage() {
     if (!code) return;
     setLoading(true); setError('');
     try {
+      if (teacher) {
+        const response = await fetch(`/api/teacher/classes/${encodeURIComponent(code)}`, { credentials: 'include', cache: 'no-store' });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(String(payload?.error || `Request failed (${response.status})`));
+        const classRow = payload.class || {};
+        setClassName(classRow.class_name || ''); setSchool(classRow.school_name || '');
+        setCourses(Array.isArray(payload.courses) ? payload.courses : []);
+        setMaterials(payload.materials || {});
+        setAssignments(payload.assignments || {});
+        setSubmissions(payload.submissions || {});
+        setTests(payload.tests || {});
+        setQuestions(payload.questions || {});
+        return;
+      }
+
       const classes = await get<any[]>(`${url}/rest/v1/teacher_classes?code=eq.${encodeURIComponent(code)}&select=*`);
       if (!classes[0]) throw new Error('Class not found');
       setClassName(classes[0].class_name || ''); setSchool(classes[0].school_name || '');
       const cs = await get<Course[]>(`${url}/rest/v1/class_courses?class_code=eq.${encodeURIComponent(code)}&select=*&order=created_at.asc,id.asc`);
       const mm: Record<string, Material[]> = {}; const aa: Record<string, Assignment[]> = {}; const tt: Record<string, Test[]> = {}; const qq: Record<string, Question[]> = {}; const ss: Record<string, Submission[]> = {};
-      for (const course of cs) { if (!course.id) continue; mm[course.id] = await get<Material[]>(`${url}/rest/v1/course_materials?course_id=eq.${encodeURIComponent(course.id)}&select=*`).catch(() => []); aa[course.id] = await get<Assignment[]>(`${url}/rest/v1/course_assignments?course_id=eq.${encodeURIComponent(course.id)}&select=*&order=created_at.asc`).catch(() => []); tt[course.id] = await get<Test[]>(`${url}/rest/v1/tests?course_id=eq.${encodeURIComponent(course.id)}${teacher ? '' : '&published=eq.true'}&select=*&order=created_at.asc`).catch(() => []); for (const test of tt[course.id]) qq[test.id] = await get<Question[]>(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(test.id)}&select=*&order=question_order.asc`).catch(() => []); for (const assignment of aa[course.id]) { if (!assignment.id) continue; const filter = teacher ? `assignment_id=eq.${encodeURIComponent(assignment.id)}` : `assignment_id=eq.${encodeURIComponent(assignment.id)}&student_id=eq.${encodeURIComponent(studentId)}`; ss[assignment.id] = await get<Submission[]>(`${url}/rest/v1/assignment_submissions?${filter}&select=*`).catch(() => []); } }
+      for (const course of cs) { if (!course.id) continue; mm[course.id] = await get<Material[]>(`${url}/rest/v1/course_materials?course_id=eq.${encodeURIComponent(course.id)}&select=*`).catch(() => []); aa[course.id] = await get<Assignment[]>(`${url}/rest/v1/course_assignments?course_id=eq.${encodeURIComponent(course.id)}&select=*&order=created_at.asc`).catch(() => []); tt[course.id] = await get<Test[]>(`${url}/rest/v1/tests?course_id=eq.${encodeURIComponent(course.id)}&published=eq.true&select=*&order=created_at.asc`).catch(() => []); for (const test of tt[course.id]) qq[test.id] = await get<Question[]>(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(test.id)}&select=*&order=question_order.asc`).catch(() => []); for (const assignment of aa[course.id]) { if (!assignment.id) continue; const filter = `assignment_id=eq.${encodeURIComponent(assignment.id)}&student_id=eq.${encodeURIComponent(studentId)}`; ss[assignment.id] = await get<Submission[]>(`${url}/rest/v1/assignment_submissions?${filter}&select=*`).catch(() => []); } }
       setCourses(cs); setMaterials(mm); setAssignments(aa); setTests(tt); setQuestions(qq); setSubmissions(ss);
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load class'); } finally { setLoading(false); }
   }
