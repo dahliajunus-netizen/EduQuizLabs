@@ -30,6 +30,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const submissions: Record<string, any[]> = {};
     const tests: Record<string, any[]> = {};
     const questions: Record<string, any[]> = {};
+    const attempts: Record<string, any[]> = {};
+    const testSubmissions: Record<string, any[]> = {};
 
     for (const course of Array.isArray(courses) ? courses : []) {
       if (!course?.id) continue;
@@ -93,6 +95,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       submissions,
       tests,
       questions,
+      attempts,
+      testSubmissions,
       participants,
     });
   } catch (error) {
