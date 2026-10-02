@@ -172,6 +172,21 @@ export default function TakeTestPage() {
       const restored = data.attempt?.answers || {};
       setAnswers(restored);
       answersRef.current = restored;
+
+      const attemptKey = data.attempt?.id ? `eduquiz:test-position:${data.attempt.id}` : '';
+      let resumeIndex = 0;
+      const storedPosition = attemptKey ? Number.parseInt(localStorage.getItem(attemptKey) || '', 10) : NaN;
+      if (Number.isFinite(storedPosition)) {
+        resumeIndex = storedPosition;
+      } else if (data.questions?.length) {
+        const answeredIndexes = (data.questions as Question[])
+          .map((q: Question, index: number) => (isAnswered(q, restored) ? index : -1))
+          .filter((index: number) => index >= 0);
+        resumeIndex = answeredIndexes.length ? answeredIndexes[answeredIndexes.length - 1] : 0;
+      }
+      if (data.questions?.length) resumeIndex = Math.max(0, Math.min(resumeIndex, data.questions.length - 1));
+      setCurrent(resumeIndex);
+      if (attemptKey) localStorage.setItem(attemptKey, String(resumeIndex));
       setUnlocked(!data.test?.requires_password && Boolean(data.attempt));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load test.');
@@ -265,6 +280,21 @@ export default function TakeTestPage() {
       const restored = data.attempt?.answers || {};
       setAnswers(restored);
       answersRef.current = restored;
+
+      const attemptKey = data.attempt?.id ? `eduquiz:test-position:${data.attempt.id}` : '';
+      let resumeIndex = 0;
+      const storedPosition = attemptKey ? Number.parseInt(localStorage.getItem(attemptKey) || '', 10) : NaN;
+      if (Number.isFinite(storedPosition)) {
+        resumeIndex = storedPosition;
+      } else if (data.questions?.length) {
+        const answeredIndexes = (data.questions as Question[])
+          .map((q: Question, index: number) => (isAnswered(q, restored) ? index : -1))
+          .filter((index: number) => index >= 0);
+        resumeIndex = answeredIndexes.length ? answeredIndexes[answeredIndexes.length - 1] : 0;
+      }
+      if (data.questions?.length) resumeIndex = Math.max(0, Math.min(resumeIndex, data.questions.length - 1));
+      setCurrent(resumeIndex);
+      if (attemptKey) localStorage.setItem(attemptKey, String(resumeIndex));
       setUnlocked(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not start test.');
@@ -324,7 +354,9 @@ export default function TakeTestPage() {
   };
 
   const goToQuestion = (index: number) => {
-    setCurrent(Math.max(0, Math.min(index, questions.length - 1)));
+    const nextIndex = Math.max(0, Math.min(index, questions.length - 1));
+    setCurrent(nextIndex);
+    if (attempt?.id) localStorage.setItem(`eduquiz:test-position:${attempt.id}`, String(nextIndex));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
