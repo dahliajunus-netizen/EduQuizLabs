@@ -72,7 +72,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const submissions = await supabaseDb(`test_submissions?test_id=eq.${encodeURIComponent(id)}&student_id=eq.${encodeURIComponent(current.id)}&select=id,test_id,student_id,answers,score&order=id.desc`);
     if (!submissions?.length) return NextResponse.json({ error: 'No completed attempt was found.' }, { status: 404 });
 
-    const questions = await supabaseDb(`test_questions?test_id=eq.${encodeURIComponent(id)}&select=id,question_order,question,question_type,option_a,option_b,option_c,option_d&order=question_order.asc,id.asc`);
+    const questions = await supabaseDb(`test_questions?test_id=eq.${encodeURIComponent(id)}&select=id,question_order,question,question_type,option_a,option_b,option_c,option_d,correct_answer&order=question_order.asc,id.asc`);
     const submission = submissions[0];
     const answers = submission.answers && typeof submission.answers === 'object' ? submission.answers : {};
 
