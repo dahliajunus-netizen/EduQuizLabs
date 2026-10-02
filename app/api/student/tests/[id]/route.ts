@@ -17,6 +17,8 @@ function safeImageUrl(value: unknown): string | null {
   catch { return null; }
 }
 function getImageUrl(question: any): string | null {
+  const direct = safeImageUrl(question?.image_url);
+  if (direct) return direct;
   const answerData = question?.answer_data;
   if (answerData && typeof answerData === 'object' && !Array.isArray(answerData)) return safeImageUrl(answerData.image_url);
   if (typeof answerData === 'string') { try { const parsed = JSON.parse(answerData); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return safeImageUrl(parsed.image_url); } catch {} }
@@ -58,7 +60,7 @@ async function getTest(id: string) {
   return Array.isArray(rows) ? rows[0] : null;
 }
 async function getQuestions(id: string) {
-  return supabaseDb(`test_questions?test_id=eq.${encodeURIComponent(id)}&select=id,test_id,question_order,question,question_type,option_a,option_b,option_c,option_d,correct_answer,answer_data&order=question_order.asc,id.asc`);
+  return supabaseDb(`test_questions?test_id=eq.${encodeURIComponent(id)}&select=id,test_id,question_order,question,question_type,option_a,option_b,option_c,option_d,correct_answer,answer_data,image_url&order=question_order.asc,id.asc`);
 }
 async function getSubmissions(id: string, userId: string) {
   return supabaseDb(`test_submissions?test_id=eq.${encodeURIComponent(id)}&student_id=eq.${encodeURIComponent(userId)}&select=id,test_id,student_id,answers,score&order=id.desc`);
