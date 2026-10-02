@@ -161,6 +161,92 @@ async function createAttempt(id: string, userId: string) {
   return supabaseRpc('start_test_attempt', { p_test_id: id, p_student_id: userId });
 }
 
+function normalized(value: unknown) {
+  return String(value ?? '').trim().replace(/\\s+/g, ' ').toLowerCase();
+}
+
+function isCorrect(q: any, value: unknown) {
+  const type = String(q.question_type || 'multiple_choice')
+    .toLowerCase()
+    .replace(/-/g, '_')
+    .replace(/\\s+/g, '_');
+
+  if (type === 'fill_blank' || type === 'fill_in_blank') {
+    const accepted = String(q.option_a || q.correct_answer || '')
+      .split(/\\s*(?:\\|\\||;|,)\\s*/)
+      .map(normalized)
+      .filter(Boolean);
+    return accepted.includes(normalized(value));
+  }
+
+  if (type === 'matching' || type === 'match') {
+    try {
+      const submitted = JSON.parse(String(value || '{}'));
+      const pairs = JSON.parse(String(q.option_a || '[]'));
+      return Array.isArray(pairs) && pairs.length > 0 && pairs.every(
+        (pair: any) => normalized(submitted?.[pair.left]) === normalized(pair.right)
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  const submitted = normalized(value);
+  const correct = normalized(q.correct_answer);
+
+  if (type === 'true_false' || type === 'truefalse' || type === 'boolean') {
+    const map = (x: string) => x === 'a' || x === 'true' ? 'a' : x === 'b' || x === 'false' ? 'b' : x;
+    return map(submitted) === map(correct);
+  }
+
+  return submitted === correct;
+}
+
+async function completeAttempt(attempt: any, answers: Record<string, unknown>, autoSubmit = false) {
+  const questions = await getQuestions(attempt.test_id);
+  if (!Array.isArray(questions) || questions.length === 0) {
+    throw new Error('This test has no questions.');
+  }
+
+  const correct = questions.reduce(
+    (count: number, q: any) => count + (isCorrect(q, answers[q.id]) ? 1 : 0),
+    0,
+  );
+  const score = Math.round((correct / questions.length) * 10000) / 100;
+  const now = new Date().toISOString();
+
+  const created = await supabaseDb('test_submissions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({
+      test_id: attempt.test_id,
+      student_id: attempt.student_id,
+      answers,
+      score,
+    }),
+  });
+
+  await supabaseDb(
+    `test_attempts?id=eq.${encodeURIComponent(attempt.id)}&student_id=eq.${encodeURIComponent(attempt.student_id)}&status=eq.in_progress`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answers,
+        status: 'completed',
+        updated_at: now,
+        completed_at: now,
+      }),
+    },
+  );
+
+  return {
+    submission: Array.isArray(created) ? created[0] : created,
+    score,
+    auto_submitted: autoSubmit,
+  };
+}
+
 async function completeAttempt(attempt: any, answers: Record<string, unknown>, autoSubmit = false) {
   return supabaseRpc('submit_test_attempt', {
     p_attempt_id: attempt.id,
