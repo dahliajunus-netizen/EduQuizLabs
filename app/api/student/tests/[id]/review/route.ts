@@ -54,12 +54,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!current) return NextResponse.json({ error: 'Student authentication required.' }, { status: 401 });
 
     const { id } = await params;
-    const tests = await supabaseDb(`tests?id=eq.${encodeURIComponent(id)}&published=eq.true&select=id,title,class_code,max_attempts,allow_review&limit=1`);
+    const tests = await supabaseDb(`tests?id=eq.${encodeURIComponent(id)}&published=eq.true&select=id,title,class_code,course_id,max_attempts,allow_review&limit=1`);
     const test = Array.isArray(tests) ? tests[0] : null;
     if (!test) return NextResponse.json({ error: 'Test not found or not published.' }, { status: 404 });
     if (test.allow_review === false) return NextResponse.json({ error: 'Review is not permitted for this test.' }, { status: 403 });
 
-    const classes = await supabaseDb(`student_classes?student_id=eq.${encodeURIComponent(current.id)}&code=eq.${encodeURIComponent(String(test.class_code || ''))}&select=code&limit=1`);
+    let classCode = String(test.class_code || '').trim().toUpperCase();
+    if (!classCode && test.course_id) {
+      const courses = await supabaseDb(`class_courses?id=eq.${encodeURIComponent(String(test.course_id))}&select=class_code&limit=1`);
+      classCode = String(Array.isArray(courses) ? courses[0]?.class_code || '' : '').trim().toUpperCase();
+    }
+    const classes = classCode
+      ? await supabaseDb(`student_classes?student_id=eq.${encodeURIComponent(current.id)}&code=eq.${encodeURIComponent(classCode)}&select=code&limit=1`)
+      : [];
     if (!classes?.length) return NextResponse.json({ error: 'You are not enrolled in this class.' }, { status: 403 });
 
     const submissions = await supabaseDb(`test_submissions?test_id=eq.${encodeURIComponent(id)}&student_id=eq.${encodeURIComponent(current.id)}&select=id,test_id,student_id,answers,score&order=id.desc`);
