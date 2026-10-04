@@ -55,7 +55,11 @@ export async function GET(request: NextRequest) {
     if (!table) return NextResponse.json({ error: 'Unsupported resource.' }, { status: 404 });
 
     if (table === 'tests') {
-      const data = await dbQuery(`tests?select=*&order=created_at.desc`);\n      const owned = Array.isArray(data) ? data.filter((t: any) => t?.class_code && true) : [];\n      const teacherClasses = await dbQuery(`teacher_classes?teacher_id=eq.${encodeURIComponent(auth.user!.id)}&select=code`);\n      const codes = new Set((Array.isArray(teacherClasses) ? teacherClasses : []).map((c: any) => String(c.code)));\n      return NextResponse.json(owned.filter((t: any) => codes.has(String(t.class_code))));
+      const data = await dbQuery(`tests?select=*&order=created_at.desc`);
+      const owned = Array.isArray(data) ? data.filter((t: any) => t?.class_code && true) : [];
+      const teacherClasses = await dbQuery(`teacher_classes?teacher_id=eq.${encodeURIComponent(auth.user!.id)}&select=code`);
+      const codes = new Set((Array.isArray(teacherClasses) ? teacherClasses : []).map((c: any) => String(c.code)));
+      return NextResponse.json(owned.filter((t: any) => codes.has(String(t.class_code))));
       return NextResponse.json(data || []);
     }
 
