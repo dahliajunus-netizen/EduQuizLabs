@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { requireTeacher, requireTeacherClassOwnership } from '@/lib/server/auth';
+import { requireTeacher } from '@/lib/server/auth';
 import { csrfResponse } from '@/lib/server/csrf';
-import { serverConfigOk, supabaseDb } from '@/lib/server/supabase';
+import { serverConfigOk } from '@/lib/server/supabase';
 
 const pool = new Pool({ connectionString: process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_PRISMA_URL || process.env.DATABASE_URL });
 
@@ -55,15 +55,7 @@ export async function GET(request: NextRequest) {
     if (!table) return NextResponse.json({ error: 'Unsupported resource.' }, { status: 404 });
 
     if (table === 'tests') {
-      const classes = await supabaseDb(
-        `teacher_classes?teacher_id=eq.${encodeURIComponent(auth.user!.id)}&select=code`,
-      );
-      const codes = Array.isArray(classes)
-        ? classes.map((row: any) => String(row.code || '').trim()).filter(Boolean)
-        : [];
-      if (!codes.length) return NextResponse.json([]);
-      const encodedCodes = codes.map(code => `"${code.replace(/"/g, '\\"')}"`).join(',');
-      const data = await supabaseDb(`tests?class_code=in.(${encodedCodes})&select=*&order=created_at.desc`);
+      const data = await dbQuery(`SELECT * FROM tests WHERE class_code IN (SELECT code FROM teacher_classes WHERE teacher_id = $1) ORDER BY created_at DESC`, [auth.user!.id]);
       return NextResponse.json(data || []);
     }
 
