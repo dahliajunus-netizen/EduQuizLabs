@@ -13,7 +13,7 @@ type MatchPair = { left: string; right: string };
 type Test = { id: string; class_code: string; title: string; description: string | null; published: boolean; created_at: string; due_date?: string | null; test_password?: string | null; time_limit_minutes?: number | null };
 type Question = { id?: string; test_id: string; question_order: number; question: string; image_url?: string | null; option_a: string; option_b: string; option_c: string; option_d: string; correct_answer: string; points?: number; question_type?: QuestionType };
 
-const url = '/api/teacher/tests-proxy';
+const url = '/api/teacher/tests-v2';
 const baseHeaders = { 'Content-Type': 'application/json' };
 const typeLabels: Record<QuestionType, string> = { multiple_choice: 'Multiple Choice', true_false: 'True / False', fill_blank: 'Fill in the Blank', matching: 'Match' };
 
@@ -108,7 +108,7 @@ export default function TeacherTestsPage() {
     return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
 
-  async function saveTestDetails() {
+  async function saveTestDetails(openQuestionAfterSave = false) {
     if (!url) { setError('Teacher test API is unavailable.'); return; }
     if (!classCode.trim()) { setError('Please enter a class code.'); return; }
     if (!title.trim()) { setError('Please enter a test title.'); return; }
@@ -141,10 +141,18 @@ export default function TeacherTestsPage() {
         returned = checked[0] || null;
       }
       if (!returned) throw new Error('The test was not found after saving.');
-      if (editingId) setTests(prev => prev.map(t => t.id === returned!.id ? returned! : t));
-      else setTests(prev => [returned!, ...prev]);
+      if (editingId) {
+        setTests(prev => prev.map(t => t.id === returned!.id ? returned! : t));
+      } else {
+        setTests(prev => [returned!, ...prev]);
+        setQuestions(prev => ({ ...prev, [returned!.id]: [] }));
+      }
       resetDetails();
       setError('');
+      if (openQuestionAfterSave && returned) {
+        newQuestion(returned.id);
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }
     } catch (e) { setError(`Failed to save test details: ${e instanceof Error ? e.message : 'Unknown error'}`); }
     finally { setBusy(false); }
   }
@@ -256,7 +264,7 @@ export default function TeacherTestsPage() {
           <Input name="test-description" autoComplete="off" value={description} onChange={e => setDescription(e.target.value)} placeholder="Description (optional)" />
           <div className="space-y-1.5"><label className="text-sm font-medium">Due date</label><div className="flex h-10 items-center rounded-md border border-input bg-background px-2"><input name="due-day" autoComplete="off" inputMode="numeric" aria-label="Due date day" placeholder="DD" maxLength={2} value={dueDay} onChange={e => setDueDay(e.target.value.replace(/\D/g, '').slice(0, 2))} className="w-10 bg-transparent text-center text-sm outline-none placeholder:text-muted-foreground" /><span className="text-muted-foreground">/</span><input name="due-month" autoComplete="off" inputMode="numeric" aria-label="Due date month" placeholder="MM" maxLength={2} value={dueMonth} onChange={e => setDueMonth(e.target.value.replace(/\D/g, '').slice(0, 2))} className="w-10 bg-transparent text-center text-sm outline-none placeholder:text-muted-foreground" /><span className="text-muted-foreground">/</span><input name="due-year" autoComplete="off" inputMode="numeric" aria-label="Due date year" placeholder="YYYY" maxLength={4} value={dueYear} onChange={e => setDueYear(e.target.value.replace(/\D/g, '').slice(0, 4))} className="w-16 bg-transparent text-center text-sm outline-none placeholder:text-muted-foreground" /></div><p className="text-xs text-muted-foreground">DD/MM/YYYY</p></div>
           <div className="space-y-1.5"><label className="text-sm font-medium">Time limit (minutes)</label><Input name="test-time-limit" autoComplete="off" type="number" min="1" step="1" inputMode="numeric" value={timeLimit} onChange={e => setTimeLimit(e.target.value.replace(/\D/g, ''))} placeholder="Optional" /></div>
-          <div className="flex gap-2 lg:mt-6"><Button onClick={() => void saveTestDetails()} disabled={busy || !classCode.trim() || !title.trim()} className="flex-1">{busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="mr-2 size-4" />}Save Test Details</Button>{editingId && <Button variant="outline" onClick={resetDetails} disabled={busy}>Cancel</Button>}</div>
+          <div className="flex flex-wrap gap-2 lg:mt-6"><Button onClick={() => void saveTestDetails()} disabled={busy || !classCode.trim() || !title.trim()} className="flex-1">{busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="mr-2 size-4" />}{editingId ? "Save Test Details" : "Save Test Details"}</Button>{!editingId && <Button type="button" variant="outline" onClick={() => void saveTestDetails(true)} disabled={busy || !classCode.trim() || !title.trim()} className="flex-1"><Plus className="mr-2 size-4" />Save & Add Question</Button>}{editingId && <Button variant="outline" onClick={resetDetails} disabled={busy}>Cancel</Button>}</div>
         </CardContent></Card>
         {loading ? <Loader2 className="mx-auto size-8 animate-spin" /> : tests.map(t => (
           <Card key={t.id}>
