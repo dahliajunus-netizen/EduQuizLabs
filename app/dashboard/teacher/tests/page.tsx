@@ -14,7 +14,6 @@ type Test = { id: string; class_code: string; title: string; description: string
 type Question = { id?: string; test_id: string; question_order: number; question: string; image_url?: string | null; option_a: string; option_b: string; option_c: string; option_d: string; correct_answer: string; points?: number; question_type?: QuestionType };
 
 const url = '/api/teacher/tests-proxy';
-const key = 'server-session';
 const baseHeaders = { 'Content-Type': 'application/json' };
 const typeLabels: Record<QuestionType, string> = { multiple_choice: 'Multiple Choice', true_false: 'True / False', fill_blank: 'Fill in the Blank', matching: 'Match' };
 
@@ -64,15 +63,15 @@ export default function TeacherTestsPage() {
   async function load() {
     setLoading(true);
     try {
-      if (!url || !key) throw new Error('Supabase environment variables are missing.');
+      if (!url) throw new Error('Teacher test API is unavailable.');
       const headers = authHeaders();
-      const r = await fetch(`${url}/rest/v1/tests?select=*&order=created_at.desc`, { headers, cache: 'no-store' });
+      const r = await fetch(`${url}/tests?select=*&order=created_at.desc`, { headers, cache: 'no-store' });
       if (!r.ok) throw new Error(await r.text());
       const data: Test[] = await r.json();
       setTests(data);
       const map: Record<string, Question[]> = {};
       await Promise.all(data.map(async t => {
-        const x = await fetch(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(t.id)}&select=*&order=question_order.asc`, { headers: authHeaders(), cache: 'no-store' });
+        const x = await fetch(`${url}/test_questions?test_id=eq.${encodeURIComponent(t.id)}&select=*&order=question_order.asc`, { headers: authHeaders(), cache: 'no-store' });
         if (!x.ok) throw new Error(await x.text());
         map[t.id] = await x.json();
       }));
@@ -110,7 +109,7 @@ export default function TeacherTestsPage() {
   }
 
   async function saveTestDetails() {
-    if (!url || !key) { setError('Supabase environment variables are missing.'); return; }
+    if (!url) { setError('Teacher test API is unavailable.'); return; }
     if (!classCode.trim()) { setError('Please enter a class code.'); return; }
     if (!title.trim()) { setError('Please enter a test title.'); return; }
     setBusy(true); setError('');
@@ -126,9 +125,9 @@ export default function TeacherTestsPage() {
       const requestHeaders = { ...authHeaders(), Prefer: 'return=representation' };
       let r: Response;
       if (editingId) {
-        r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(editingId)}&select=*`, { method: 'PATCH', headers: requestHeaders, body: JSON.stringify(payload) });
+        r = await fetch(`${url}/tests?id=eq.${encodeURIComponent(editingId)}&select=*`, { method: 'PATCH', headers: requestHeaders, body: JSON.stringify(payload) });
       } else {
-        r = await fetch(`${url}/rest/v1/tests?select=*`, { method: 'POST', headers: requestHeaders, body: JSON.stringify({ ...payload, published: false }) });
+        r = await fetch(`${url}/tests?select=*`, { method: 'POST', headers: requestHeaders, body: JSON.stringify({ ...payload, published: false }) });
       }
       const responseText = await r.text();
       if (!r.ok) throw new Error(responseText || `Supabase returned HTTP ${r.status}.`);
@@ -136,7 +135,7 @@ export default function TeacherTestsPage() {
       try { const parsed = JSON.parse(responseText); returned = Array.isArray(parsed) ? (parsed[0] || null) : parsed; } catch {}
       if (!editingId && !returned?.id) throw new Error('Supabase did not return the newly saved test.');
       if (editingId && !returned?.id) {
-        const check = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(editingId)}&select=*`, { headers: authHeaders(), cache: 'no-store' });
+        const check = await fetch(`${url}/tests?id=eq.${encodeURIComponent(editingId)}&select=*`, { headers: authHeaders(), cache: 'no-store' });
         if (!check.ok) throw new Error(await check.text());
         const checked: Test[] = await check.json();
         returned = checked[0] || null;
@@ -153,7 +152,7 @@ export default function TeacherTestsPage() {
   async function deleteTest(id: string) {
     if (!url || !confirm('Delete this test and all its questions/submissions?')) return;
     try {
-      const r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
+      const r = await fetch(`${url}/tests?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
       if (!r.ok) throw new Error(await r.text());
       if (editingId === id) resetDetails();
       await load();
@@ -163,7 +162,7 @@ export default function TeacherTestsPage() {
   async function togglePublished(t: Test) {
     if (!url) return;
     try {
-      const r = await fetch(`${url}/rest/v1/tests?id=eq.${encodeURIComponent(t.id)}`, { method: 'PATCH', headers: { ...authHeaders(), Prefer: 'return=minimal' }, body: JSON.stringify({ published: !t.published }) });
+      const r = await fetch(`${url}/tests?id=eq.${encodeURIComponent(t.id)}`, { method: 'PATCH', headers: { ...authHeaders(), Prefer: 'return=minimal' }, body: JSON.stringify({ published: !t.published }) });
       if (!r.ok) throw new Error(await r.text());
       setTests(p => p.map(x => x.id === t.id ? { ...x, published: !t.published } : x));
     } catch (e) { setError(`Failed to change publication status: ${e instanceof Error ? e.message : 'Unknown error'}`); }
@@ -188,12 +187,12 @@ export default function TeacherTestsPage() {
 
   async function recalculatePoints(testId: string) {
     if (!url) throw new Error('Supabase URL is missing.');
-    const r = await fetch(`${url}/rest/v1/test_questions?test_id=eq.${encodeURIComponent(testId)}&select=id`, { headers: authHeaders(), cache: 'no-store' });
+    const r = await fetch(`${url}/test_questions?test_id=eq.${encodeURIComponent(testId)}&select=id`, { headers: authHeaders(), cache: 'no-store' });
     if (!r.ok) throw new Error(await r.text());
     const rows: { id: string }[] = await r.json();
     const points = rows.length ? 100 / rows.length : 0;
     for (const row of rows) {
-      const x = await fetch(`${url}/rest/v1/test_questions?id=eq.${encodeURIComponent(row.id)}`, { method: 'PATCH', headers: { ...authHeaders(), Prefer: 'return=minimal' }, body: JSON.stringify({ points }) });
+      const x = await fetch(`${url}/test_questions?id=eq.${encodeURIComponent(row.id)}`, { method: 'PATCH', headers: { ...authHeaders(), Prefer: 'return=minimal' }, body: JSON.stringify({ points }) });
       if (!x.ok) throw new Error(await x.text());
     }
   }
@@ -221,13 +220,13 @@ export default function TeacherTestsPage() {
       if (!['A', 'B', 'C', 'D'].includes(draft.correct_answer)) missing.push('correct answer');
     }
     if (missing.length) { setError(`Please fill in: ${missing.join(', ')}`); return; }
-    if (!url || !key) { setError('Supabase is not configured.'); return; }
+    if (!url) { setError('Teacher test API is unavailable.'); return; }
     setBusy(true); setError('');
     try {
       const testId = draft.test_id;
       const order = (questions[testId]?.length || 0) + 1;
       const payload = { test_id: testId, question_order: order, question: draft.question.trim(), image_url: draft.image_url?.trim() || null, option_a: draft.option_a.trim(), option_b: draft.option_b.trim(), option_c: draft.option_c.trim(), option_d: draft.option_d.trim(), correct_answer: draft.correct_answer, points: 100 / order, question_type: draft.question_type };
-      const r = await fetch(`${url}/rest/v1/test_questions`, { method: 'POST', headers: { ...authHeaders(), Prefer: 'return=representation' }, body: JSON.stringify(payload) });
+      const r = await fetch(`${url}/test_questions`, { method: 'POST', headers: { ...authHeaders(), Prefer: 'return=representation' }, body: JSON.stringify(payload) });
       if (!r.ok) throw new Error(await r.text());
       await recalculatePoints(testId);
       setQ(null); setOpen(null); await load();
@@ -238,7 +237,7 @@ export default function TeacherTestsPage() {
   async function deleteQuestion(id: string, testId: string) {
     if (!url || !confirm('Delete this question?')) return;
     try {
-      const r = await fetch(`${url}/rest/v1/test_questions?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
+      const r = await fetch(`${url}/test_questions?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
       if (!r.ok) throw new Error(await r.text());
       await recalculatePoints(testId); await load();
     } catch (e) { setError(`Failed to delete question: ${e instanceof Error ? e.message : 'Unknown error'}`); }
