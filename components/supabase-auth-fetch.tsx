@@ -134,9 +134,26 @@ function rewriteStudentQuizRead(requestUrl: string, method: string) {
       apiUrl.search = parsed.search
       return apiUrl.toString()
     }
-    const protectedDeleteResources = new Set(['course_materials', 'course_assignments', 'assignment_submissions', 'tests', 'test_questions', 'test_submissions', 'test_attempts'])
-    if (method.toUpperCase() === 'DELETE' && protectedDeleteResources.has(parsed.pathname.replace('/rest/v1/', ''))) {
-      const resource = parsed.pathname.replace('/rest/v1/', '')
+    const protectedDeleteResources = new Set(['course_materials', 'course_assignments', 'assignment_submissions', 'test_submissions', 'test_attempts'])
+    const resource = parsed.pathname.replace('/rest/v1/', '')
+
+    // Teacher test CRUD must never hit Supabase REST from the browser. Route every
+    // write for tests/test_questions through the authenticated server API, which
+    // performs teacher ownership checks and uses the server-side database role.
+    if (resource === 'tests' || resource === 'test_questions') {
+      if (method.toUpperCase() === 'DELETE' && resource === 'tests' || method.toUpperCase() === 'DELETE' && resource === 'test_questions') {
+        const apiUrl = new URL('/api/teacher/tests-v2/' + resource, window.location.origin)
+        apiUrl.search = parsed.search
+        return apiUrl.toString()
+      }
+      if (!['GET', 'HEAD'].includes(method.toUpperCase())) {
+        const apiUrl = new URL('/api/teacher/tests-v2/' + resource, window.location.origin)
+        apiUrl.search = parsed.search
+        return apiUrl.toString()
+      }
+    }
+
+    if (method.toUpperCase() === 'DELETE' && protectedDeleteResources.has(resource)) {
       const apiUrl = new URL('/api/teacher/classes/resources', window.location.origin)
       apiUrl.search = parsed.search
       apiUrl.searchParams.set('_resource', resource)
