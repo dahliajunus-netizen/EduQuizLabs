@@ -134,7 +134,7 @@ export async function PATCH(request: NextRequest) {
 
     if (table === 'tests') {
       if (!(await ownedTest(auth.user!.id, id))) return NextResponse.json({ error: 'Not authorized.' }, { status: 403 });
-      const data = await dbQuery(`tests?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify({ class_code: String(body?.class_code || '').trim().toUpperCase(), title: String(body?.title || '').trim(), description: body?.description ?? null, due_date: body?.due_date ?? null, time_limit_minutes: body?.time_limit_minutes ?? null }) });
+      const data = await dbQuery(`tests?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify({ class_code: String(body?.class_code || '').trim().toUpperCase(), title: String(body?.title || '').trim(), description: body?.description ?? null, due_date: body?.due_date ?? null, time_limit_minutes: body?.time_limit_minutes ?? null, ...(typeof body?.published === 'boolean' ? { published: body.published } : {}) }) });
       return NextResponse.json(data);
     }
 
