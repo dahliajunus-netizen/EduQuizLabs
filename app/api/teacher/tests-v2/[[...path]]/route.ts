@@ -129,7 +129,8 @@ export async function PATCH(request: NextRequest) {
     if (auth.error) return auth.error;
     const table = tableFromPath(request);
     const body = await request.json().catch(() => ({}));
-    const id = request.nextUrl.searchParams.get('id');
+    const rawId = request.nextUrl.searchParams.get('id');
+    const id = rawId?.startsWith('eq.') ? rawId.slice(3) : rawId;
     if (!id) return NextResponse.json({ error: 'id is required.' }, { status: 400 });
 
     if (table === 'tests') {
