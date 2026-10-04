@@ -69,6 +69,13 @@ export async function POST(request: NextRequest) {
     const transition = transitions[action];
     if (!transition) return NextResponse.json({ error: 'Unknown live quiz transition.' }, { status: 400 });
 
+    // The answer timer and the teacher's Reveal button can race. Treat an
+    // already-applied results transition as successful instead of failing
+    // with a results -> results state error.
+    if (action === 'live_quiz_begin_results' && String(quiz.status) === 'results') {
+      return NextResponse.json(quiz);
+    }
+
     if (!transition.allowed.includes(String(quiz.status))) {
       return NextResponse.json({
         error: `Cannot change live quiz from "${quiz.status}" to "${transition.status}".`,
