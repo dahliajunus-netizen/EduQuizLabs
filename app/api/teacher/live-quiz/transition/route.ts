@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Question not found.' }, { status: 404 });
       }
 
-      if (!['lobby', 'intermission'].includes(String(quiz.status))) {
+      if (!['lobby', 'intermission', 'question_reveal'].includes(String(quiz.status))) {
         return NextResponse.json({ error: `Cannot reveal a question from status "${quiz.status}".` }, { status: 409 });
       }
 
