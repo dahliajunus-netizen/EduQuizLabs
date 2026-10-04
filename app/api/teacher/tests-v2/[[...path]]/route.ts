@@ -134,7 +134,15 @@ export async function PATCH(request: NextRequest) {
 
     if (table === 'tests') {
       if (!(await ownedTest(auth.user!.id, id))) return NextResponse.json({ error: 'Not authorized.' }, { status: 403 });
-      const data = await dbQuery(`tests?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify({ class_code: String(body?.class_code || '').trim().toUpperCase(), title: String(body?.title || '').trim(), description: body?.description ?? null, due_date: body?.due_date ?? null, time_limit_minutes: body?.time_limit_minutes ?? null, ...(typeof body?.published === 'boolean' ? { published: body.published } : {}) }) });
+      const patch: Record<string, unknown> = {};
+      if (typeof body?.class_code === 'string') patch.class_code = body.class_code.trim().toUpperCase();
+      if (typeof body?.title === 'string') patch.title = body.title.trim();
+      if (Object.prototype.hasOwnProperty.call(body || {}, 'description')) patch.description = body.description ?? null;
+      if (Object.prototype.hasOwnProperty.call(body || {}, 'due_date')) patch.due_date = body.due_date ?? null;
+      if (Object.prototype.hasOwnProperty.call(body || {}, 'time_limit_minutes')) patch.time_limit_minutes = body.time_limit_minutes ?? null;
+      if (typeof body?.published === 'boolean') patch.published = body.published;
+      if (!Object.keys(patch).length) return NextResponse.json({ error: 'No test fields to update.' }, { status: 400 });
+      const data = await dbQuery(`tests?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify(patch) });
       return NextResponse.json(data);
     }
 
