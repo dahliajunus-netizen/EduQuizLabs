@@ -165,11 +165,8 @@ function rewriteStudentQuizRead(requestUrl: string, method: string) {
       if (parsed.pathname === '/rest/v1/tests') parsed.pathname = '/rest/v1/student_visible_tests'
       else if (parsed.pathname === '/rest/v1/test_questions') parsed.pathname = '/rest/v1/student_visible_test_questions'
     }
-    if (!isTeacherLiveQuizPage()) {
-      if (parsed.pathname === '/rest/v1/live_quizzes') parsed.pathname = '/rest/v1/live_quiz_public'
-      else if (parsed.pathname === '/rest/v1/live_quiz_questions') parsed.pathname = '/rest/v1/live_quiz_public_questions'
-      else if (parsed.pathname === '/rest/v1/live_quiz_players' && (parsed.searchParams.get('order') || '').trim().startsWith('correct_answers')) parsed.pathname = '/rest/v1/live_quiz_finished_players'
-    }
+    // Live Quiz uses the deployed base tables directly; do not rewrite
+    // reads to public views that are not present in the current schema.
     return parsed.toString()
   } catch { return requestUrl }
 }
