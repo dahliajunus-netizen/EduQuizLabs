@@ -12,6 +12,19 @@ async function ownsClass(userId: string, classCode: string) {
   return Array.isArray(rows) && Boolean(rows[0]);
 }
 
+async function courseForClass(userId: string, classCode: string, requestedCourseId?: string) {
+  if (requestedCourseId) {
+    const rows = await dbQuery(
+      `class_courses?id=eq.${encodeURIComponent(requestedCourseId)}&class_code=eq.${encodeURIComponent(classCode)}&select=id&limit=1`,
+    );
+    return Array.isArray(rows) && rows[0] ? String(rows[0].id) : null;
+  }
+  const rows = await dbQuery(
+    `class_courses?class_code=eq.${encodeURIComponent(classCode)}&select=id&order=created_at.asc,id.asc&limit=1`,
+  );
+  return Array.isArray(rows) && rows[0]?.id ? String(rows[0].id) : null;
+}
+
 async function getOwnedTest(userId: string, testId: string) {
   const tests = await dbQuery(`tests?id=eq.${encodeURIComponent(testId)}&select=*&limit=1`);
   const test = Array.isArray(tests) ? tests[0] : null;
@@ -87,7 +100,9 @@ export async function POST(request: NextRequest) {
       if (!classCode || !(await ownsClass(auth.user!.id, classCode))) {
         return NextResponse.json({ error: 'You are not authorized to create a test for this class.' }, { status: 403 });
       }
-      const data = await dbQuery(`tests`, { method: 'POST', headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify({ class_code: classCode, title: String(body?.title || '').trim(), description: body?.description ?? null, due_date: body?.due_date ?? null, time_limit_minutes: body?.time_limit_minutes ?? null, published: body?.published === true }) });
+      const courseId = await courseForClass(auth.user!.id, classCode, typeof body?.course_id === 'string' ? body.course_id.trim() : '');
+      if (!courseId) return NextResponse.json({ error: 'This class has no course yet. Create a course for the class before creating a test.' }, { status: 400 });
+      const data = await dbQuery(`tests`, { method: 'POST', headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify({ course_id: courseId, class_code: classCode, title: String(body?.title || '').trim(), description: body?.description ?? null, due_date: body?.due_date ?? null, time_limit_minutes: body?.time_limit_minutes ?? null, published: body?.published === true }) });
       return NextResponse.json(data);
     }
 
