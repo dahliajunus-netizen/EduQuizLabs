@@ -152,6 +152,7 @@ export default function TakeTestPage() {
   const [saved, setSaved] = useState(true);
   const answersRef = useRef<Record<string, string>>({});
   const savingRef = useRef(false);
+  const pendingSaveRef = useRef<Record<string, string> | null>(null);
   const submittingRef = useRef(false);
 
   useEffect(() => {
@@ -213,15 +214,26 @@ export default function TakeTestPage() {
   );
 
   const save = useCallback(
-    async (next = answersRef.current) => {
-      if (!attempt?.id || savingRef.current || complete) return;
+    async (next = answersRef.current, keepalive = false) => {
+      if (!attempt?.id || complete) return;
+
+      // If a save is already in flight, remember the newest answer set instead
+      // of silently dropping it. This matters when a student answers several
+      // questions quickly or leaves the page while a previous save is pending.
+      if (savingRef.current) {
+        pendingSaveRef.current = next;
+        return;
+      }
+
       savingRef.current = true;
+      pendingSaveRef.current = null;
       setSaved(false);
       try {
         const r = await fetch(endpoint(id), {
           method: 'POST',
           headers: requestHeaders(true),
           body: JSON.stringify({ action: 'save', answers: next }),
+          ...(keepalive ? { keepalive: true } : {}),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data?.error || 'Save failed.');
@@ -237,6 +249,11 @@ export default function TakeTestPage() {
         setError(e instanceof Error ? e.message : 'Your latest answer could not be saved.');
       } finally {
         savingRef.current = false;
+        const pending = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        if (pending && !complete && attempt?.id) {
+          void save(pending);
+        }
       }
     },
     [attempt?.id, complete, id],
@@ -245,7 +262,7 @@ export default function TakeTestPage() {
   useEffect(() => {
     if (!attempt?.id || complete) return;
     const timer = window.setInterval(() => void save(), 5000);
-    const onHide = () => void save();
+    const onHide = () => void save(answersRef.current, true);
     window.addEventListener('pagehide', onHide);
     return () => {
       window.clearInterval(timer);
