@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireStudent } from '@/lib/server/auth';
+import { authenticatedUser } from '@/lib/server/supabase';
 import { supabaseDb } from '@/lib/server/supabase';
 
 const q = (value:string) => encodeURIComponent(value);
 
 export async function POST(request:NextRequest){
-  const student=await requireStudent(request);
-  if(!student) return NextResponse.json({error:'Unauthorized.'},{status:401});
+  const student=await authenticatedUser(request);
   const body=await request.json().catch(()=>null);
   const quizId=String(body?.quiz_id||'').trim();
   const questionId=String(body?.question_id||'').trim();
@@ -16,9 +15,11 @@ export async function POST(request:NextRequest){
     return NextResponse.json({error:'Quiz, question, player and answer are required.'},{status:400});
 
   try{
-    const players=await supabaseDb(`live_quiz_players?id=eq.${q(playerId)}&quiz_id=eq.${q(quizId)}&student_id=eq.${q(student.id)}&select=id,nickname,score,correct_answers,total_response_time_ms&limit=1`);
+    const players=await supabaseDb(`live_quiz_players?id=eq.${q(playerId)}&quiz_id=eq.${q(quizId)}&student_id=eq.${q(student.id)}&select=id,student_id,nickname,score,correct_answers,total_response_time_ms&limit=1`);
     const player=Array.isArray(players)?players[0]:null;
     if(!player) return NextResponse.json({error:'Player session not found.'},{status:404});
+    if(student?.id && player.student_id && String(player.student_id)!==String(student.id))
+      return NextResponse.json({error:'Player session does not belong to this account.'},{status:403});
 
     const quizzes=await supabaseDb(`live_quizzes?id=eq.${q(quizId)}&select=id,status,current_question,question_started_at&limit=1`);
     const quiz=Array.isArray(quizzes)?quizzes[0]:null;
@@ -47,7 +48,7 @@ export async function POST(request:NextRequest){
     const nextCorrect=Number(player.correct_answers||0)+points;
     const nextTime=Number(player.total_response_time_ms||0)+elapsed;
     const nextScore=Number(player.score||0)+points;
-    const updated=await supabaseDb(`live_quiz_players?id=eq.${q(playerId)}&quiz_id=eq.${q(quizId)}&student_id=eq.${q(student.id)}`,{
+    const updated=await supabaseDb(`live_quiz_players?id=eq.${q(playerId)}&quiz_id=eq.${q(quizId)}`,{
       method:'PATCH',
       headers:{'Content-Type':'application/json',Prefer:'return=representation'},
       body:JSON.stringify({correct_answers:nextCorrect,total_response_time_ms:nextTime,score:nextScore}),
