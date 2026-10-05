@@ -15,7 +15,7 @@ export async function POST(request:NextRequest){
     return NextResponse.json({error:'Quiz, question, player and answer are required.'},{status:400});
 
   try{
-    const players=await supabaseDb(`live_quiz_players?id=eq.${q(playerId)}&quiz_id=eq.${q(quizId)}&student_id=eq.${q(student.id)}&select=id,student_id,nickname,score,correct_answers,total_response_time_ms&limit=1`);
+    const players=await supabaseDb(`live_quiz_players?id=eq.${q(playerId)}&quiz_id=eq.${q(quizId)}&select=id,student_id,nickname,score,correct_answers,total_response_time_ms&limit=1`);
     const player=Array.isArray(players)?players[0]:null;
     if(!player) return NextResponse.json({error:'Player session not found.'},{status:404});
     if(student?.id && player.student_id && String(player.student_id)!==String(student.id))
