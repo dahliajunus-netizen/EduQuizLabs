@@ -3,17 +3,62 @@ import { authenticatedUser, supabaseDb } from '@/lib/server/supabase';
 
 const MAX_LENGTH = 500;
 
-const BLOCKED_WORDS = [
-  'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'dick', 'piss',
-  'cunt', 'slut', 'whore',
+// Moderation terms are intentionally kept server-side so the client cannot bypass the filter.
+// The matcher also catches common obfuscation (spacing, punctuation, repeated letters, and
+// simple leetspeak) instead of relying on exact substring matches.
+const BLOCKED_TERMS = [
+  // Profanity / sexual insults
+  'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'dick', 'piss', 'cunt', 'slut', 'whore',
+  'motherfucker', 'bullshit', 'dumbass', 'jackass', 'dipshit', 'douchebag',
+  // Common identity-targeting slurs
+  'nigger', 'nigga', 'faggot', 'fag', 'dyke', 'tranny', 'retard', 'spic', 'wetback',
+  'chink', 'gook', 'kike', 'raghead', 'beaner', 'cracker', 'coon', 'sandnigger',
 ];
 
+const LEET_MAP: Record<string, string> = {
+  '0': 'o',
+  '1': 'i',
+  '3': 'e',
+  '4': 'a',
+  '5': 's',
+  '7': 't',
+  '@': 'a',
+  '$': 's',
+};
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^{}()|[\]\\]/g, '\\$&');
+}
+
+function buildObfuscatedPattern(term: string) {
+  const chars = [...term].map((char) => {
+    const alternatives = [char];
+    for (const [leet, normal] of Object.entries(LEET_MAP)) {
+      if (normal === char) alternatives.push(leet);
+    }
+    return alternatives.length > 1 ? '[' + alternatives.map(escapeRegex).join('') + ']' : escapeRegex(char);
+  });
+
+  // Allow whitespace/punctuation between letters and tolerate repeated letters.
+  return new RegExp(
+    chars.map((char) => char + '+').join('[\\s._*\\-]*'),
+    'giu',
+  );
+}
+
+const BLOCKED_PATTERNS = BLOCKED_TERMS.map(buildObfuscatedPattern);
+
 function filterMessage(input: string) {
-  let output = input.trim().replace(/\s+/g, ' ');
-  for (const word of BLOCKED_WORDS) {
-    const pattern = new RegExp(word.replace(/[.*+?^{}()|[\]\\]/g, '\\$&'), 'gi');
-    output = output.replace(pattern, (match) => '*'.repeat(Math.max(3, match.length)));
+  let output = input
+    .normalize('NFKC')
+    .replace(/[\\u200B-\\u200D\\uFEFF]/g, '')
+    .trim()
+    .replace(/\\s+/g, ' ');
+
+  for (const pattern of BLOCKED_PATTERNS) {
+    output = output.replace(pattern, (match) => '*'.repeat(Math.max(3, [...match].length)));
   }
+
   return output;
 }
 
