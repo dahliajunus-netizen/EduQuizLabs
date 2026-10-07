@@ -26,7 +26,7 @@ const LEET_MAP: Record<string, string> = {
   '$': 's',
 };
 
-const BLOCKED_SET = new Set(BLOCKED_TERMS);
+const BLOCKED_SET = new Set(BLOCKED_TERMS.filter((term) => term.length >= 4));
 
 function normalizeForModeration(value: string) {
   return [...value.toLowerCase()]
