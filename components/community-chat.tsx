@@ -10,11 +10,12 @@ type CommunityMessage = {
   user_id: string;
   full_name: string;
   role: string;
+  country: string;
   message: string;
   created_at: string;
 };
 
-const POLL_MS = 2000;
+const POLL_MS = 750;
 
 export function CommunityChat() {
   const [open, setOpen] = useState(false);
@@ -71,7 +72,10 @@ export function CommunityChat() {
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(String(body?.error || 'Failed to send message.'));
       setDraft('');
-      await loadMessages(true);
+      if (body?.id) {
+        setMessages((current) => current.some((item) => item.id === body.id) ? current : [...current, body]);
+      }
+      void loadMessages(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message.');
     } finally {
@@ -124,6 +128,9 @@ export function CommunityChat() {
                       <span className="min-w-0 truncate text-sm font-black">{message.full_name}</span>
                       <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-primary">
                         {message.role}
+                      </span>
+                      <span className="max-w-[120px] truncate text-[10px] font-semibold text-muted-foreground" title={message.country}>
+                        {message.country || 'Unknown'}
                       </span>
                       <time className="ml-auto shrink-0 text-[10px] text-muted-foreground">
                         {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
