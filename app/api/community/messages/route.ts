@@ -26,43 +26,28 @@ const LEET_MAP: Record<string, string> = {
   '$': 's',
 };
 
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^{}()|[\\]\\\\]/g, '\\$&');
+const BLOCKED_SET = new Set(BLOCKED_TERMS);
+
+function normalizeForModeration(value: string) {
+  return [...value.toLowerCase()]
+    .map((char) => LEET_MAP[char] || char)
+    .join('');
 }
-
-function buildBlockedPattern(term: string) {
-  const chars = [...term].map((char) => {
-    const alternatives = [char];
-    for (const [leet, normal] of Object.entries(LEET_MAP)) {
-      if (normal === char) alternatives.push(leet);
-    }
-    const part = alternatives.length > 1
-      ? '[' + alternatives.map(escapeRegex).join('') + ']'
-      : escapeRegex(char);
-    return part;
-  });
-
-  // Separators are allowed between letters, but each letter must still be present.
-  return new RegExp(
-    '(?<![a-z])' + chars.join('[\\\\s._*\\\\-]*') + '(?![a-z])',
-    'giu',
-  );
-}
-
-const BLOCKED_PATTERNS = BLOCKED_TERMS.map(buildBlockedPattern);
 
 function filterMessage(input: string) {
-  let output = input
+  const cleaned = input
     .normalize('NFKC')
     .replace(/[\\u200B-\\u200D\\uFEFF]/g, '')
     .trim()
     .replace(/\\s+/g, ' ');
 
-  for (const pattern of BLOCKED_PATTERNS) {
-    output = output.replace(pattern, (match) => '*'.repeat(Math.max(3, [...match].length)));
-  }
-
-  return output;
+  // Only replace complete tokens. This prevents innocent words such as
+  // "whattup" or "guys" from being partially modified.
+  return cleaned.replace(/[A-Za-z0-9@$]+/g, (token) => {
+    const normalized = normalizeForModeration(token);
+    if (!BLOCKED_SET.has(normalized)) return token;
+    return '*'.repeat(Math.max(3, [...token].length));
+  });
 }
 
 async function getProfile(userId: string) {
