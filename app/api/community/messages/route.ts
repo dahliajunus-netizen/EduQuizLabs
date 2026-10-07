@@ -19,7 +19,7 @@ function filterMessage(input: string) {
 
 async function getProfile(userId: string) {
   const rows = await supabaseDb(
-    'users?id=eq.' + encodeURIComponent(userId) + '&select=id,full_name,role&limit=1',
+    'users?id=eq.' + encodeURIComponent(userId) + '&select=id,full_name,role,country&limit=1',
   );
   return Array.isArray(rows) ? rows[0] : null;
 }
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 100), 1), 100);
     const rows = await supabaseDb(
-      'community_messages?select=id,user_id,full_name,role,message,created_at&order=created_at.desc&limit=' + limit,
+      'community_messages?select=id,user_id,full_name,role,country,message,created_at&order=created_at.desc&limit=' + limit,
     );
     return NextResponse.json(Array.isArray(rows) ? rows.reverse() : [], {
       headers: { 'Cache-Control': 'no-store' },
@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'This account cannot use community chat.' }, { status: 403 });
     }
 
+    const country = String(profile.country || '').trim() || 'Unknown';
     const rows = await supabaseDb('community_messages', {
       method: 'POST',
       headers: {
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
         user_id: String(profile.id),
         full_name: String(profile.full_name || user.email || 'EduQuizLabs User').slice(0, 120),
         role,
+        country: country.slice(0, 80),
         message,
       }),
     });
