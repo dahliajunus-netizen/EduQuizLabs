@@ -87,9 +87,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const url = new URL(request.url);
+    const since = url.searchParams.get('since');
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 100), 1), 100);
+    const sinceFilter = since ? '&created_at=gte.' + encodeURIComponent(since) : '';
     const rows = await supabaseDb(
-      'community_messages?select=id,user_id,full_name,role,country,message,created_at&order=created_at.desc&limit=' + limit,
+      'community_messages?select=id,user_id,full_name,role,country,message,created_at&order=created_at.desc&limit=' + limit + sinceFilter,
     );
     return NextResponse.json(Array.isArray(rows) ? rows.reverse() : [], {
       headers: { 'Cache-Control': 'no-store' },
