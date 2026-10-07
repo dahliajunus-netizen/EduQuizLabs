@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     const raw = typeof body?.message === 'string' ? body.message : '';
     const message = filterMessage(raw);
 
-    if (!message) return NextResponse.json({ error: 'Message cannot be empty.' }, { status: 400 });
+    if (!message) return NextResponse.json({ error: 'Please keep the community chat appropriate and respectful.' }, { status: 400 });
     if (message.length > MAX_LENGTH) {
       return NextResponse.json({ error: 'Message must be ' + MAX_LENGTH + ' characters or fewer.' }, { status: 400 });
     }
