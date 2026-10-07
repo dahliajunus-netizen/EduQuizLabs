@@ -27,26 +27,29 @@ const LEET_MAP: Record<string, string> = {
 };
 
 function escapeRegex(value: string) {
-  return value.replace(/[.*+?^{}()|[\]\\]/g, '\\$&');
+  return value.replace(/[.*+?^{}()|[\\]\\\\]/g, '\\$&');
 }
 
-function buildObfuscatedPattern(term: string) {
+function buildBlockedPattern(term: string) {
   const chars = [...term].map((char) => {
     const alternatives = [char];
     for (const [leet, normal] of Object.entries(LEET_MAP)) {
       if (normal === char) alternatives.push(leet);
     }
-    return alternatives.length > 1 ? '[' + alternatives.map(escapeRegex).join('') + ']' : escapeRegex(char);
+    const part = alternatives.length > 1
+      ? '[' + alternatives.map(escapeRegex).join('') + ']'
+      : escapeRegex(char);
+    return part;
   });
 
-  // Allow whitespace/punctuation between letters and tolerate repeated letters.
+  // Separators are allowed between letters, but each letter must still be present.
   return new RegExp(
-    chars.map((char) => char + '+').join('[\\s._*\\-]*'),
+    '(?<![a-z])' + chars.join('[\\\\s._*\\\\-]*') + '(?![a-z])',
     'giu',
   );
 }
 
-const BLOCKED_PATTERNS = BLOCKED_TERMS.map(buildObfuscatedPattern);
+const BLOCKED_PATTERNS = BLOCKED_TERMS.map(buildBlockedPattern);
 
 function filterMessage(input: string) {
   let output = input
