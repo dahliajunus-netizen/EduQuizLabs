@@ -16,6 +16,7 @@ type CommunityMessage = {
 };
 
 const REALTIME_HEARTBEAT_MS = 25_000;
+const DAILY_REFRESH_CHECK_MS = 30_000;
 const REALTIME_RECONNECT_MS = 1_500;
 
 function realtimeUrl() {
@@ -43,10 +44,16 @@ export function CommunityChat() {
   const reconnectRef = useRef<number | null>(null);
   const closedByEffectRef = useRef(false);
 
+  const getLocalDayStart = () => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return start.toISOString();
+  };
+
   const loadMessages = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const response = await fetch('/api/community/messages?limit=100', {
+      const response = await fetch(`/api/community/messages?limit=100&since=${encodeURIComponent(getLocalDayStart())}`, {
         credentials: 'include',
         cache: 'no-store',
       });
@@ -65,6 +72,15 @@ export function CommunityChat() {
     if (!open) return;
     closedByEffectRef.current = false;
     void loadMessages();
+
+    let currentDayKey = new Date().toLocaleDateString();
+    const dailyRefreshTimer = window.setInterval(() => {
+      const dayKey = new Date().toLocaleDateString();
+      if (dayKey === currentDayKey) return;
+      currentDayKey = dayKey;
+      setMessages([]);
+      void loadMessages(true);
+    }, DAILY_REFRESH_CHECK_MS);
 
     const url = realtimeUrl();
     if (!url) {
@@ -141,6 +157,7 @@ export function CommunityChat() {
 
     connect();
     return () => {
+      window.clearInterval(dailyRefreshTimer);
       closedByEffectRef.current = true;
       cleanupSocket();
     };
