@@ -26,28 +26,50 @@ const LEET_MAP: Record<string, string> = {
   '$': 's',
 };
 
-const BLOCKED_SET = new Set(BLOCKED_TERMS.filter((term) => term.length >= 4));
-
 function normalizeForModeration(value: string) {
   return [...value.toLowerCase()]
     .map((char) => LEET_MAP[char] || char)
     .join('');
 }
 
-function filterMessage(input: string) {
-  const cleaned = input
+function containsBlockedTerm(input: string) {
+  // Check whole alphanumeric tokens after simple leetspeak normalization.
+  // The original message is never modified.
+  const tokens = input.normalize('NFKC').match(/[A-Za-z0-9@$]+/g) || [];
+  for (const token of tokens) {
+    const normalized = normalizeForModeration(token);
+    if (BLOCKED_SET.has(normalized)) return true;
+  }
+
+  // Also catch punctuation-separated spellings such as f.u.c.k without
+  // touching ordinary words containing the same letters.
+  for (const term of BLOCKED_SET) {
+    const pattern = new RegExp(
+      '(?<![A-Za-z])' +
+        [...term]
+          .map((char) => {
+            const alternatives = [char];
+            for (const [leet, normal] of Object.entries(LEET_MAP)) {
+              if (normal === char) alternatives.push(leet);
+            }
+            return '[' + alternatives.join('') + ']';
+          })
+          .join('[^A-Za-z0-9]*') +
+        '(?![A-Za-z])',
+      'i',
+    );
+    if (pattern.test(input)) return true;
+  }
+
+  return false;
+}
+
+function sanitizeMessage(input: string) {
+  return input
     .normalize('NFKC')
     .replace(/[\\u200B-\\u200D\\uFEFF]/g, '')
     .trim()
     .replace(/\\s+/g, ' ');
-
-  // Only replace complete tokens. This prevents innocent words such as
-  // "whattup" or "guys" from being partially modified.
-  return cleaned.replace(/[A-Za-z0-9@$]+/g, (token) => {
-    const normalized = normalizeForModeration(token);
-    if (!BLOCKED_SET.has(normalized)) return token;
-    return '*'.repeat(Math.max(3, [...token].length));
-  });
 }
 
 async function getProfile(userId: string) {
@@ -83,9 +105,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     const raw = typeof body?.message === 'string' ? body.message : '';
-    const message = filterMessage(raw);
+    const message = sanitizeMessage(raw);
 
     if (!message) return NextResponse.json({ error: 'Please keep the community chat appropriate and respectful.' }, { status: 400 });
+    if (containsBlockedTerm(message)) {
+      return NextResponse.json({ error: 'Please keep the community chat appropriate and respectful.' }, { status: 400 });
+    }
     if (message.length > MAX_LENGTH) {
       return NextResponse.json({ error: 'Message must be ' + MAX_LENGTH + ' characters or fewer.' }, { status: 400 });
     }
