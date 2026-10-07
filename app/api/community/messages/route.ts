@@ -15,6 +15,8 @@ const BLOCKED_TERMS = [
   'chink', 'gook', 'kike', 'raghead', 'beaner', 'cracker', 'coon', 'sandnigger',
 ];
 
+const BLOCKED_SET = new Set(BLOCKED_TERMS.filter((term) => term.length >= 4));
+
 const LEET_MAP: Record<string, string> = {
   '0': 'o',
   '1': 'i',
@@ -67,9 +69,9 @@ function containsBlockedTerm(input: string) {
 function sanitizeMessage(input: string) {
   return input
     .normalize('NFKC')
-    .replace(/[\\u200B-\\u200D\\uFEFF]/g, '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .trim()
-    .replace(/\\s+/g, ' ');
+    .replace(/\s+/g, ' ');
 }
 
 async function getProfile(userId: string) {
