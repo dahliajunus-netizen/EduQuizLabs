@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { RoleGuard } from '@/components/RoleGuard';
+import { CommunityChat } from '@/components/community-chat';
 
 export default function TeacherDashboardLayout({
   children,
@@ -54,6 +55,7 @@ export default function TeacherDashboardLayout({
   return (
     <RoleGuard role="teacher">
       {children}
+      <CommunityChat />
     </RoleGuard>
   );
 }
