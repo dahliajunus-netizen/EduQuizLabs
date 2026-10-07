@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { RoleGuard } from '@/components/RoleGuard';
+import { CommunityChat } from '@/components/community-chat';
 
 export default function StudentDashboardLayout({
   children,
@@ -19,6 +20,7 @@ export default function StudentDashboardLayout({
   return (
     <RoleGuard role="student" allowTeacherClassPages={allowTeacherClassPages}>
       {children}
+      <CommunityChat />
     </RoleGuard>
   );
 }
