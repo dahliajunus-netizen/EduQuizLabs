@@ -15,7 +15,20 @@ type CommunityMessage = {
   created_at: string;
 };
 
-const POLL_MS = 750;
+const REALTIME_HEARTBEAT_MS = 25_000;
+const REALTIME_RECONNECT_MS = 1_500;
+
+function realtimeUrl() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  if (!supabaseUrl || !publishableKey) return null;
+  const url = new URL(supabaseUrl);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = '/realtime/v1/websocket';
+  url.searchParams.set('apikey', publishableKey);
+  url.searchParams.set('vsn', '1.0.0');
+  return url.toString();
+}
 
 export function CommunityChat() {
   const [open, setOpen] = useState(false);
@@ -25,6 +38,10 @@ export function CommunityChat() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const heartbeatRef = useRef<number | null>(null);
+  const reconnectRef = useRef<number | null>(null);
+  const closedByEffectRef = useRef(false);
 
   const loadMessages = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -46,9 +63,87 @@ export function CommunityChat() {
 
   useEffect(() => {
     if (!open) return;
+    closedByEffectRef.current = false;
     void loadMessages();
-    const interval = window.setInterval(() => void loadMessages(true), POLL_MS);
-    return () => window.clearInterval(interval);
+
+    const url = realtimeUrl();
+    if (!url) {
+      setError('Realtime chat is not configured.');
+      return;
+    }
+
+    let reconnectTimer: number | null = null;
+    let socket: WebSocket | null = null;
+    let ref = 0;
+
+    const cleanupSocket = () => {
+      if (heartbeatRef.current !== null) window.clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+      if (socket && socket.readyState === WebSocket.OPEN) socket.close(1000, 'cleanup');
+      socket = null;
+      socketRef.current = null;
+    };
+
+    const connect = () => {
+      if (closedByEffectRef.current) return;
+      socket = new WebSocket(url);
+      socketRef.current = socket;
+      const joinRef = String(++ref);
+
+      socket.onopen = () => {
+        socket?.send(JSON.stringify({
+          topic: 'realtime:public:community_messages',
+          event: 'phx_join',
+          payload: {
+            config: {
+              postgres_changes: [{ event: 'INSERT', schema: 'public', table: 'community_messages' }],
+              broadcast: { ack: false, self: false },
+              presence: { key: '' },
+            },
+          },
+          ref: joinRef,
+          join_ref: joinRef,
+        }));
+
+        if (heartbeatRef.current !== null) window.clearInterval(heartbeatRef.current);
+        heartbeatRef.current = window.setInterval(() => {
+          if (socket?.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(++ref) }));
+          }
+        }, REALTIME_HEARTBEAT_MS);
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.event !== 'postgres_changes') return;
+          const record = data.payload?.data?.record || data.payload?.data;
+          if (!record?.id || !record?.message) return;
+          const incoming = record as CommunityMessage;
+          setMessages((current) => {
+            if (current.some((item) => item.id === incoming.id)) return current;
+            return [...current, incoming].slice(-100);
+          });
+        } catch {
+          // Ignore malformed realtime frames.
+        }
+      };
+
+      socket.onclose = () => {
+        if (heartbeatRef.current !== null) window.clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+        if (closedByEffectRef.current) return;
+        reconnectTimer = window.setTimeout(connect, REALTIME_RECONNECT_MS);
+      };
+    };
+
+    connect();
+    return () => {
+      closedByEffectRef.current = true;
+      cleanupSocket();
+    };
   }, [open, loadMessages]);
 
   useEffect(() => {
@@ -73,9 +168,8 @@ export function CommunityChat() {
       if (!response.ok) throw new Error(String(body?.error || 'Failed to send message.'));
       setDraft('');
       if (body?.id) {
-        setMessages((current) => current.some((item) => item.id === body.id) ? current : [...current, body]);
+        setMessages((current) => current.some((item) => item.id === body.id) ? current : [...current, body].slice(-100));
       }
-      void loadMessages(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message.');
     } finally {
