@@ -63,8 +63,8 @@ export default function RootLayout({
           </LanguageProvider>
 
           {process.env.NODE_ENV === 'production' && <Analytics />}
+          <IntroScreen />
         </ThemeProvider>
-        <IntroScreen />
       </body>
     </html>
   )
