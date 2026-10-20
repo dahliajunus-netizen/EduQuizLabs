@@ -4,7 +4,7 @@ import { useTheme } from 'next-themes'
 import { useEffect, useRef, useState } from 'react'
 
 const FADE_DURATION_MS = 700
-const SESSION_KEY = 'eduquizlabs_intro_seen'
+const SESSION_KEY = 'eduquizlabs_intro_seen_v2'
 
 export function IntroScreen() {
   const { resolvedTheme } = useTheme()
