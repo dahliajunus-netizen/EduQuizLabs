@@ -4,6 +4,7 @@ import { Instrument_Serif, Inter } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
 import { LanguageProvider } from '@/components/language-provider'
 import { SupabaseAuthFetch } from '@/components/supabase-auth-fetch'
+import { IntroScreen } from '@/components/intro-screen'
 import './globals.css'
 
 const inter = Inter({
@@ -63,6 +64,7 @@ export default function RootLayout({
 
           {process.env.NODE_ENV === 'production' && <Analytics />}
         </ThemeProvider>
+        <IntroScreen />
       </body>
     </html>
   )
