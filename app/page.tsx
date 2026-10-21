@@ -81,6 +81,18 @@ export default function Page() {
                 </li>
               ))}
             </ul>
+
+            <div className="mt-8 w-full max-w-2xl overflow-hidden rounded-2xl border border-primary-foreground/15 bg-black/10 shadow-xl">
+              <video
+                className="block aspect-video w-full object-cover"
+                src="/why-eduquizlabs.mp4"
+                controls
+                muted
+                playsInline
+                preload="metadata"
+                aria-label="Why EduQuizLabs promotional video"
+              />
+            </div>
           </div>
         </div>
       </section>
