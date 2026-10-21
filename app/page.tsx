@@ -86,8 +86,9 @@ export default function Page() {
               <video
                 className="block aspect-video w-full object-cover"
                 src="/why-eduquizlabs.mp4"
-                controls
+                autoPlay
                 muted
+                loop
                 playsInline
                 preload="metadata"
                 aria-label="Why EduQuizLabs promotional video"
