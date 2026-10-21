@@ -85,7 +85,7 @@ export default function Page() {
             <div className="mt-8 w-full max-w-2xl overflow-hidden rounded-2xl border border-primary-foreground/15 bg-black/10 shadow-xl">
               <video
                 className="block aspect-video w-full object-cover"
-                src="/why-eduquizlabs.mp4"
+                src="/why-eduquizlabs-standard.mp4"
                 autoPlay
                 muted
                 loop
