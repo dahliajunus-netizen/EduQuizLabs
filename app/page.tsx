@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { GraduationCap, CheckCircle2, Maximize2, Award } from 'lucide-react'
+import { GraduationCap, CheckCircle2, Maximize2 } from 'lucide-react'
 import { LoginForm } from '@/components/login-form'
 import { ThemeToggle } from '@/components/theme-toggle'
 
@@ -63,9 +63,9 @@ export default function Page() {
             <GraduationCap className="size-5" />
           </span>
           <span className="text-lg font-bold tracking-tight">EduQuizLabs</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-300 px-3 py-1.5 text-xs font-extrabold tracking-wide text-amber-950 shadow-sm">
-            <Award className="size-4 shrink-0" />
-            ISIF GOLD MEDALIST
+          <span className="ml-1 inline-flex items-center gap-1.5 text-xs font-medium tracking-wide text-primary-foreground/70">
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-300/80" />
+            ISIF Gold Medalist
           </span>
         </div>
 
