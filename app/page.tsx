@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { GraduationCap, CheckCircle2 } from 'lucide-react'
+import { GraduationCap, CheckCircle2, Maximize2 } from 'lucide-react'
 import { LoginForm } from '@/components/login-form'
 import { ThemeToggle } from '@/components/theme-toggle'
 
@@ -16,6 +16,7 @@ function getDashboardPath(user: any) {
 export default function Page() {
   const router = useRouter()
   const [checkingSession, setCheckingSession] = useState(true)
+  const promoVideoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -82,8 +83,9 @@ export default function Page() {
               ))}
             </ul>
 
-            <div className="mt-8 w-full max-w-2xl overflow-hidden rounded-2xl border border-primary-foreground/15 bg-black/10 shadow-xl">
+            <div className="relative mt-8 w-full max-w-2xl overflow-hidden rounded-2xl border border-primary-foreground/15 bg-black/10 shadow-xl">
               <video
+                ref={promoVideoRef}
                 className="block aspect-video w-full object-cover"
                 src="/why-eduquizlabs-standard.mp4"
                 autoPlay
@@ -93,6 +95,29 @@ export default function Page() {
                 preload="metadata"
                 aria-label="Why EduQuizLabs promotional video"
               />
+              <button
+                type="button"
+                onClick={async () => {
+                  const video = promoVideoRef.current
+                  if (!video) return
+                  try {
+                    if (document.fullscreenElement) {
+                      await document.exitFullscreen()
+                    } else if (video.requestFullscreen) {
+                      await video.requestFullscreen()
+                    } else if ((video as HTMLVideoElement & { webkitEnterFullscreen?: () => void }).webkitEnterFullscreen) {
+                      ;(video as HTMLVideoElement & { webkitEnterFullscreen: () => void }).webkitEnterFullscreen()
+                    }
+                  } catch (error) {
+                    console.error('Unable to enter fullscreen:', error)
+                  }
+                }}
+                className="absolute bottom-3 right-3 inline-flex size-10 items-center justify-center rounded-lg bg-black/65 text-white shadow-md transition hover:bg-black/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                aria-label="View promotional video fullscreen"
+                title="Fullscreen"
+              >
+                <Maximize2 className="size-5" />
+              </button>
             </div>
           </div>
         </div>
