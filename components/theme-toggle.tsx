@@ -27,14 +27,9 @@ export function ThemeToggle() {
 
     setAnimating(true)
 
-    const rect = buttonRef.current?.getBoundingClientRect()
-    const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
-    const y = rect ? rect.top + rect.height / 2 : window.innerHeight / 2
-    const radius = Math.hypot(
-      Math.max(x, window.innerWidth - x),
-      Math.max(y, window.innerHeight - y),
-    )
+    setAnimating(true)
 
+    // Fade to the destination color, switch themes behind it, then fade back out.
     const overlay = document.createElement('div')
     overlay.setAttribute('aria-hidden', 'true')
     overlay.style.cssText = `
@@ -42,38 +37,29 @@ export function ThemeToggle() {
       inset:0;
       z-index:2147483646;
       pointer-events:none;
-      overflow:hidden;
-    `
-
-    const circle = document.createElement('div')
-    circle.style.cssText = `
-      position:absolute;
-      left:${x - radius}px;
-      top:${y - radius}px;
-      width:${radius * 2}px;
-      height:${radius * 2}px;
-      border-radius:50%;
       background:${nextTheme === 'dark' ? 'rgb(18, 24, 38)' : 'rgb(248, 250, 252)'};
-      transform:scale(.01);
-      transition:transform 700ms cubic-bezier(.2,.8,.2,1);
-      will-change:transform;
+      opacity:0;
+      transition:opacity 300ms ease-in-out;
+      will-change:opacity;
     `
 
-    overlay.appendChild(circle)
     document.body.appendChild(overlay)
-    void circle.offsetWidth
+    void overlay.offsetWidth
 
     requestAnimationFrame(() => {
-      circle.style.transform = 'scale(1)'
+      overlay.style.opacity = '1'
     })
 
-    // Switch exactly as the expanding reveal reaches the middle of the screen.
-    window.setTimeout(() => setTheme(nextTheme), 350)
-
     window.setTimeout(() => {
-      overlay.remove()
-      setAnimating(false)
-    }, 720)
+      setTheme(nextTheme)
+      window.setTimeout(() => {
+        overlay.style.opacity = '0'
+        window.setTimeout(() => {
+          overlay.remove()
+          setAnimating(false)
+        }, 320)
+      }, 30)
+    }, 300)
   }
 
   const isDark = resolvedTheme === 'dark'
