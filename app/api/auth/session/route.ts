@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { setAuthCookies } from '@/lib/server/auth-cookies';
+import { supabaseDb } from '@/lib/server/supabase';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey;
 
 export async function GET(request: NextRequest) {
   if (!supabaseUrl || !supabaseKey) return NextResponse.json({ ok: false }, { status: 500 });
@@ -46,11 +46,7 @@ export async function GET(request: NextRequest) {
 
   let profile: any = null;
   try {
-    const profileResponse = await fetch(
-      supabaseUrl + '/rest/v1/users?id=eq.' + encodeURIComponent(String(authUser.id)) + '&select=id,email,role,full_name,avatar_url,country&limit=1',
-      { headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey }, cache: 'no-store' },
-    );
-    const rows = await profileResponse.json().catch(() => []);
+    const rows = await supabaseDb('users?id=eq.' + encodeURIComponent(String(authUser.id)) + '&select=id,email,role,full_name,avatar_url,country&limit=1');
     profile = Array.isArray(rows) ? rows[0] : null;
   } catch {}
 

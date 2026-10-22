@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { csrfResponse } from '@/lib/server/csrf';
 import { setAuthCookies } from '@/lib/server/auth-cookies';
+import { supabaseDb } from '@/lib/server/supabase';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -47,17 +48,8 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = String(authData.user.id);
-    const profileResponse = await fetch(
-      `${supabaseUrl}/rest/v1/users?id=eq.${encodeURIComponent(userId)}&select=id,full_name,email,role`,
-      {
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${authData.access_token}`,
-        },
-        cache: 'no-store',
-      },
-    );
-    const rows = await profileResponse.json().catch(() => []);
+    // Read the profile with the server key: signed-in users get no direct table access.
+    const rows = await supabaseDb(`users?id=eq.${encodeURIComponent(userId)}&select=id,full_name,email,role&limit=1`).catch(() => []);
     const profile = Array.isArray(rows) ? rows[0] : null;
 
     if (!profile) {
