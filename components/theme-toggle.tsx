@@ -63,6 +63,9 @@ export function ThemeToggle() {
   }
 
   const isDark = resolvedTheme === 'dark'
+  // The theme is only known in the browser; a neutral label until mount keeps
+  // the server and client HTML identical (no hydration mismatch).
+  const label = !mounted ? 'Toggle theme' : isDark ? 'Switch to light mode' : 'Switch to dark mode'
 
   return (
     <Button
@@ -70,8 +73,8 @@ export function ThemeToggle() {
       type="button"
       variant="outline"
       size="icon"
-      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      aria-label={label}
+      title={label}
       onClick={toggleTheme}
       disabled={animating}
       className="group relative overflow-hidden rounded-xl border-border/70 bg-background/70 shadow-sm backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-default"

@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Loader2, Award, X, Radio } from 'lucide-react';
@@ -15,6 +15,9 @@ export function LoginForm() {
   const router = useRouter();
   const [showPassword,setShowPassword]=useState(false),[submitting,setSubmitting]=useState(false),[error,setError]=useState<string|null>(null),[isCreditsOpen,setIsCreditsOpen]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[passwordTouched,setPasswordTouched]=useState(false);
   const showPasswordError=passwordTouched&&password.length>0&&password.length<8;
+  // SessionWatcher sends people here with ?expired=1 when their session ran out.
+  const [sessionExpired,setSessionExpired]=useState(false);
+  useEffect(()=>{try{if(new URLSearchParams(window.location.search).get('expired')==='1')setSessionExpired(true);}catch{}},[]);
   async function handleSubmit(event:React.FormEvent<HTMLFormElement>){
     event.preventDefault();setError(null);setPasswordTouched(true);const cleanEmail=email.trim().toLowerCase();
     if(!cleanEmail)return setError('Please enter your email.');if(password.length<8)return setError('Password must be at least 8 characters.');
@@ -39,6 +42,7 @@ export function LoginForm() {
       <Link href="/join?from=signin" className="inline-flex"><Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 px-3 text-xs"><Radio size={14}/> Join Live Quiz</Button></Link>
       <Button type="button" variant="ghost" size="sm" onClick={()=>setIsCreditsOpen(true)} className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"><Award size={14}/> Credits</Button>
     </div>
+    {sessionExpired&&!error&&<div role="status" className="mb-5 rounded-lg border border-primary/25 bg-primary/10 p-3 text-sm font-medium text-primary">Your session expired. Please sign in again.</div>}
     {error&&<div role="alert" className="mb-5 break-words rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm font-medium text-red-500">{error}</div>}
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       <div className="flex flex-col gap-2"><Label htmlFor="email">Email</Label><Input id="email" name="email" type="email" autoComplete="email" placeholder="you@school.edu" required value={email} onChange={e=>setEmail(e.target.value)} className="h-11 bg-background"/></div>

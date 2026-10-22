@@ -275,14 +275,18 @@ export function CommunityChat() {
         </div>
       )}
 
+      {/* Room at the end of the page so the floating button never covers the last content. */}
+      <div aria-hidden="true" className="h-20" />
+
       <Button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-[60] h-12 rounded-full px-5 shadow-lg"
+        className="fixed bottom-4 right-4 z-[60] size-12 rounded-full p-0 shadow-lg sm:bottom-5 sm:right-5 sm:w-auto sm:px-5"
         aria-label="Open global community chat"
+        title="Community chat"
       >
-        <MessageCircle className="mr-2 size-4" />
-        Community
+        <MessageCircle className="size-5 sm:mr-2 sm:size-4" />
+        <span className="hidden sm:inline">Community</span>
       </Button>
     </>
   );
