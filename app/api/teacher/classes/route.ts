@@ -3,7 +3,6 @@ import { randomInt } from 'crypto';
 import { requireTeacher } from '@/lib/server/auth';
 import { supabaseDb } from '@/lib/server/supabase';
 
-const LEGACY_TEACHER_ID = '32b60aea-9c8f-4100-9999-999999999999';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 function generateCode() {
@@ -20,23 +19,9 @@ export async function GET(request: NextRequest) {
     const codeFilter = requestedCode.match(/^eq\.([A-Za-z0-9]+)$/)?.[1] || '';
     const queryCode = codeFilter ? `&code=eq.${encodeURIComponent(codeFilter.toUpperCase())}` : '';
 
-    let rows = await supabaseDb(
+    const rows = await supabaseDb(
       `teacher_classes?teacher_id=eq.${encodeURIComponent(user.id)}${queryCode}&select=id,class_name,school_name,code,teacher_id&order=class_name.asc`,
     );
-
-    if (Array.isArray(rows) && rows.length === 0 && !codeFilter && user.id !== LEGACY_TEACHER_ID) {
-      const legacyRows = await supabaseDb(
-        `teacher_classes?teacher_id=eq.${LEGACY_TEACHER_ID}&select=id,class_name,school_name,code,teacher_id&order=class_name.asc`,
-      );
-      if (Array.isArray(legacyRows) && legacyRows.length > 0) {
-        await supabaseDb(`teacher_classes?teacher_id=eq.${LEGACY_TEACHER_ID}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-          body: JSON.stringify({ teacher_id: user.id }),
-        });
-        rows = legacyRows.map((row) => ({ ...row, teacher_id: user.id }));
-      }
-    }
 
     return NextResponse.json(Array.isArray(rows) ? rows : []);
   } catch (error) {
