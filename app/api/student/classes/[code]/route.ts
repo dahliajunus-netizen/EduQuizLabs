@@ -41,7 +41,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       ]);
 
       const courseAssignments = Array.isArray(assignmentRows) ? assignmentRows : [];
-      const courseTests = Array.isArray(testRows) ? testRows : [];
+      // Never send the stored assessment password (hash) to students.
+      const courseTests = (Array.isArray(testRows) ? testRows : []).map(({ test_password, ...test }: any) => ({
+        ...test,
+        requires_password: Boolean(String(test_password || '').trim()),
+      }));
 
       const [assignmentSubmissionPairs, questionPairs] = await Promise.all([
         Promise.all(courseAssignments.filter((a: any) => a?.id).map(async (assignment: any) => [
@@ -50,7 +54,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         ] as const)),
         Promise.all(courseTests.filter((t: any) => t?.id).map(async (test: any) => [
           String(test.id),
-          await supabaseDb(`test_questions?test_id=eq.${q(String(test.id))}&select=*&order=question_order.asc`).catch(() => []),
+          // The class page only needs question counts for students. Answer keys
+          // (correct_answer, option_a for fill-blank/matching, answer_data) and
+          // question text stay server-side until the student opens the test.
+          await supabaseDb(`test_questions?test_id=eq.${q(String(test.id))}&select=id,test_id,question_order,question_type,points&order=question_order.asc`).catch(() => []),
         ] as const)),
       ]);
 
