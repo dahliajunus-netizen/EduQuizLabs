@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticatedUser, supabaseDb } from '@/lib/server/supabase';
+import { playerIdFromCookie } from '@/lib/server/live-quiz-player';
 
 const q = (value: string) => encodeURIComponent(value);
 
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
     const questions = quiz.status === 'lobby' ? [] : questionRows.slice(0, Math.max(0, current + 1));
 
     const user = await authenticatedUser(request).catch(() => null);
-    const guestPlayerId = String(request.nextUrl.searchParams.get('player_id') || '').trim();
+    const guestPlayerId = playerIdFromCookie(request, String(quiz.id));
     let player: any = null;
     if (user?.id) {
       const rows = await supabaseDb(`live_quiz_players?quiz_id=eq.${q(quiz.id)}&student_id=eq.${q(String(user.id))}&select=${PLAYER_FIELDS}&limit=1`);
