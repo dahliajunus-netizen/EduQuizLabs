@@ -4,6 +4,7 @@ import { Instrument_Serif, Inter } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
 import { LanguageProvider } from '@/components/language-provider'
 import { SupabaseAuthFetch } from '@/components/supabase-auth-fetch'
+import { SessionWatcher } from '@/components/session-watcher'
 import { IntroScreen } from '@/components/intro-screen'
 import './globals.css'
 
@@ -59,6 +60,7 @@ export default function RootLayout({
         >
           <LanguageProvider>
             <SupabaseAuthFetch />
+            <SessionWatcher />
             {children}
           </LanguageProvider>
 
