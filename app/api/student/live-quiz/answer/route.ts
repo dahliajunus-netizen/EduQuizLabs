@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticatedUser } from '@/lib/server/supabase';
 import { supabaseDb } from '@/lib/server/supabase';
+import { playerIdFromCookie } from '@/lib/server/live-quiz-player';
 
 const q = (value:string) => encodeURIComponent(value);
+const ANSWER_GRACE_MS = 1500;
 
 export async function POST(request:NextRequest){
   const student=await authenticatedUser(request);
@@ -18,8 +20,13 @@ export async function POST(request:NextRequest){
     const players=await supabaseDb(`live_quiz_players?id=eq.${q(playerId)}&quiz_id=eq.${q(quizId)}&select=id,student_id,nickname,score,correct_answers,total_response_time_ms&limit=1`);
     const player=Array.isArray(players)?players[0]:null;
     if(!player) return NextResponse.json({error:'Player session not found.'},{status:404});
-    if(student?.id && player.student_id && String(player.student_id)!==String(student.id))
-      return NextResponse.json({error:'Player session does not belong to this account.'},{status:403});
+    // Account players must be signed in as that account; guest players must hold
+    // the signed cookie issued when they joined. Knowing a player_id is not enough.
+    const ownsPlayer=player.student_id
+      ?Boolean(student?.id)&&String(player.student_id)===String(student.id)
+      :playerIdFromCookie(request,quizId)===String(player.id);
+    if(!ownsPlayer)
+      return NextResponse.json({error:'Player session does not belong to you. Rejoin the game to answer.'},{status:403});
 
     const quizzes=await supabaseDb(`live_quizzes?id=eq.${q(quizId)}&select=id,status,current_question,question_started_at&limit=1`);
     const quiz=Array.isArray(quizzes)?quizzes[0]:null;
@@ -36,6 +43,9 @@ export async function POST(request:NextRequest){
 
     const started=quiz.question_started_at?new Date(String(quiz.question_started_at)).getTime():Date.now();
     const limit=Math.max(1,Number(question.time_limit_seconds)||30)*1000;
+    // Allow a little network latency, but not answers after the timer has run out.
+    if(Date.now()-started>limit+ANSWER_GRACE_MS)
+      return NextResponse.json({error:'Time is up for this question.'},{status:409});
     const elapsed=Math.min(limit,Math.max(0,Date.now()-started));
     const correct=answer===String(question.correct_answer||'').trim().toUpperCase();
     const points=correct?1:0;

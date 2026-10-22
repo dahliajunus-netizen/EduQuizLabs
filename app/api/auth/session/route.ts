@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { setAuthCookies } from '@/lib/server/auth-cookies';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey;
-
-function setCookie(response: NextResponse, name: string, value: string, maxAge: number) {
-  response.cookies.set(name, value, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge });
-}
 
 export async function GET(request: NextRequest) {
   if (!supabaseUrl || !supabaseKey) return NextResponse.json({ ok: false }, { status: 500 });
@@ -60,8 +57,6 @@ export async function GET(request: NextRequest) {
   if (!profile?.role) return NextResponse.json({ ok: false }, { status: 401 });
 
   const response = NextResponse.json({ ok: true, user: { ...profile, fullName: profile.full_name } });
-  const tenYears = 60 * 60 * 24 * 365 * 10;
-  if (newAccessToken) setCookie(response, 'eduquiz_access_token', newAccessToken, tenYears);
-  if (newRefreshToken) setCookie(response, 'eduquiz_refresh_token', newRefreshToken, tenYears);
+  if (newAccessToken) setAuthCookies(response, newAccessToken, newRefreshToken || undefined);
   return response;
 }
