@@ -57,9 +57,9 @@ function TermsContent() {
           <ul className="list-disc space-y-1 pl-5">
             <li>Use the platform for unlawful, fraudulent, abusive, threatening, or harmful purposes.</li>
             <li>Upload malicious code or intentionally interfere with the platform.</li>
-            <li>Attempt to access another user's account, private data, or restricted systems without authorization.</li>
+            <li>Attempt to access another user&apos;s account, private data, or restricted systems without authorization.</li>
             <li>Use automated tools to scrape, copy, overload, or disrupt the service without permission.</li>
-            <li>Submit content that infringes another person's intellectual-property, privacy, or other rights.</li>
+            <li>Submit content that infringes another person&apos;s intellectual-property, privacy, or other rights.</li>
             <li>Misrepresent your identity, role, or authority within a class or course.</li>
           </ul>
         </section>
@@ -72,7 +72,7 @@ function TermsContent() {
 
         <section className="space-y-2">
           <h2 className="text-lg font-semibold text-foreground">7. Student & School Use</h2>
-          <p>EduQuizLabs may be used in school and educational settings, including by students. Where a school, teacher, parent, or other authorized adult is responsible for a student's use of an educational service, they should provide any permissions or supervision required by their applicable rules and laws.</p>
+          <p>EduQuizLabs may be used in school and educational settings, including by students. Where a school, teacher, parent, or other authorized adult is responsible for a student&apos;s use of an educational service, they should provide any permissions or supervision required by their applicable rules and laws.</p>
         </section>
 
         <section className="space-y-2">
@@ -82,7 +82,7 @@ function TermsContent() {
 
         <section className="space-y-2">
           <h2 className="text-lg font-semibold text-foreground">9. Third-Party Services</h2>
-          <p>EduQuizLabs relies on third-party infrastructure and services to operate parts of the platform. Your use of those features may also be subject to the third party's terms and policies. We are not responsible for services or content controlled by third parties.</p>
+          <p>EduQuizLabs relies on third-party infrastructure and services to operate parts of the platform. Your use of those features may also be subject to the third party&apos;s terms and policies. We are not responsible for services or content controlled by third parties.</p>
         </section>
 
         <section className="space-y-2">

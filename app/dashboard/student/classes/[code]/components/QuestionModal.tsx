@@ -45,7 +45,7 @@ const fromDatabaseQuestionType = (value: string): QuestionType => ({
   'true-false': 'true-false', true_false: 'true-false',
   'fill-blank': 'fill-blank', fill_blank: 'fill-blank', fill_in_blank: 'fill-blank',
   matching: 'matching',
-}[value] || 'multiple-choice');
+} as Record<string, QuestionType>)[value] || 'multiple-choice';
 
 function readPairs(value: string): MatchPair[] {
   if (!value.trim()) return [{ left: '', right: '' }];

@@ -8,7 +8,7 @@ const transitions: Record<string, { status: string; allowed: string[] }> = {
   live_quiz_begin_answering: { status: 'answering', allowed: ['question_reveal'] },
   live_quiz_begin_results: { status: 'results', allowed: ['answering'] },
   live_quiz_begin_intermission: { status: 'intermission', allowed: ['results'] },
-  live_quiz_finish_quiz: { status: 'finished', allowed: ['results', 'intermission', 'answering', 'question_reveal'] },
+  live_quiz_finish_quiz: { status: 'finished', allowed: ['lobby', 'results', 'intermission', 'answering', 'question_reveal'] },
 };
 
 export async function POST(request: NextRequest) {

@@ -6,10 +6,6 @@ import { ArrowLeft, BarChart3, Check, Clock, Radio, Trophy, Users } from 'lucide
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const headers = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
-
 type Quiz = { id: string; title: string; status: string; current_question: number };
 type Question = { id: string; question_order: number; question: string; correct_answer: string };
 type Answer = { player_id: string; question_id: string; answer: string; correct: boolean; response_time_ms: number; points_earned: number; answered_at?: string };
@@ -22,10 +18,12 @@ const shapes = [
 ];
 
 async function api(path: string) {
-  const r = await fetch(`${url}/rest/v1/${path}`, { headers, cache: 'no-store' });
+  const r = await fetch(path, { credentials: 'include', cache: 'no-store' });
   const text = await r.text();
-  if (!r.ok) throw new Error(text || `Request failed (${r.status})`);
-  return text.trim() ? JSON.parse(text) : null;
+  let data: any = null;
+  try { data = text.trim() ? JSON.parse(text) : null; } catch {}
+  if (!r.ok) throw new Error(data?.error || text || `Request failed (${r.status})`);
+  return data;
 }
 
 export default function LiveQuizAnalytics() {
@@ -41,15 +39,13 @@ export default function LiveQuizAnalytics() {
   async function load() {
     if (!quizId) return;
     try {
-      const q = await api(`live_quizzes?id=eq.${encodeURIComponent(quizId)}&select=id,title,status,current_question`);
-      if (!q?.[0]) throw new Error('Live quiz not found.');
-      setQuiz(q[0]);
-      const qs = await api(`live_quiz_questions?quiz_id=eq.${encodeURIComponent(quizId)}&select=id,question_order,question,correct_answer&order=question_order.asc`);
-      setQuestions(qs || []);
-      const as = await api(`live_quiz_answers?quiz_id=eq.${encodeURIComponent(quizId)}&select=player_id,question_id,answer,correct,response_time_ms,points_earned,answered_at&order=answered_at.asc`);
-      setAnswers(as || []);
-      const ps = await api(`live_quiz_players?quiz_id=eq.${encodeURIComponent(quizId)}&select=id,nickname`);
-      setPlayers(ps || []);
+      // Teacher-only endpoint: checks that this teacher owns the quiz.
+      const data = await api(`/api/teacher/live-quiz/${encodeURIComponent(quizId)}`);
+      if (!data?.quiz) throw new Error('Live quiz not found.');
+      setQuiz(data.quiz);
+      setQuestions(data.questions || []);
+      setAnswers(data.answers || []);
+      setPlayers(data.players || []);
       setError('');
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not load analytics.'); }
   }

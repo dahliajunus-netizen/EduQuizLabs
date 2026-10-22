@@ -17,7 +17,7 @@ export default function TestsError({ reset }: { error: Error & { digest?: string
               <AlertTriangle className="size-8" />
             </div>
             <p className="mt-6 text-xs font-bold uppercase tracking-[0.2em] text-destructive">Test system error</p>
-            <h1 className="mt-2 text-2xl font-black">We couldn't load this page</h1>
+            <h1 className="mt-2 text-2xl font-black">We couldn&apos;t load this page</h1>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
               Something went wrong while loading the tests. Try again, or return to the class.
             </p>

@@ -177,7 +177,7 @@ export async function POST(request:NextRequest,{params}:{params:Promise<{id:stri
 
     if(action==='save') {
       if(expired(attempt,test)) {
-        try {const result=await completeAttempt(attempt,answers,true);return NextResponse.json({ok:true,auto_submitted:true,...result});}
+        try {const result=await completeAttempt(attempt,answers,true);return NextResponse.json({ok:true,...result});}
         catch(error){const response=rpcErrorResponse(error);if(response)return response;throw error;}
       }
       if(dueDatePassed(test))return NextResponse.json({error:'This test is past its due date.'},{status:409});
