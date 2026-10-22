@@ -53,12 +53,14 @@ export default function Page() {
   }
 
   return (
-    <main className="min-h-screen bg-background lg:grid lg:grid-cols-2">
-      <section className="relative flex min-h-[520px] flex-col overflow-hidden bg-primary px-6 py-8 text-primary-foreground sm:px-10 lg:min-h-screen lg:px-16 lg:py-10">
+    // On phones the sign-in form comes first so returning users don't scroll past
+    // the marketing; from lg up the two halves sit side by side as before.
+    <main className="flex min-h-screen flex-col bg-background lg:grid lg:grid-cols-2">
+      <section className="relative order-2 flex flex-col overflow-hidden bg-primary px-6 py-10 text-primary-foreground sm:px-10 lg:order-none lg:min-h-screen lg:px-16 lg:py-10">
         <div aria-hidden="true" className="pointer-events-none absolute -right-40 -top-40 size-[30rem] rounded-full bg-primary-foreground/10 blur-3xl" />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-48 -left-40 size-[32rem] rounded-full bg-primary-foreground/10 blur-3xl" />
 
-        <div className="relative z-10 flex flex-wrap items-center gap-3">
+        <div className="relative z-10 hidden flex-wrap items-center gap-3 lg:flex">
           <span className="flex size-10 items-center justify-center rounded-xl bg-primary-foreground/15 ring-1 ring-primary-foreground/10">
             <GraduationCap className="size-5" />
           </span>
@@ -69,7 +71,7 @@ export default function Page() {
           </span>
         </div>
 
-        <div className="relative z-10 flex flex-1 items-center py-12 lg:py-16">
+        <div className="relative z-10 flex flex-1 items-center lg:py-16">
           <div className="w-full max-w-2xl">
             <h1 className="text-balance text-5xl font-normal italic leading-[1.08] tracking-tight sm:text-6xl lg:text-7xl" style={{ fontFamily: 'Georgia, serif' }}>
               Where curiosity becomes knowledge
@@ -127,15 +129,22 @@ export default function Page() {
         </div>
       </section>
 
-      <section className="relative flex min-h-[560px] items-center justify-center px-5 py-12 sm:px-10 lg:min-h-screen lg:px-16">
+      <section className="relative order-1 flex justify-center px-5 pb-10 pt-5 sm:px-10 sm:pt-8 lg:order-none lg:min-h-screen lg:items-center lg:px-16 lg:py-12">
         <div className="absolute right-5 top-5 sm:right-8 sm:top-8">
           <ThemeToggle />
         </div>
 
         <div className="w-full max-w-md">
           <div className="mb-6">
-            <div className="mb-4 flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10 lg:hidden">
-              <GraduationCap className="size-5" />
+            <div className="mb-8 flex min-h-10 flex-wrap items-center gap-x-2.5 gap-y-1 pr-14 lg:hidden">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10">
+                <GraduationCap className="size-5" />
+              </span>
+              <span className="text-lg font-bold tracking-tight text-foreground">EduQuizLabs</span>
+              <span className="ml-1 inline-flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground">
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-300/80" />
+                ISIF Gold Medalist
+              </span>
             </div>
             <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Sign in</h2>
           </div>
