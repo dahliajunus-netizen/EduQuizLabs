@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { csrfResponse } from '@/lib/server/csrf';
+import { clearAuthCookies } from '@/lib/server/auth-cookies';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -23,7 +24,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  response.cookies.delete('eduquiz_access_token');
-  response.cookies.delete('eduquiz_refresh_token');
+  clearAuthCookies(response);
   return response;
 }

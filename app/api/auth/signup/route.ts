@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { csrfResponse } from '@/lib/server/csrf';
+import { setAuthCookies } from '@/lib/server/auth-cookies';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -44,11 +45,6 @@ function calculateExactAge(birthday: string) {
   if (today.getMonth() < month - 1 || (today.getMonth() === month - 1 && today.getDate() < day)) age--;
   if (age < 0 || age > 120) return null;
   return age;
-}
-
-function setAuthCookies(response: NextResponse, accessToken: string, refreshToken: string) {
-  response.cookies.set('eduquiz_access_token', accessToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 60 * 60 });
-  if (refreshToken) response.cookies.set('eduquiz_refresh_token', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 });
 }
 
 export async function POST(request: NextRequest) {
