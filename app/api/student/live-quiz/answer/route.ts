@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticatedUser } from '@/lib/server/supabase';
 import { supabaseDb } from '@/lib/server/supabase';
 import { playerIdFromCookie } from '@/lib/server/live-quiz-player';
+import { answersOpenAt } from '@/lib/quiz/live-timing';
 
 const q = (value:string) => encodeURIComponent(value);
 const ANSWER_GRACE_MS = 1500;
+// Phones sync their clocks to within a few hundred ms; don't reject a tap that lands just before the open.
+const OPEN_TOLERANCE_MS = 300;
 
 export async function POST(request:NextRequest){
   const student=await authenticatedUser(request);
@@ -31,7 +34,10 @@ export async function POST(request:NextRequest){
     const quizzes=await supabaseDb(`live_quizzes?id=eq.${q(quizId)}&select=id,status,current_question,question_started_at&limit=1`);
     const quiz=Array.isArray(quizzes)?quizzes[0]:null;
     if(!quiz) return NextResponse.json({error:'Live quiz not found.'},{status:404});
-    if(String(quiz.status)!=='answering') return NextResponse.json({error:'Answers are closed.'},{status:409});
+    // Answers open at a scheduled time, which can come just before the host's
+    // switch to "answering" reaches the server; accept those too.
+    const opensAt=answersOpenAt(String(quiz.status),quiz.question_started_at);
+    if(opensAt===null||Date.now()<opensAt-OPEN_TOLERANCE_MS) return NextResponse.json({error:'Answers are closed.'},{status:409});
 
     const questions=await supabaseDb(`live_quiz_questions?id=eq.${q(questionId)}&quiz_id=eq.${q(quizId)}&select=id,question_order,correct_answer,time_limit_seconds&limit=1`);
     const question=Array.isArray(questions)?questions[0]:null;
@@ -41,7 +47,7 @@ export async function POST(request:NextRequest){
     const existing=await supabaseDb(`live_quiz_answers?quiz_id=eq.${q(quizId)}&question_id=eq.${q(questionId)}&player_id=eq.${q(playerId)}&select=answer,correct,response_time_ms,points_earned&limit=1`);
     if(Array.isArray(existing)&&existing[0]) return NextResponse.json(existing[0]);
 
-    const started=quiz.question_started_at?new Date(String(quiz.question_started_at)).getTime():Date.now();
+    const started=opensAt;
     const limit=Math.max(1,Number(question.time_limit_seconds)||30)*1000;
     // Allow a little network latency, but not answers after the timer has run out.
     if(Date.now()-started>limit+ANSWER_GRACE_MS)

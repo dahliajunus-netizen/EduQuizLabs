@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireTeacher, requireTeacherClassOwnership } from '@/lib/server/auth';
 import { supabaseDb } from '@/lib/server/supabase';
+import { answersOpenAt } from '@/lib/quiz/live-timing';
 
 const q = (value: string) => encodeURIComponent(value);
 
@@ -82,6 +83,11 @@ export async function POST(request: NextRequest) {
       }, { status: 409 });
     }
 
+    // Answers opened at the scheduled time players already counted down to,
+    // not whenever the host's request happened to arrive.
+    const scheduledOpen = transition.status === 'answering'
+      ? answersOpenAt(String(quiz.status), quiz.question_started_at)
+      : null;
     const updated = await supabaseDb(
       `live_quizzes?id=eq.${q(quizId)}`,
       {
@@ -91,7 +97,7 @@ export async function POST(request: NextRequest) {
           status: transition.status,
           question_started_at: transition.status === 'finished' || transition.status === 'results' || transition.status === 'intermission'
             ? null
-            : new Date().toISOString(),
+            : new Date(scheduledOpen ?? Date.now()).toISOString(),
         }),
       },
     );

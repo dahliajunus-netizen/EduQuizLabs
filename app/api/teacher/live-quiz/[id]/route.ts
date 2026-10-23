@@ -24,7 +24,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       supabaseDb(`live_quiz_answers?quiz_id=eq.${q(quiz.id)}&select=player_id,question_id,answer,correct,response_time_ms,points_earned,answered_at&order=answered_at.asc`),
     ]);
     return NextResponse.json(
-      { quiz, questions, players: Array.isArray(players) ? players : [], answers: Array.isArray(answers) ? answers : [] },
+      { quiz, questions, players: Array.isArray(players) ? players : [], answers: Array.isArray(answers) ? answers : [], server_now: new Date().toISOString() },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {

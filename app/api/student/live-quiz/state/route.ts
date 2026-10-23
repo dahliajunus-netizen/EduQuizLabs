@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { quiz, questions, total_questions: questionRows.length, player, my_answer: myAnswer, ranking },
+      { quiz, questions, total_questions: questionRows.length, player, my_answer: myAnswer, ranking, server_now: new Date().toISOString() },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {
